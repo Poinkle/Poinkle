@@ -1,0 +1,220 @@
+{
+  "AAVE/USD": {
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {}
+  },
+  "ADA/USD": {
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {}
+  },
+  "AKT/USD": {
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {}
+  },
+  "ATOM/USD": {
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {}
+  },
+  "AVAX/USD": {
+    "EMA 21 crossed above EMA 55": "1782185400000:EMA 21 crossed above EMA 55",
+    "EMA 21 crossed below EMA 55": "1782193500000:EMA 21 crossed below EMA 55",
+    "RSI is below 30": "1782202500000:RSI is below 30",
+    "Volume is 2x higher than the 20-candle average": "1782202500000:Volume is 2x higher than the 20-candle average",
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {
+      "ema_cross_above": "1782222300000:ema_cross_above",
+      "ema_cross_below": "1782306900000:ema_cross_below",
+      "rsi_cross_above_70": "1782223200000:rsi_cross_above_70",
+      "rsi_cross_below_30": "1782308700000:rsi_cross_below_30",
+      "volume_spike": "1782310500000:volume_spike"
+    }
+  },
+  "BNB/USD": {
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {}
+  },
+  "BTC/USD": {
+    "RSI is below 30": "1782204300000:RSI is below 30",
+    "Volume is 2x higher than the 20-candle average": "1782203400000:Volume is 2x higher than the 20-candle average",
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {
+      "ema_cross_above": "1782303300000:ema_cross_above",
+      "ema_cross_below": "1782306000000:ema_cross_below",
+      "rsi_cross_below_30": "1782306900000:rsi_cross_below_30",
+      "volume_spike": "1782310500000:volume_spike"
+    }
+  },
+  "DOGE/USD": {
+    "RSI is below 30": "1782210600000:RSI is below 30",
+    "Volume is 2x higher than the 20-candle average": "1782202500000:Volume is 2x higher than the 20-candle average",
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {
+      "rsi_cross_above_70": "1782265500000:rsi_cross_above_70",
+      "rsi_cross_below_30": "1782306900000:rsi_cross_below_30",
+      "volume_spike": "1782310500000:volume_spike"
+    }
+  },
+  "DOT/USD": {
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {}
+  },
+  "EDEL/USD": {},
+  "ETH/USD": {
+    "RSI is below 30": "1782211500000:RSI is below 30",
+    "Volume is 2x higher than the 20-candle average": "1782202500000:Volume is 2x higher than the 20-candle average",
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {
+      "ema_cross_above": "1782301500000:ema_cross_above",
+      "ema_cross_below": "1782306900000:ema_cross_below",
+      "rsi_cross_below_30": "1782308700000:rsi_cross_below_30",
+      "volume_spike": "1782309600000:volume_spike"
+    }
+  },
+  "FARTCOIN/USD": {
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {}
+  },
+  "FET/USD": {
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {}
+  },
+  "HBAR/USD": {
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {}
+  },
+  "HYPE/USD": {
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {}
+  },
+  "ICP/USD": {
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {}
+  },
+  "INJ/USD": {
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {}
+  },
+  "JASMY/USD": {
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {}
+  },
+  "LINK/USD": {
+    "RSI is below 30": "1782210600000:RSI is below 30",
+    "Volume is 2x higher than the 20-candle average": "1782202500000:Volume is 2x higher than the 20-candle average",
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {
+      "ema_cross_above": "1782294300000:ema_cross_above",
+      "ema_cross_below": "1782296100000:ema_cross_below",
+      "rsi_cross_below_30": "1782308700000:rsi_cross_below_30",
+      "volume_spike": "1782309600000:volume_spike"
+    }
+  },
+  "NEAR/USD": {
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {}
+  },
+  "NOBODY/USD": {},
+  "ONDO/USD": {
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {}
+  },
+  "PENGU/USD": {
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {}
+  },
+  "PEPE/USD": {
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {}
+  },
+  "RENDER/USD": {
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {}
+  },
+  "SHIB/USD": {
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {}
+  },
+  "SOL/USD": {
+    "RSI is below 30": "1782210600000:RSI is below 30",
+    "Volume is 2x higher than the 20-candle average": "1782202500000:Volume is 2x higher than the 20-candle average",
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {
+      "ema_cross_above": "1782304200000:ema_cross_above",
+      "ema_cross_below": "1782306000000:ema_cross_below",
+      "volume_spike": "1782310500000:volume_spike"
+    }
+  },
+  "SUI/USD": {
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {}
+  },
+  "TAO/USD": {
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {}
+  },
+  "TON/USD": {
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {}
+  },
+  "UNI/USD": {
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {}
+  },
+  "WIF/USD": {
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {}
+  },
+  "XRP/USD": {
+    "RSI is below 30": "1782204300000:RSI is below 30",
+    "Volume is 2x higher than the 20-candle average": "1782202500000:Volume is 2x higher than the 20-candle average",
+    "last_checked_candle": "1782525600000",
+    "last_checked_time": "2026-06-27 02:00 UTC",
+    "sent_alerts": {
+      "ema_cross_above": "1782260100000:ema_cross_above",
+      "ema_cross_below": "1782270900000:ema_cross_below",
+      "rsi_cross_below_30": "1782307800000:rsi_cross_below_30",
+      "volume_spike": "1782309600000:volume_spike"
+    }
+  },
+  "__active_trades": {},
+  "__bot_status": {
+    "last_scan_time": "2026-06-26 10:22:44 PM ET",
+    "mode": "TEST",
+    "scanner_state": "Updating...",
+    "status": "Offline",
+    "updated_at": "2026-06-26 10:22:48 PM ET"
+  },
+  "__telegram_commands": {
+    "last_update_id": 263415012
+  }
+}

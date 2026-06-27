@@ -1,0 +1,14 @@
+{
+  "7468510100": {
+    "BTC": {
+      "enabled": true,
+      "last_triggered": {},
+      "type": "resistance"
+    },
+    "SOL": {
+      "enabled": true,
+      "last_triggered": {},
+      "type": "all"
+    }
+  }
+}
