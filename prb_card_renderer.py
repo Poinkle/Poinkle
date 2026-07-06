@@ -40,6 +40,7 @@ MIKE_WATERMARK_PATH = Path("assets") / "inner_circle_logo.png"
 MIKE_WATERMARK_OPACITY = 0.10
 MIKE_TABLE_SCALE = BODY_SCALE
 MIKE_TABLE_ROW_GAP = 74
+MIKE_TABLE_X_OFFSET = 56
 
 
 FONT = {
@@ -747,10 +748,14 @@ def render_mike_list_card(rows, logo_path=None, output_dir=None):
     draw_horizontal_line(pixels, WIDTH, HEIGHT, 302, color=CYAN)
 
     y = 348
-    draw_text(pixels, WIDTH, HEIGHT, 76, y, "COIN", color=CYAN, scale=MIKE_TABLE_SCALE)
-    draw_text(pixels, WIDTH, HEIGHT, 250, y, "PRICE", color=CYAN, scale=MIKE_TABLE_SCALE)
-    draw_text(pixels, WIDTH, HEIGHT, 560, y, "TREND", color=CYAN, scale=MIKE_TABLE_SCALE)
-    draw_text(pixels, WIDTH, HEIGHT, 800, y, "RSI", color=CYAN, scale=MIKE_TABLE_SCALE)
+    coin_x = 76 + MIKE_TABLE_X_OFFSET
+    price_x = 250 + MIKE_TABLE_X_OFFSET
+    trend_x = 560 + MIKE_TABLE_X_OFFSET
+    rsi_x = 800 + MIKE_TABLE_X_OFFSET
+    draw_text(pixels, WIDTH, HEIGHT, coin_x, y, "COIN", color=CYAN, scale=MIKE_TABLE_SCALE)
+    draw_text(pixels, WIDTH, HEIGHT, price_x, y, "PRICE", color=CYAN, scale=MIKE_TABLE_SCALE)
+    draw_text(pixels, WIDTH, HEIGHT, trend_x, y, "TREND", color=CYAN, scale=MIKE_TABLE_SCALE)
+    draw_text(pixels, WIDTH, HEIGHT, rsi_x, y, "RSI", color=CYAN, scale=MIKE_TABLE_SCALE)
     y += 46
     draw_horizontal_line(pixels, WIDTH, HEIGHT, y, color=(30, 126, 142))
     y += 32
@@ -770,10 +775,10 @@ def render_mike_list_card(rows, logo_path=None, output_dir=None):
         price = sanitize_text(row.get("price", "n/a"))[:18] if available else "unavailable"
         rsi_value = sanitize_text(row.get("rsi", "n/a"))[:8]
 
-        draw_text(pixels, WIDTH, HEIGHT, 76, y, symbol, color=GOLD if available else MUTED, scale=MIKE_TABLE_SCALE)
-        draw_text(pixels, WIDTH, HEIGHT, 250, y, price, color=row_color, scale=MIKE_TABLE_SCALE)
-        draw_text(pixels, WIDTH, HEIGHT, 560, y, trend[:10], color=trend_color, scale=MIKE_TABLE_SCALE)
-        draw_text(pixels, WIDTH, HEIGHT, 800, y, rsi_value, color=row_color, scale=MIKE_TABLE_SCALE)
+        draw_text(pixels, WIDTH, HEIGHT, coin_x, y, symbol, color=GOLD if available else MUTED, scale=MIKE_TABLE_SCALE)
+        draw_text(pixels, WIDTH, HEIGHT, price_x, y, price, color=row_color, scale=MIKE_TABLE_SCALE)
+        draw_text(pixels, WIDTH, HEIGHT, trend_x, y, trend[:10], color=trend_color, scale=MIKE_TABLE_SCALE)
+        draw_text(pixels, WIDTH, HEIGHT, rsi_x, y, rsi_value, color=row_color, scale=MIKE_TABLE_SCALE)
         y += MIKE_TABLE_ROW_GAP
 
     draw_horizontal_line(pixels, WIDTH, HEIGHT, HEIGHT - 164, color=(30, 126, 142))

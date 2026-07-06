@@ -263,6 +263,7 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual([call["scale"] for call in symbol_rows], [prb_card_renderer.MIKE_TABLE_SCALE] * 2)
         self.assertEqual(symbol_rows[1]["y"] - symbol_rows[0]["y"], prb_card_renderer.MIKE_TABLE_ROW_GAP)
         self.assertGreater(prb_card_renderer.MIKE_TABLE_SCALE, prb_card_renderer.SMALL_SCALE)
+        self.assertEqual(symbol_rows[0]["x"], 76 + prb_card_renderer.MIKE_TABLE_X_OFFSET)
 
     def test_breakout_attempt_uses_closed_candle_and_range_context(self):
         symbol_state = {}
