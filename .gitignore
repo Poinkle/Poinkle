@@ -6,3 +6,5 @@ TELEGRAM_BOT_TOKEN=
 scanner_state.json
 user_alerts.json
 snapshots/
+
+scanner_state.json

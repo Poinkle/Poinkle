@@ -70,6 +70,8 @@ class ScannerLogicTests(unittest.TestCase):
         self.original_live_alert_test_chat_id = scanner.LIVE_ALERT_TEST_CHAT_ID
         self.original_last_research_chart_data = scanner.LAST_RESEARCH_CHART_DATA.copy()
         self.original_mike_alternate_exchange = scanner.MIKE_ALTERNATE_EXCHANGE
+        self.original_diagnostics_file = scanner.DIAGNOSTICS_FILE
+        self.diagnostics_tmpdir = tempfile.TemporaryDirectory()
         scanner.TEST_MODE = False
         scanner.KEY_LEVELS = {
             "BTC/USD": {"support": [95], "resistance": [100]},
@@ -78,6 +80,7 @@ class ScannerLogicTests(unittest.TestCase):
         scanner.LIVE_ALERT_TEST_CHAT_ID = ""
         scanner.LAST_RESEARCH_CHART_DATA.clear()
         scanner.MIKE_ALTERNATE_EXCHANGE = None
+        scanner.DIAGNOSTICS_FILE = Path(self.diagnostics_tmpdir.name) / "diagnostics" / "alert_diagnostics.jsonl"
 
     def tearDown(self):
         scanner.TEST_MODE = self.original_test_mode
@@ -88,6 +91,8 @@ class ScannerLogicTests(unittest.TestCase):
         scanner.LAST_RESEARCH_CHART_DATA.clear()
         scanner.LAST_RESEARCH_CHART_DATA.update(self.original_last_research_chart_data)
         scanner.MIKE_ALTERNATE_EXCHANGE = self.original_mike_alternate_exchange
+        scanner.DIAGNOSTICS_FILE = self.original_diagnostics_file
+        self.diagnostics_tmpdir.cleanup()
 
     def test_resample_candles_combines_four_one_hour_candles(self):
         candles = [
@@ -2425,6 +2430,33 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(metric["delivery_type"], "photo")
         self.assertEqual(scanner.alert_delivery_summary(state["__alert_delivery_metrics"]), "Alert delivery delay over last 1 alert(s): min 90.0s, max 90.0s, avg 90.0s.")
 
+    def test_append_diagnostic_record_creates_valid_jsonl_with_logged_at(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            scanner.DIAGNOSTICS_FILE = Path(tmpdir) / "diagnostics" / "alert_diagnostics.jsonl"
+
+            scanner.append_diagnostic_record({"record_type": "delivery", "symbol": "BTC/USD"})
+
+            self.assertTrue(scanner.DIAGNOSTICS_FILE.exists())
+            lines = scanner.DIAGNOSTICS_FILE.read_text().splitlines()
+            self.assertEqual(len(lines), 1)
+            record = json.loads(lines[0])
+            self.assertEqual(record["record_type"], "delivery")
+            self.assertEqual(record["symbol"], "BTC/USD")
+            self.assertIn("logged_at", record)
+
+    def test_append_diagnostic_record_catches_write_failure(self):
+        warnings = []
+
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            scanner, "log_warn", side_effect=lambda message: warnings.append(message)
+        ):
+            scanner.DIAGNOSTICS_FILE = Path(tmpdir)
+
+            scanner.append_diagnostic_record({"record_type": "delivery"})
+
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("Could not write diagnostic record", warnings[0])
+
     def test_loop_phase_benchmark_formats_phase_breakdown(self):
         message = scanner.format_loop_phase_benchmark(
             command_seconds=1.25,
@@ -2446,7 +2478,7 @@ class ScannerLogicTests(unittest.TestCase):
             scanner,
             "log_info",
             side_effect=lambda message: logged.append(message),
-        ):
+        ), patch.object(scanner, "append_diagnostic_record") as append_record:
             scanner.log_accuracy_audit_snapshot(
                 "BTC/USD",
                 candle(1_700_000_000_000, 100, 105, 99, 104, 250),
@@ -2462,6 +2494,9 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("RSI14 58.12", logged[0])
         self.assertIn("EMA21 101.25", logged[0])
         self.assertIn("EMA55 99.75", logged[0])
+        append_record.assert_called_once()
+        self.assertEqual(append_record.call_args.args[0]["record_type"], "accuracy_audit")
+        self.assertEqual(append_record.call_args.args[0]["symbol"], "BTC/USD")
 
     def test_levels_command_accepts_watchlist_json_symbols(self):
         sent_messages = []

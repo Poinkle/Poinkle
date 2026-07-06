@@ -160,6 +160,7 @@ POLL_SECONDS = 15
 TRADE_TRACK_POLL_SECONDS = 60
 TRADE_TRACK_MAX_MINUTES = 60
 STATE_FILE = Path("scanner_state.json")
+DIAGNOSTICS_FILE = PROJECT_DIR / "diagnostics" / "alert_diagnostics.jsonl"
 USER_ALERTS_FILE = PROJECT_DIR / "user_alerts.json"
 USER_PROFILES_FILE = PROJECT_DIR / "user_profiles.json"
 BOT_CONFIG_FILE = PROJECT_DIR / "bot_config.json"
@@ -242,6 +243,23 @@ def throttled_log_warn(symbol, error_key, message):
 def throttled_log_error(symbol, error):
     message = str(error) or error.__class__.__name__
     throttled_log_warn(symbol, message, f"{symbol}: {message}")
+
+
+def ensure_diagnostics_dir():
+    DIAGNOSTICS_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+
+def append_diagnostic_record(record):
+    try:
+        ensure_diagnostics_dir()
+        line_record = dict(record)
+        line_record["logged_at"] = datetime.now(timezone.utc).isoformat()
+        with DIAGNOSTICS_FILE.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(line_record, separators=(",", ":"), sort_keys=True))
+            handle.write("\n")
+            handle.flush()
+    except Exception as error:
+        log_warn(f"Could not write diagnostic record: {error}")
 
 
 def scan_cycle_benchmark(elapsed_seconds, scanned_symbols, skipped_symbols=0, failed_symbols=0):
@@ -352,15 +370,28 @@ def accuracy_audit_symbols():
 def log_accuracy_audit_snapshot(symbol, candle, current_market_price, ema_21, ema_55, current_rsi):
     if symbol not in accuracy_audit_symbols():
         return
+    candle_close_time = eastern_time_from_timestamp(candle_close_timestamp_ms(candle))
     log_info(
         "Accuracy audit snapshot: "
         f"{symbol} | "
-        f"candle close {eastern_time_from_timestamp(candle_close_timestamp_ms(candle))} | "
+        f"candle close {candle_close_time} | "
         f"price {format_level(current_market_price)} | "
         f"close {format_level(candle[4])} | "
         f"RSI14 {current_rsi:.2f} | "
         f"EMA21 {format_level(ema_21)} | "
         f"EMA55 {format_level(ema_55)}"
+    )
+    append_diagnostic_record(
+        {
+            "record_type": "accuracy_audit",
+            "symbol": symbol,
+            "candle_close_time": candle_close_time,
+            "current_market_price": current_market_price,
+            "candle_close": candle[4],
+            "rsi14": current_rsi,
+            "ema21": ema_21,
+            "ema55": ema_55,
+        }
     )
 
 
@@ -5868,6 +5899,24 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
                     delivery_type="photo" if image_sent else "text_fallback",
                 )
                 log_alert_delivery_metric(metric, alert_delivery_metrics(state))
+                append_diagnostic_record(
+                    {
+                        "record_type": "delivery",
+                        **metric,
+                        "direction": [alert.get("direction", "") for alert in alert_group],
+                        "volume_multiple": [alert.get("volume_multiple") for alert in alert_group],
+                        "current_market_price": current_market_price,
+                        "current_rsi": current_rsi,
+                        "ema_21": ema_21,
+                        "ema_55": ema_55,
+                        "current_atr_14": current_atr_14,
+                        "range_low": range_low,
+                        "range_high": range_high,
+                        "main_chat_safe_mode": main_chat_safe_mode,
+                        "live_alert_test_chat_id_configured": bool(LIVE_ALERT_TEST_CHAT_ID),
+                        "routed_to_test_chat": main_chat_safe_mode and bool(LIVE_ALERT_TEST_CHAT_ID),
+                    }
+                )
                 if main_chat_safe_mode and LIVE_ALERT_TEST_CHAT_ID:
                     log_info(
                         f"MAIN_CHAT_SAFE_MODE active - routed live alert for {symbol} "
@@ -5953,6 +6002,11 @@ def main():
         raise SystemExit(
             "Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID. Add them to your .env file."
         )
+
+    try:
+        ensure_diagnostics_dir()
+    except Exception as error:
+        log_warn(f"Could not create diagnostics directory: {error}")
 
     exchange = ccxt.coinbase()
     supported_symbols, unsupported_symbols = validate_watchlist_against_exchange(exchange, WATCHLIST)
