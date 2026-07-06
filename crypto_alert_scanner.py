@@ -6,6 +6,29 @@ from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+try:
+    from chart_generator import generate_levels_chart
+except ModuleNotFoundError:
+    generate_levels_chart = None
+
+try:
+    from prb_card_renderer import (
+        render_alert_card,
+        render_mike_list_card,
+        render_prb_cards,
+        render_reference_card,
+        render_welcome_card,
+    )
+except ModuleNotFoundError:
+    render_alert_card = None
+    render_mike_list_card = None
+    render_prb_cards = None
+    render_reference_card = None
+    render_welcome_card = None
+
+LAST_LEVELS_CHART_DATA = {}
+LAST_RESEARCH_CHART_DATA = {}
+
 PROJECT_DIR = Path(__file__).resolve().parent
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
@@ -30,44 +53,99 @@ except ModuleNotFoundError:
 
 
 TEST_MODE = True
-MAIN_CHAT_SAFE_MODE = True
 DEBUG = False
-BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "BOT_USERNAME")
+LIVE_ALERT_TEST_CHAT_ID = ""
+BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "Poinkle_Bot").strip().lstrip("@")
+ALPHA_ONBOARDED_USERS = set()
+WATCHLIST_FILE = Path(__file__).resolve().parent / "watchlist.json"
+SYMBOL_ALIASES = {
+    "XAO": "XAU",
+    "GOLD": "XAU",
+}
+OFFICIAL_COIN_LINKS = {
+    "BTC": "https://bitcoin.org",
+    "ETH": "https://ethereum.org",
+    "SOL": "https://solana.com",
+    "XRP": "https://xrpl.org",
+    "BNB": "https://bnbchain.org",
+    "DOGE": "https://dogecoin.com",
+    "ADA": "https://cardano.org",
+    "LINK": "https://chain.link",
+    "AVAX": "https://www.avax.network",
+    "DOT": "https://polkadot.com",
+    "LTC": "https://litecoin.org",
+    "BCH": "https://bitcoincash.org",
+    "XLM": "https://stellar.org",
+    "TON": "https://ton.org",
+    "TRX": "https://tron.network",
+}
 
-# Single master symbol list used by the scanner and /levels command.
-WATCHLIST = [
-    "BTC/USD",
-    "ETH/USD",
-    "SOL/USD",
-    "XRP/USD",
-    "BNB/USD",
-    "DOGE/USD",
-    "ADA/USD",
-    "LINK/USD",
-    "AVAX/USD",
-    "SUI/USD",
-    "TON/USD",
-    "HBAR/USD",
-    "DOT/USD",
-    "TAO/USD",
-    "RENDER/USD",
-    "FET/USD",
-    "NEAR/USD",
-    "AKT/USD",
-    "ICP/USD",
-    "AAVE/USD",
-    "UNI/USD",
-    "INJ/USD",
-    "ATOM/USD",
-    "PEPE/USD",
-    "SHIB/USD",
-    "WIF/USD",
-    "JASMY/USD",
-    "FARTCOIN/USD",
-    "HYPE/USD",
-    "ONDO/USD",
-    "PENGU/USD",
-]
+
+def load_watchlist_symbols(path=WATCHLIST_FILE):
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return []
+
+    symbols = []
+    seen = set()
+    for item in data.get("symbols", []):
+        if not item.get("enabled", True):
+            continue
+        symbol = str(item.get("symbol", "")).strip().upper()
+        if not symbol or symbol in seen:
+            continue
+        symbols.append(symbol)
+        seen.add(symbol)
+    return symbols
+
+
+# Single master symbol list used by the scanner, snapshots, research, and command normalization.
+WATCHLIST = load_watchlist_symbols()
+UNSUPPORTED_SYMBOLS_THIS_SESSION = set()
+
+
+def validate_watchlist_against_exchange(exchange, watchlist):
+    try:
+        markets = exchange.load_markets()
+    except Exception as error:
+        log_warn(f"Could not load exchange markets for validation: {error}")
+        return list(watchlist), []
+
+    supported = []
+    unsupported = []
+    for symbol in watchlist:
+        if symbol in markets:
+            supported.append(symbol)
+        else:
+            unsupported.append(symbol)
+
+    if unsupported:
+        log_warn(
+            f"{len(unsupported)} watchlist symbol(s) are not supported on this "
+            f"exchange and will be skipped for this session: {', '.join(unsupported)}"
+        )
+        log_warn(
+            "Fix: either remove these from watchlist.json (set enabled: false), "
+            "or confirm the correct Coinbase market name and update the symbol."
+        )
+
+    return supported, unsupported
+
+
+def symbol_base(symbol):
+    return str(symbol or "").strip().upper().split("/", 1)[0]
+
+
+def official_coin_link(symbol):
+    return OFFICIAL_COIN_LINKS.get(symbol_base(symbol))
+
+
+def official_coin_link_text(symbol):
+    link = official_coin_link(symbol)
+    if not link:
+        return ""
+    return f"\n\n<b>Learn more:</b> {link}"
 
 
 # Add your key support and resistance levels here.
@@ -83,11 +161,55 @@ TRADE_TRACK_POLL_SECONDS = 60
 TRADE_TRACK_MAX_MINUTES = 60
 STATE_FILE = Path("scanner_state.json")
 USER_ALERTS_FILE = PROJECT_DIR / "user_alerts.json"
+USER_PROFILES_FILE = PROJECT_DIR / "user_profiles.json"
+BOT_CONFIG_FILE = PROJECT_DIR / "bot_config.json"
 ERROR_COOLDOWN_SECONDS = 300
 ALERT_COOLDOWN_SECONDS = 3600
+SCAN_ALERT_COOLDOWN_SECONDS = 1800
+SCAN_TIER2_ALERT_COOLDOWN_SECONDS = 3600
+ROLLING_CONFLUENCE_WINDOW_SECONDS = 900
+SCAN_PERFORMANCE_TARGET_SYMBOLS = 150
+COINBASE_PUBLIC_REQUESTS_PER_SECOND = 10
+ACCURACY_AUDIT_SYMBOLS = {"BTC/USD", "ETH/USD", "SOL/USD", "AAVE/USD", "PEPE/USD"}
+ALERT_DELIVERY_METRIC_LIMIT = 100
 LEVEL_ALERT_TYPES = {"support", "resistance", "all", "critical"}
 EASTERN_TIME = ZoneInfo("America/New_York")
 ERROR_LOG_STATE = {}
+DEFAULT_BOT_CONFIG = {
+    "developer_mode": False,
+    "maintenance_mode": False,
+    "live_alerts_enabled": False,
+}
+PUBLIC_BOT_COMMANDS = [
+    {"command": "snapshot", "description": "Full visual chart and breakdown"},
+    {"command": "snap", "description": "Quick version of snapshot"},
+    {"command": "research", "description": "Deeper multi-card research brief"},
+    {"command": "levels", "description": "Legacy text-only version"},
+    {"command": "alerts", "description": "Set a personal price-zone alert"},
+    {"command": "myalerts", "description": "View your active alerts"},
+    {"command": "mike", "description": "Mike's curated watchlist"},
+    {"command": "guide", "description": "Command and coin reference card"},
+    {"command": "help", "description": "Full help message"},
+    {"command": "start", "description": "Welcome message"},
+]
+MIKES_LIST = [
+    "JASMY/USD",
+    "ICP/USD",
+    "HYPE/USD",
+    "VIRTUAL/USD",
+    "BRETT/USD",
+    "TAO/USD",
+    "SUPER/USD",
+    "SOL/USD",
+    "JCT/USD",
+    "PENGU/USD",
+]
+MIKE_ALTERNATE_EXCHANGE_ID = "kucoin"
+MIKE_ALTERNATE_SYMBOLS = {
+    "BRETT/USD": "BRETT/USDT",
+    "JCT/USD": "JCT/USDT",
+}
+MIKE_ALTERNATE_EXCHANGE = None
 
 
 class MarketDataError(RuntimeError):
@@ -120,6 +242,138 @@ def throttled_log_warn(symbol, error_key, message):
 def throttled_log_error(symbol, error):
     message = str(error) or error.__class__.__name__
     throttled_log_warn(symbol, message, f"{symbol}: {message}")
+
+
+def scan_cycle_benchmark(elapsed_seconds, scanned_symbols, skipped_symbols=0, failed_symbols=0):
+    scanned_symbols = int(scanned_symbols)
+    skipped_symbols = int(skipped_symbols)
+    failed_symbols = int(failed_symbols)
+    elapsed_seconds = max(float(elapsed_seconds), 0.0)
+    average_seconds = elapsed_seconds / scanned_symbols if scanned_symbols else 0.0
+    public_requests = scanned_symbols * 2
+    rate_limit_floor_seconds = public_requests / COINBASE_PUBLIC_REQUESTS_PER_SECOND if public_requests else 0.0
+    target_rate_limit_floor_seconds = (
+        (SCAN_PERFORMANCE_TARGET_SYMBOLS * 2) / COINBASE_PUBLIC_REQUESTS_PER_SECOND
+    )
+    return {
+        "elapsed_seconds": elapsed_seconds,
+        "scanned_symbols": scanned_symbols,
+        "skipped_symbols": skipped_symbols,
+        "failed_symbols": failed_symbols,
+        "average_seconds_per_symbol": average_seconds,
+        "estimated_public_requests": public_requests,
+        "rate_limit_floor_seconds": rate_limit_floor_seconds,
+        "target_symbols": SCAN_PERFORMANCE_TARGET_SYMBOLS,
+        "target_rate_limit_floor_seconds": target_rate_limit_floor_seconds,
+    }
+
+
+def format_scan_cycle_benchmark(benchmark):
+    return (
+        "Scan benchmark: "
+        f"{benchmark['scanned_symbols']} scanned, "
+        f"{benchmark['skipped_symbols']} skipped, "
+        f"{benchmark['failed_symbols']} failed in "
+        f"{benchmark['elapsed_seconds']:.2f}s "
+        f"({benchmark['average_seconds_per_symbol']:.3f}s/symbol). "
+        f"Estimated public calls: {benchmark['estimated_public_requests']}; "
+        f"Coinbase 10 req/s floor: {benchmark['rate_limit_floor_seconds']:.1f}s. "
+        f"150-symbol target floor: {benchmark['target_rate_limit_floor_seconds']:.1f}s."
+    )
+
+
+def candle_close_timestamp_ms(candle):
+    return int(candle[0]) + TIMEFRAME_MS
+
+
+def alert_delivery_delay_seconds(candle, sent_at=None):
+    sent_at = time.time() if sent_at is None else float(sent_at)
+    return max(0.0, sent_at - (candle_close_timestamp_ms(candle) / 1000))
+
+
+def alert_delivery_metrics(state):
+    return state.setdefault("__alert_delivery_metrics", [])
+
+
+def alert_delivery_summary(metrics):
+    if not metrics:
+        return "No alert delivery metrics recorded yet."
+
+    delays = [float(metric["delay_seconds"]) for metric in metrics]
+    average_delay = sum(delays) / len(delays)
+    return (
+        f"Alert delivery delay over last {len(delays)} alert(s): "
+        f"min {min(delays):.1f}s, max {max(delays):.1f}s, avg {average_delay:.1f}s."
+    )
+
+
+def record_alert_delivery_metric(state, symbol, candle, alerts, sent_at=None, delivery_type="unknown"):
+    sent_at = time.time() if sent_at is None else float(sent_at)
+    candle_close_ms = candle_close_timestamp_ms(candle)
+    metric = {
+        "symbol": symbol,
+        "alert_types": [alert.get("type", "unknown") for alert in alerts],
+        "alert_labels": [alert.get("label", "Market Alert") for alert in alerts],
+        "candle_close_time": eastern_time_from_timestamp(candle_close_ms),
+        "sent_time": datetime.fromtimestamp(sent_at, tz=EASTERN_TIME).strftime("%Y-%m-%d %I:%M:%S %p ET"),
+        "delay_seconds": alert_delivery_delay_seconds(candle, sent_at=sent_at),
+        "delivery_type": delivery_type,
+    }
+    metrics = alert_delivery_metrics(state)
+    metrics.append(metric)
+    del metrics[:-ALERT_DELIVERY_METRIC_LIMIT]
+    return metric
+
+
+def log_alert_delivery_metric(metric, metrics):
+    log_info(
+        "Alert delivery timing: "
+        f"{metric['symbol']} "
+        f"{' + '.join(metric['alert_labels'])} | "
+        f"candle close {metric['candle_close_time']} | "
+        f"sent {metric['sent_time']} | "
+        f"delay {metric['delay_seconds']:.1f}s | "
+        f"delivery {metric['delivery_type']}"
+    )
+    log_info(alert_delivery_summary(metrics))
+
+
+def accuracy_audit_symbols():
+    configured = os.getenv("POINKLE_ACCURACY_AUDIT_SYMBOLS", "").strip()
+    if not configured:
+        return ACCURACY_AUDIT_SYMBOLS
+    return {
+        normalize_symbol(part.strip()) or part.strip().upper()
+        for part in configured.split(",")
+        if part.strip()
+    }
+
+
+def log_accuracy_audit_snapshot(symbol, candle, current_market_price, ema_21, ema_55, current_rsi):
+    if symbol not in accuracy_audit_symbols():
+        return
+    log_info(
+        "Accuracy audit snapshot: "
+        f"{symbol} | "
+        f"candle close {eastern_time_from_timestamp(candle_close_timestamp_ms(candle))} | "
+        f"price {format_level(current_market_price)} | "
+        f"close {format_level(candle[4])} | "
+        f"RSI14 {current_rsi:.2f} | "
+        f"EMA21 {format_level(ema_21)} | "
+        f"EMA55 {format_level(ema_55)}"
+    )
+
+
+def format_loop_phase_benchmark(command_seconds, scan_seconds, user_alert_seconds, active_trade_seconds):
+    total = command_seconds + scan_seconds + user_alert_seconds + active_trade_seconds
+    return (
+        "Loop phase benchmark: "
+        f"commands {command_seconds:.2f}s | "
+        f"scan {scan_seconds:.2f}s | "
+        f"user alerts {user_alert_seconds:.2f}s | "
+        f"active trades {active_trade_seconds:.2f}s | "
+        f"total before sleep {total:.2f}s"
+    )
 
 
 def candle_error_message(symbol, error):
@@ -168,6 +422,27 @@ def ema(values, period):
         current_ema = (value - current_ema) * multiplier + current_ema
 
     return current_ema
+
+
+def resample_candles(candles, group_size):
+    """
+    Groups consecutive OHLCV candles into larger bars.
+    Example: group_size=4 turns four 1h candles into one 4h candle.
+    Each candle is [timestamp, open, high, low, close, volume].
+    """
+    resampled = []
+    for index in range(0, len(candles) - group_size + 1, group_size):
+        group = candles[index:index + group_size]
+        if len(group) < group_size:
+            continue
+        timestamp = group[0][0]
+        open_price = group[0][1]
+        high = max(candle[2] for candle in group)
+        low = min(candle[3] for candle in group)
+        close = group[-1][4]
+        volume = sum(candle[5] for candle in group)
+        resampled.append([timestamp, open_price, high, low, close, volume])
+    return resampled
 
 
 def rsi(values, period=14):
@@ -247,6 +522,204 @@ def save_user_alerts(alerts):
     USER_ALERTS_FILE.write_text(json.dumps(alerts, indent=2, sort_keys=True))
 
 
+def load_user_profiles():
+    if not USER_PROFILES_FILE.exists():
+        return {}
+    try:
+        return json.loads(USER_PROFILES_FILE.read_text())
+    except json.JSONDecodeError:
+        return {}
+
+
+def save_user_profiles(profiles):
+    USER_PROFILES_FILE.write_text(json.dumps(profiles, indent=2, sort_keys=True))
+
+
+def user_profile(user_id):
+    if not user_id:
+        return {}
+    return load_user_profiles().get(str(user_id), {})
+
+
+def user_skill_level(user_id):
+    return user_profile(user_id).get("skill_level")
+
+
+def set_user_skill_level(user_id, skill_level):
+    profiles = load_user_profiles()
+    profile = profiles.setdefault(str(user_id), {})
+    profile["skill_level"] = skill_level
+    save_user_profiles(profiles)
+    return profile
+
+
+def mark_skill_onboarding_prompted(user_id):
+    profiles = load_user_profiles()
+    profile = profiles.setdefault(str(user_id), {})
+    profile["skill_onboarding_prompted"] = True
+    save_user_profiles(profiles)
+    return profile
+
+
+def skill_onboarding_prompted(user_id):
+    return bool(user_profile(user_id).get("skill_onboarding_prompted"))
+
+
+def load_bot_config():
+    if not BOT_CONFIG_FILE.exists():
+        return DEFAULT_BOT_CONFIG.copy()
+
+    try:
+        config = json.loads(BOT_CONFIG_FILE.read_text())
+    except json.JSONDecodeError:
+        return DEFAULT_BOT_CONFIG.copy()
+
+    merged_config = DEFAULT_BOT_CONFIG.copy()
+    merged_config.update(config)
+    return merged_config
+
+
+def save_bot_config(config):
+    BOT_CONFIG_FILE.write_text(json.dumps(config, indent=2, sort_keys=True))
+
+
+def live_alerts_enabled():
+    return bool(load_bot_config().get("live_alerts_enabled", False))
+
+
+def main_chat_safe_mode_enabled():
+    return not live_alerts_enabled()
+
+
+def split_env_ids(value):
+    if not value:
+        return set()
+    return {str(item).strip() for item in str(value).replace(";", ",").split(",") if str(item).strip()}
+
+
+def configured_owner_ids():
+    owner_ids = set()
+    for env_name in ("OWNER_ID", "TELEGRAM_OWNER_ID", "OWNER_TELEGRAM_ID"):
+        value = os.getenv(env_name)
+        if value:
+            owner_ids.add(str(value).strip())
+    owner_ids.update(split_env_ids(os.getenv("OWNER_IDS")))
+    return {owner_id for owner_id in owner_ids if owner_id}
+
+
+def configured_admin_ids():
+    admin_ids = set(configured_owner_ids())
+    for env_name in ("ADMIN_ID", "TELEGRAM_ADMIN_ID", "ADMIN_TELEGRAM_ID"):
+        value = os.getenv(env_name)
+        if value:
+            admin_ids.add(str(value).strip())
+    admin_ids.update(split_env_ids(os.getenv("ADMIN_IDS")))
+    admin_ids.update(split_env_ids(os.getenv("TELEGRAM_ADMIN_IDS")))
+    admin_ids.update(split_env_ids(os.getenv("ADMIN_TELEGRAM_IDS")))
+    return {admin_id for admin_id in admin_ids if admin_id}
+
+
+def owner_telegram_id():
+    owner_ids = sorted(configured_owner_ids())
+    return owner_ids[0] if owner_ids else ""
+
+
+def admin_telegram_ids():
+    return configured_admin_ids()
+
+
+def telegram_user_id(source_chat=None, from_user=None, fallback_chat_id=""):
+    from_user = from_user or {}
+    source_chat = source_chat or {}
+    if from_user.get("id"):
+        return str(from_user["id"])
+    return str(source_chat.get("id", fallback_chat_id))
+
+
+def is_owner_user(user_id):
+    return str(user_id) in {str(owner_id) for owner_id in configured_owner_ids()}
+
+
+def is_admin_user(user_id):
+    return str(user_id) in {str(admin_id) for admin_id in admin_telegram_ids()}
+
+
+def username_from_user(from_user):
+    from_user = from_user or {}
+    username = from_user.get("username") or ""
+    if username:
+        return f"@{username}"
+    first_name = from_user.get("first_name") or ""
+    last_name = from_user.get("last_name") or ""
+    full_name = " ".join(part for part in [first_name, last_name] if part).strip()
+    return full_name or "Unknown"
+
+
+def value_with_type(value):
+    return f"{value!r} ({type(value).__name__})"
+
+
+def configured_id_debug_values():
+    env_names = [
+        "OWNER_ID",
+        "OWNER_IDS",
+        "TELEGRAM_OWNER_ID",
+        "OWNER_TELEGRAM_ID",
+        "ADMIN_ID",
+        "ADMIN_IDS",
+        "TELEGRAM_ADMIN_ID",
+        "ADMIN_TELEGRAM_ID",
+        "TELEGRAM_ADMIN_IDS",
+        "ADMIN_TELEGRAM_IDS",
+    ]
+    return {env_name: os.getenv(env_name) for env_name in env_names}
+
+
+def log_mode_command_debug(command_text, user_id, username, chat_id):
+    owner_ids = sorted(configured_owner_ids())
+    admin_ids = sorted(admin_telegram_ids())
+    normalized_user_id = str(user_id)
+    normalized_admin_ids = {str(admin_id) for admin_id in admin_ids}
+    admin_check = normalized_user_id in normalized_admin_ids
+    configured_values = configured_id_debug_values()
+    print("----------------------------------------")
+    print("Command:")
+    print(command_text)
+    print("")
+    print("update.effective_user.id:")
+    print(value_with_type(user_id) if user_id else "Unknown")
+    print("")
+    print("update.effective_user.username:")
+    print(value_with_type(username))
+    print("")
+    print("update.effective_chat.id:")
+    print(value_with_type(chat_id) if chat_id else "Unknown")
+    print("")
+    print("Configured OWNER_ID / OWNER_IDS / ADMIN_ID values:")
+    for name, value in configured_values.items():
+        print(f"{name}: {value_with_type(value)}")
+    print(f"TELEGRAM_CHAT_ID destination only: {value_with_type(os.getenv('TELEGRAM_CHAT_ID'))}")
+    print("")
+    print("Normalized Owner ID(s):")
+    print(", ".join(owner_ids) if owner_ids else "Not configured")
+    print("")
+    print("Normalized Admin ID(s):")
+    print(", ".join(admin_ids) if admin_ids else "Not configured")
+    print("")
+    print("Comparison:")
+    print(f"str(update.effective_user.id): {normalized_user_id!r}")
+    print(f"normalized admin set: {sorted(normalized_admin_ids)}")
+    print("")
+    print("Admin Check Result:")
+    print(admin_check)
+    if not admin_check:
+        print("")
+        print("Permission mismatch:")
+        print(f"Bot received Telegram User ID: {normalized_user_id!r}")
+        print(f"Bot expected one of: {sorted(normalized_admin_ids) if normalized_admin_ids else 'Not configured'}")
+    print("----------------------------------------")
+
+
 def count_enabled_user_alerts(alerts):
     total = 0
     for alerts_by_symbol in alerts.values():
@@ -276,24 +749,110 @@ def scan_header_time():
 
 def alert_time_text(timestamp_ms):
     return (
-        f"<b>Candle Close Time:</b> {eastern_time_from_timestamp(timestamp_ms)}\n"
-        f"<b>Alert Sent Time:</b> {eastern_time_now()}\n"
+        f"Candle Close Time: {eastern_time_from_timestamp(timestamp_ms)}\n"
+        f"Alert Sent Time: {eastern_time_now()}\n"
     )
 
 
 def send_telegram_message(token, chat_id, text):
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    response = requests.post(
-        url,
-        json={
-            "chat_id": chat_id,
-            "text": text,
-            "parse_mode": "HTML",
-            "disable_web_page_preview": True,
-        },
-        timeout=20,
-    )
-    response.raise_for_status()
+    try:
+        response = requests.post(
+            url,
+            json={
+                "chat_id": chat_id,
+                "text": text,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": True,
+            },
+            timeout=20,
+        )
+        if response.status_code != 200:
+            print(f"[WARN] Telegram send failed: {response.status_code} {response.text}")
+    except Exception as e:
+        print(f"[WARN] Telegram send exception: {e}")
+def send_telegram_photo(token, chat_id, photo_path, caption=""):
+    url = f"https://api.telegram.org/bot{token}/sendPhoto"
+    try:
+        with open(photo_path, "rb") as photo:
+            response = requests.post(
+                url,
+                data={
+                    "chat_id": chat_id,
+                    "caption": caption[:1024],
+                    "parse_mode": "HTML",
+                },
+                files={"photo": photo},
+                timeout=30,
+            )
+        if response.status_code != 200:
+            print(f"[WARN] Telegram photo send failed: {response.status_code} {response.text}")
+            return False
+        return True
+    except Exception as e:
+        print(f"[WARN] Telegram photo send exception: {e}")
+        return False
+
+
+def send_telegram_media_group(token, chat_id, photo_paths):
+    photo_paths = list(photo_paths or [])
+    if not photo_paths:
+        return False
+    if len(photo_paths) == 1:
+        return send_telegram_photo(token, chat_id, photo_paths[0])
+
+    url = f"https://api.telegram.org/bot{token}/sendMediaGroup"
+    files = {}
+    handles = []
+    try:
+        media = []
+        for index, photo_path in enumerate(photo_paths):
+            attachment_name = f"photo{index}"
+            photo = open(photo_path, "rb")
+            handles.append(photo)
+            files[attachment_name] = photo
+            media.append({"type": "photo", "media": f"attach://{attachment_name}"})
+
+        response = requests.post(
+            url,
+            data={
+                "chat_id": chat_id,
+                "media": json.dumps(media),
+            },
+            files=files,
+            timeout=60,
+        )
+        if response.status_code != 200:
+            print(f"[WARN] Telegram media group send failed: {response.status_code} {response.text}")
+            return False
+        return True
+    except Exception as e:
+        print(f"[WARN] Telegram media group send exception: {e}")
+        return False
+    finally:
+        for handle in handles:
+            try:
+                handle.close()
+            except Exception:
+                pass
+
+
+def register_bot_commands(token):
+    url = f"https://api.telegram.org/bot{token}/setMyCommands"
+    try:
+        response = requests.post(
+            url,
+            json={"commands": PUBLIC_BOT_COMMANDS},
+            timeout=20,
+        )
+        if response.status_code != 200:
+            log_warn(f"Telegram command registration failed: {response.status_code} {response.text}")
+            return False
+        log_info("Telegram command menu registered.")
+        return True
+    except Exception as error:
+        log_warn(f"Telegram command registration exception: {error}")
+        return False
 
 
 def bot_mode_text():
@@ -356,8 +915,117 @@ def get_telegram_updates(token, offset=None):
 
 
 def bot_username_text():
-    clean_username = str(os.getenv("TELEGRAM_BOT_USERNAME", BOT_USERNAME)).strip().lstrip("@") or "BOT_USERNAME"
-    return f"@{clean_username}"
+    clean_username = str(os.getenv("TELEGRAM_BOT_USERNAME", BOT_USERNAME)).strip().lstrip("@")
+    if clean_username:
+        return f"@{clean_username}"
+    return "@Poinkle_Bot"
+
+
+def poinkle_alpha_chat_id():
+    return str(os.getenv("POINKLE_ALPHA_CHAT_ID") or os.getenv("TEST_CHAT_ID") or "").strip()
+
+
+def is_alpha_onboarding_chat(chat):
+    alpha_chat_id = poinkle_alpha_chat_id()
+    return bool(alpha_chat_id) and str(chat.get("id", "")) == alpha_chat_id and not is_private_chat(chat)
+
+
+def alpha_onboarding_message():
+    return (
+        "👋 Welcome to Poinkle Alpha.\n\n"
+        "Try:\n\n"
+        "/snapshot BTC\n"
+        "/snap ETH\n"
+        "/help\n\n"
+        "Layer 1 helps you read:\n"
+        "Trend → Key Levels → Liquidity → Confirmation → Decision\n\n"
+        "Educational market structure only.\n"
+        "Not financial advice."
+    )
+
+
+def skill_onboarding_message():
+    return (
+        "Hey — quick one before we go further. When you look at a chart "
+        "like this, are you mostly still getting your bearings, or do "
+        "things like support, resistance, and RSI already make sense to "
+        "you?\n\n"
+        "Reply with one:\n"
+        "Still getting my bearings\n"
+        "This already makes sense to me"
+    )
+
+
+def maybe_send_skill_onboarding(telegram_token, source_chat, from_user):
+    source_chat = source_chat or {}
+    from_user = from_user or {}
+    if is_private_chat(source_chat):
+        return False
+    if from_user.get("is_bot"):
+        return False
+
+    user_id = str(from_user.get("id") or "")
+    if not user_id:
+        return False
+    if user_skill_level(user_id) or skill_onboarding_prompted(user_id):
+        return False
+
+    try:
+        send_telegram_message(telegram_token, user_id, skill_onboarding_message())
+    except Exception as error:
+        log_warn(f"Could not DM skill onboarding to user {user_id}: {error}")
+    finally:
+        mark_skill_onboarding_prompted(user_id)
+    return True
+
+
+def parse_skill_level_reply(text):
+    normalized = " ".join(str(text or "").strip().lower().split())
+    if normalized == "still getting my bearings":
+        return "beginner"
+    if normalized == "this already makes sense to me":
+        return "experienced"
+    return None
+
+
+def handle_skill_level_reply(telegram_token, chat, text, from_user=None):
+    if not is_private_chat(chat or {}):
+        return False
+    skill_level = parse_skill_level_reply(text)
+    if not skill_level:
+        return False
+    user_id = telegram_user_id(chat, from_user, str((chat or {}).get("id", "")))
+    if not user_id:
+        return False
+
+    set_user_skill_level(user_id, skill_level)
+    if skill_level == "beginner":
+        message = "Got it. I’ll keep the chart notes a little more plain-language."
+    else:
+        message = "Got it. I’ll keep the chart notes tighter."
+    send_telegram_message(telegram_token, str((chat or {}).get("id", user_id)), message)
+    return True
+
+
+def maybe_send_alpha_onboarding(telegram_token, chat, text, from_user):
+    if not is_alpha_onboarding_chat(chat):
+        return False
+    if not text or text.startswith("/"):
+        return False
+    if (from_user or {}).get("is_bot"):
+        return False
+
+    user_id = str((from_user or {}).get("id") or "")
+    if not user_id or user_id in ALPHA_ONBOARDED_USERS:
+        return False
+
+    ALPHA_ONBOARDED_USERS.add(user_id)
+    send_telegram_message(
+        telegram_token,
+        str(chat.get("id")),
+        alpha_onboarding_message(),
+    )
+    return True
 
 
 def is_private_chat(chat):
@@ -389,7 +1057,7 @@ def fetch_closed_ohlcv(exchange, symbol, timeframe, limit, fallback=None):
                 validate_ohlcv_candles(fallback, symbol, min_count=2)
                 throttled_log_warn(
                     symbol,
-                    f"{timeframe}:fallback:{error}",
+                    f"{timeframe}:fallback",
                     f"{symbol}: {timeframe} candles unavailable. Using fallback candles.",
                 )
                 return fallback
@@ -397,7 +1065,7 @@ def fetch_closed_ohlcv(exchange, symbol, timeframe, limit, fallback=None):
                 pass
 
         handled_error = MarketDataError(candle_error_message(symbol, error))
-        throttled_log_warn(symbol, f"{timeframe}:{error}", f"{handled_error}")
+        throttled_log_warn(symbol, f"{timeframe}:{handled_error}", f"{handled_error}")
         raise handled_error from error
 
 
@@ -409,7 +1077,7 @@ def get_current_market_price(exchange, symbol, fallback_price):
     except Exception as error:
         throttled_log_warn(
             symbol,
-            f"ticker:{error}",
+            "ticker",
             f"{symbol}: Coinbase ticker fetch failed. Using fallback price.",
         )
         return float(fallback_price)
@@ -434,8 +1102,16 @@ def normalize_symbol(command_symbol):
     if not clean_symbol:
         return None
 
-    if clean_symbol.startswith("/LEVELS"):
+    if clean_symbol.startswith(("/LEVELS", "/RESEARCH")):
         return None
+
+    clean_symbol = clean_symbol.replace("-", "/")
+    if "/" in clean_symbol:
+        base, _, quote = clean_symbol.partition("/")
+        base = SYMBOL_ALIASES.get(base, base)
+        clean_symbol = f"{base}/{quote or 'USD'}"
+    else:
+        clean_symbol = SYMBOL_ALIASES.get(clean_symbol, clean_symbol)
 
     if "/" not in clean_symbol:
         clean_symbol = f"{clean_symbol}/USD"
@@ -1813,10 +2489,29 @@ def candle_body_percent(open_price, close):
     return abs(close - open_price) / open_price * 100
 
 
-def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg):
+def volume_alert_takeaway(alert, skill_level=None):
+    if skill_level == "beginner":
+        if alert.get("direction") == "bullish":
+            return "Unusual buying volume showed up. Wait to see if price can break and hold a key level."
+        if alert.get("direction") == "bearish":
+            return "Unusual selling volume showed up. Wait to see if price loses and stays below support."
+        return "Unusual volume showed up. Wait for price to pick a direction before reacting."
+
+    if alert.get("direction") == "bullish":
+        return "High volume detected. Watch for breakout confirmation."
+    if alert.get("direction") == "bearish":
+        return "High selling volume detected. Watch for breakdown confirmation."
+    return (
+        "High volume detected. No trade confirmation yet. "
+        "Watch for level break and follow-through."
+    )
+
+
+def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, skill_level=None):
     timestamp, open_price, high, low, close, volume = candle
     test_mode_text = "🧪 <b>TEST MODE</b>\n" if TEST_MODE else ""
     time_text = alert_time_text(timestamp)
+    link_text = official_coin_link_text(symbol)
     if alert.get("type", "").endswith(":weak_break"):
         trade_plan = alert["trade_plan"]
         location = alert.get("location_filter", {})
@@ -1838,6 +2533,7 @@ def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg):
             f"<b>Next key level:</b> {format_level(location.get('next_target', close))}\n\n"
             f"<b>Reason:</b> Break detected, but momentum/volume did not confirm.\n"
             f"<b>Action:</b> Watch only / No trade confirmation"
+            f"{link_text}"
         )
 
     if alert.get("type", "").endswith(":failed_follow_through"):
@@ -1861,6 +2557,7 @@ def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg):
             f"<b>Next key level:</b> {format_level(location.get('next_target', close))}\n\n"
             f"<b>Reason:</b> Price stalled around the broken level with weak volume.\n"
             f"<b>Action:</b> Watch only / No trade confirmation"
+            f"{link_text}"
         )
 
     if alert.get("type", "").endswith(":late_move"):
@@ -1881,6 +2578,7 @@ def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg):
             f"<b>Range high:</b> {format_level(location['range_high'])}\n"
             f"<b>Range Position:</b> {location['label']}\n\n"
             f"Avoid chasing. Watch for reclaim, rejection, or reversal."
+            f"{link_text}"
         )
 
     trade_plan = alert.get("trade_plan")
@@ -1932,40 +2630,27 @@ def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg):
             f"<b>TP3:</b> {format_level(trade_plan['tp3'])}\n"
             f"<b>Risk note:</b>\n"
             f"Educational alert only. Wait for your own confirmation and manage risk."
+            f"{link_text}"
         )
 
     if alert.get("type") == "volume_spike":
         body_percent = candle_body_percent(open_price, close)
-        if alert.get("direction") == "bullish":
-            participation_text = "High volume detected. Watch for breakout confirmation."
-        elif alert.get("direction") == "bearish":
-            participation_text = "High selling volume detected. Watch for breakdown confirmation."
-        else:
-            participation_text = (
-                "High volume detected. No trade confirmation yet. "
-                "Watch for level break and follow-through."
-            )
+        participation_text = volume_alert_takeaway(alert, skill_level=skill_level)
 
         return (
-            f"{alert['emoji']} <b>{symbol} {alert['label']}</b>\n\n"
+            f"{alert['emoji']} <b>{symbol} {alert['label']}</b>\n"
             f"{test_mode_text}"
-            f"<b>Symbol:</b> {symbol}\n"
-            f"<b>Timeframe:</b> 15m\n\n"
-            f"{time_text}"
-            f"\n"
-            f"<b>Open:</b> {format_level(open_price)}\n"
-            f"<b>High:</b> {format_level(high)}\n"
-            f"<b>Low:</b> {format_level(low)}\n"
-            f"<b>Close:</b> {format_level(close)}\n"
-            f"<b>Candle body %:</b> {body_percent:.2f}%\n\n"
-            f"<b>Volume:</b> {volume:.4f}\n"
-            f"<b>20-candle average:</b> {volume_avg:.4f}\n"
-            f"<b>Volume multiple:</b> {alert['volume_multiple']:.2f}x\n\n"
-            f"<b>RSI:</b> {current_rsi:.2f}\n"
-            f"<b>RSI Status:</b> {get_rsi_status(current_rsi)}\n"
-            f"<b>EMA21:</b> {format_level(ema_21)}\n"
-            f"<b>EMA55:</b> {format_level(ema_55)}\n\n"
+            f"<b>Timeframe:</b> 15m  |  {time_text.strip()}\n"
+            f"━━━━━━━━━━━━━━━━━━\n\n"
+            f"<b>Price:</b> {format_level(close)}  "
+            f"(<b>Body:</b> {body_percent:.2f}%)\n"
+            f"<b>Volume:</b> {alert['volume_multiple']:.2f}x average\n\n"
+            f"<b>RSI:</b> {current_rsi:.2f} — {get_rsi_status(current_rsi)}\n"
+            f"<b>EMA21:</b> {format_level(ema_21)}  "
+            f"<b>EMA55:</b> {format_level(ema_55)}\n"
+            f"━━━━━━━━━━━━━━━━━━\n\n"
             f"{participation_text}"
+            f"{link_text}"
         )
 
     level_text = ""
@@ -2019,6 +2704,7 @@ def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg):
         f"📊 <b>RSI Status:</b> {get_rsi_status(current_rsi)}\n"
         f"🔊 <b>Volume:</b> {volume:.4f}\n"
         f"📦 <b>20-candle avg volume:</b> {volume_avg:.4f}"
+        f"{link_text}"
     )
 
 
@@ -2088,6 +2774,353 @@ def is_ema_cross_alert(alert):
     return alert.get("type") in {"ema_cross_above", "ema_cross_below"}
 
 
+LIGHTWEIGHT_ALERT_TYPES = {
+    "volume_spike",
+    "ema_cross_above",
+    "ema_cross_below",
+    "rsi_cross_above_70",
+    "rsi_cross_below_30",
+}
+ALERT_SIGNAL_SCOPE = "15m signal - snapshot in time, not a trend call"
+
+
+def is_lightweight_alert(alert):
+    return alert.get("type") in LIGHTWEIGHT_ALERT_TYPES
+
+
+def use_full_alert_chart(alerts):
+    if len(alerts) >= 2:
+        return True
+    return any(not is_lightweight_alert(alert) for alert in alerts)
+
+
+def scan_alert_cooldown_tier(alerts):
+    return "tier2" if use_full_alert_chart(alerts) else "tier1"
+
+
+def scan_alert_cooldown_seconds(tier):
+    if tier == "tier2":
+        return SCAN_TIER2_ALERT_COOLDOWN_SECONDS
+    return SCAN_ALERT_COOLDOWN_SECONDS
+
+
+def scan_alert_cooldowns(state):
+    return state.setdefault("__scan_alert_cooldowns", {})
+
+
+def should_send_scan_alert_group(state, symbol, alerts, now=None):
+    tier = scan_alert_cooldown_tier(alerts)
+    cooldown_seconds = scan_alert_cooldown_seconds(tier)
+    symbol_cooldowns = scan_alert_cooldowns(state).setdefault(symbol, {})
+    last_sent = symbol_cooldowns.get(tier, 0)
+    now = int(time.time()) if now is None else int(now)
+    if last_sent and now - last_sent < cooldown_seconds:
+        return False, tier, cooldown_seconds - (now - last_sent)
+    return True, tier, 0
+
+
+def mark_scan_alert_group_sent(state, symbol, alerts, now=None):
+    tier = scan_alert_cooldown_tier(alerts)
+    symbol_cooldowns = scan_alert_cooldowns(state).setdefault(symbol, {})
+    symbol_cooldowns[tier] = int(time.time()) if now is None else int(now)
+    return tier
+
+
+def scan_alert_history(state):
+    return state.setdefault("__scan_alert_history", {})
+
+
+def trim_scan_alert_history(state, symbol, now=None):
+    now = int(time.time()) if now is None else int(now)
+    history = scan_alert_history(state).setdefault(symbol, [])
+    fresh_history = [
+        entry
+        for entry in history
+        if now - int(entry.get("timestamp", 0)) <= ROLLING_CONFLUENCE_WINDOW_SECONDS
+    ]
+    scan_alert_history(state)[symbol] = fresh_history
+    return fresh_history
+
+
+def record_scan_alert_history(state, symbol, alerts, now=None):
+    now = int(time.time()) if now is None else int(now)
+    history = trim_scan_alert_history(state, symbol, now)
+    for alert in alerts:
+        if not is_lightweight_alert(alert):
+            continue
+        history.append(
+            {
+                "type": alert.get("type"),
+                "label": alert.get("label", "Market Alert"),
+                "emoji": alert.get("emoji", ""),
+                "direction": alert.get("direction", ""),
+                "volume_multiple": alert.get("volume_multiple"),
+                "timestamp": now,
+            }
+        )
+    scan_alert_history(state)[symbol] = history
+    return history
+
+
+def rolling_confluence_alerts(state, symbol, pending_alerts, now=None):
+    if not pending_alerts or any(not is_lightweight_alert(alert) for alert in pending_alerts):
+        return pending_alerts
+
+    now = int(time.time()) if now is None else int(now)
+    history = trim_scan_alert_history(state, symbol, now)
+    by_type = {}
+    for entry in history:
+        alert_type = entry.get("type")
+        if alert_type:
+            by_type[alert_type] = {
+                "type": alert_type,
+                "label": entry.get("label", "Market Alert"),
+                "emoji": entry.get("emoji", ""),
+                "direction": entry.get("direction", ""),
+                "volume_multiple": entry.get("volume_multiple"),
+            }
+    for alert in pending_alerts:
+        by_type[alert.get("type")] = alert
+
+    if len(by_type) < 2:
+        return pending_alerts
+    return list(by_type.values())
+
+
+def has_lightweight_confluence(alerts):
+    return len({alert.get("type") for alert in alerts if is_lightweight_alert(alert)}) >= 2
+
+
+def alert_signal_summary(alert):
+    alert_type = alert.get("type")
+    label = alert.get("label", "Market Alert")
+    if alert_type == "volume_spike" and alert.get("volume_multiple") is not None:
+        return f"{label} ({alert['volume_multiple']:.2f}x)"
+    return label
+
+
+def alert_card_data(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, skill_level=None):
+    timestamp, open_price, high, low, close, volume = candle
+    stats = [
+        ("PRICE", format_level(close)),
+        ("RSI", f"{current_rsi:.2f}"),
+        ("EMA 21 / 55", f"{format_level(ema_21)} / {format_level(ema_55)}"),
+    ]
+    if alert.get("type") == "volume_spike":
+        volume_multiple = alert.get("volume_multiple")
+        if volume_multiple is None:
+            volume_multiple = volume / volume_avg if volume_avg > 0 else 0
+        stats.insert(1, ("VOLUME", f"{volume_multiple:.2f}x avg"))
+    elif volume_avg > 0:
+        stats.insert(1, ("VOLUME", f"{volume / volume_avg:.2f}x avg"))
+
+    return {
+        "symbol": symbol,
+        "label": alert.get("label", "Market Alert"),
+        "emoji": alert.get("emoji", ""),
+        "direction": alert.get("direction", alert.get("type", "")),
+        "timeframe": "15M",
+        "timestamp": eastern_time_from_timestamp(timestamp),
+        "stats": stats[:4],
+        "takeaway": volume_alert_takeaway(alert, skill_level=skill_level)
+        if alert.get("type") == "volume_spike"
+        else "Signal detected. Wait for confirmation and manage risk.",
+        "official_link": official_coin_link(symbol),
+    }
+
+
+def build_alert_snapshot_content(symbol, candle, alerts, ema_21, ema_55, current_rsi, volume_avg):
+    timestamp, open_price, high, low, close, volume = candle
+    body_percent = candle_body_percent(open_price, close)
+    primary_alert = alerts[0]
+    signal_lines = [alert_signal_summary(alert) for alert in alerts]
+    title_label = "CONFLUENCE ALERT" if len(alerts) >= 2 else primary_alert.get("label", "MARKET ALERT").upper()
+    volume_multiple = None
+    for alert in alerts:
+        if alert.get("type") == "volume_spike":
+            volume_multiple = alert.get("volume_multiple")
+            break
+    if volume_multiple is None:
+        volume_multiple = volume / volume_avg if volume_avg > 0 else 0
+
+    return {
+        "title": f"{symbol.replace('/', ' / ')} {title_label}",
+        "card_specs": [
+            ("SIGNALS", "\n+ ".join(signal_lines[:3])),
+            ("PRICE", f"{format_level(close)}\nBody {body_percent:.2f}%"),
+            ("VOLUME", f"{volume_multiple:.2f}x average\nCurrent candle"),
+            ("RSI", f"{current_rsi:.2f}\n{get_rsi_status(current_rsi)}"),
+            ("EMA\nCONTEXT", f"21 {format_level(ema_21)}\n55 {format_level(ema_55)}"),
+        ],
+        "footer_items": [
+            f"1. {' + '.join(signal_lines)}",
+            f"2. Price {format_level(close)} \u2192 watch confirmation",
+            f"3. Volume {volume_multiple:.2f}x average \u2192 compare follow-through",
+        ],
+    }
+
+
+def build_volume_alert_snapshot_content(symbol, candle, alert, ema_21, ema_55, current_rsi):
+    return build_alert_snapshot_content(symbol, candle, [alert], ema_21, ema_55, current_rsi, volume_avg=0)
+
+
+def render_alert_snapshot_chart(symbol, candles, candle, alerts, ema_21, ema_55, current_rsi, volume_avg, supports=None, resistances=None):
+    if generate_levels_chart is None:
+        raise RuntimeError("Snapshot chart generator unavailable")
+    if not candles:
+        raise RuntimeError("No alert candles available")
+    if not alerts:
+        raise RuntimeError("No alerts available")
+
+    content = build_alert_snapshot_content(symbol, candle, alerts, ema_21, ema_55, current_rsi, volume_avg)
+    chart_candles = candle_dicts(candles)
+    ema21_series = [ema_21] * len(chart_candles)
+    ema55_series = [ema_55] * len(chart_candles)
+    return generate_levels_chart(
+        symbol,
+        chart_candles,
+        candle[4],
+        supports or [],
+        resistances or [],
+        ema21=ema21_series,
+        ema55=ema55_series,
+        card_specs=content["card_specs"],
+        footer_items=content["footer_items"],
+        title=content["title"],
+        output_prefix=f"{symbol.replace('/', '_')}_alert_snapshot_",
+        signal_scope=ALERT_SIGNAL_SCOPE,
+    )
+
+
+def render_volume_alert_snapshot_chart(symbol, candles, candle, alert, ema_21, ema_55, current_rsi, supports=None, resistances=None):
+    return render_alert_snapshot_chart(
+        symbol,
+        candles,
+        candle,
+        [alert],
+        ema_21,
+        ema_55,
+        current_rsi,
+        volume_avg=0,
+        supports=supports,
+        resistances=resistances,
+    )
+
+
+def render_lightweight_alert_card(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, skill_level=None):
+    if render_alert_card is None:
+        raise RuntimeError("Alert card renderer unavailable")
+    return render_alert_card(
+        alert_card_data(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, skill_level=skill_level),
+        logo_path=POINKLE_RESEARCH_EMBLEM_PATH,
+    )
+
+
+def send_alert_to_chat(
+    telegram_token,
+    chat_id,
+    symbol,
+    candle,
+    alert,
+    ema_21,
+    ema_55,
+    current_rsi,
+    volume_avg,
+    alert_candles=None,
+    supports=None,
+    resistances=None,
+):
+    message = build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg)
+    if is_lightweight_alert(alert):
+        try:
+            card_path = render_lightweight_alert_card(
+                symbol,
+                candle,
+                alert,
+                ema_21,
+                ema_55,
+                current_rsi,
+                volume_avg,
+            )
+            caption = f"{alert.get('emoji', '')} <b>{symbol} {alert['label']}</b>".strip()
+            if send_telegram_photo(telegram_token, chat_id, card_path, caption=caption):
+                return True
+            raise RuntimeError("Alert card send failed")
+        except Exception as error:
+            log_warn(f"Alert card rendering failed for {symbol}: {error}")
+
+    send_telegram_message(telegram_token, chat_id, message)
+    return False
+
+
+def build_combined_alert_message(symbol, candle, alerts, ema_21, ema_55, current_rsi, volume_avg):
+    return "\n\n━━━━━━━━━━━━━━━━━━\n\n".join(
+        build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg)
+        for alert in alerts
+    )
+
+
+def send_alert_group_to_chat(
+    telegram_token,
+    chat_id,
+    symbol,
+    candle,
+    alerts,
+    ema_21,
+    ema_55,
+    current_rsi,
+    volume_avg,
+    alert_candles=None,
+    supports=None,
+    resistances=None,
+):
+    if not alerts:
+        return False
+    if len(alerts) == 1 and not use_full_alert_chart(alerts):
+        return send_alert_to_chat(
+            telegram_token,
+            chat_id,
+            symbol,
+            candle,
+            alerts[0],
+            ema_21,
+            ema_55,
+            current_rsi,
+            volume_avg,
+            alert_candles=alert_candles,
+            supports=supports,
+            resistances=resistances,
+        )
+
+    fallback_message = build_combined_alert_message(symbol, candle, alerts, ema_21, ema_55, current_rsi, volume_avg)
+    try:
+        chart_path = render_alert_snapshot_chart(
+            symbol,
+            alert_candles,
+            candle,
+            alerts,
+            ema_21,
+            ema_55,
+            current_rsi,
+            volume_avg,
+            supports=supports,
+            resistances=resistances,
+        )
+        signal_label = " + ".join(alert_signal_summary(alert) for alert in alerts)
+        caption = f"<b>{symbol} Confluence Alert</b> — {signal_label}"
+        link = official_coin_link(symbol)
+        if link:
+            caption = f"{caption}\nLearn more: {link}"
+        if send_telegram_photo(telegram_token, chat_id, chart_path, caption=caption):
+            return True
+        raise RuntimeError("Alert snapshot send failed")
+    except Exception as error:
+        log_warn(f"Alert snapshot rendering failed for {symbol}: {error}")
+
+    send_telegram_message(telegram_token, chat_id, fallback_message)
+    return False
+
+
 def has_volume_alert_context(alerts, active_trade_status=None):
     if active_trade_status in {"Retest Holding", "Retest Failed"}:
         return True
@@ -2100,10 +3133,17 @@ def has_volume_alert_context(alerts, active_trade_status=None):
 
 
 def should_send_telegram_alert(alert, alerts, active_trade_status=None):
-    if alert.get("type") != "volume_spike":
-        return True
+    return True
 
-    return has_volume_alert_context(alerts, active_trade_status)
+
+def log_suppressed_lightweight_alert(symbol, candle, alerts, reason):
+    labels = ", ".join(alert.get("label", "Market Alert") for alert in alerts)
+    types = ", ".join(alert.get("type", "unknown") for alert in alerts)
+    print(
+        "Lightweight signal logged - "
+        f"{symbol} {eastern_time_from_timestamp(candle[0])} - "
+        f"{labels} ({types}) - {reason}"
+    )
 
 
 def log_suppressed_volume_alert(symbol, candle, alert, volume_avg, reason):
@@ -2164,18 +3204,170 @@ def print_compact_scan_summary(lines):
         print(line)
 
 
-def build_levels_command_message(exchange, symbol):
+def candle_dicts(candles):
+    return [
+        {
+            "time": candle[0],
+            "open": candle[1],
+            "high": candle[2],
+            "low": candle[3],
+            "close": candle[4],
+            "volume": candle[5],
+        }
+        for candle in candles
+    ]
+
+
+def zone_midpoints(zones):
+    return [zone_midpoint(zone) for zone in zones]
+
+
+def store_levels_chart_data(symbol, closed_candles, current_price, ema_21, ema_55, buy_zones, resistance_zones):
+    LAST_LEVELS_CHART_DATA[symbol] = {
+        "candles": candle_dicts(closed_candles),
+        "current_price": current_price,
+        "supports": zone_midpoints(buy_zones),
+        "resistances": zone_midpoints(resistance_zones),
+        "ema21": [ema_21] * len(closed_candles),
+        "ema55": [ema_55] * len(closed_candles),
+    }
+
+
+def build_chart_data(closed_candles, current_price, ema_21, ema_55, buy_zones, resistance_zones):
+    return {
+        "candles": candle_dicts(closed_candles),
+        "current_price": current_price,
+        "supports": zone_midpoints(buy_zones),
+        "resistances": zone_midpoints(resistance_zones),
+        "ema21": [ema_21] * len(closed_candles),
+        "ema55": [ema_55] * len(closed_candles),
+    }
+
+
+def render_research_snapshot_chart(symbol, chart_data):
+    if generate_levels_chart is None:
+        raise RuntimeError("Chart generator unavailable")
+    if not chart_data:
+        raise RuntimeError("No research chart data available")
+    return generate_levels_chart(
+        symbol,
+        chart_data["candles"],
+        chart_data["current_price"],
+        chart_data["supports"],
+        chart_data["resistances"],
+        ema21=chart_data["ema21"],
+        ema55=chart_data["ema55"],
+        title=f"{symbol.replace('/', ' / ')} RESEARCH SNAPSHOT",
+        output_prefix=f"{symbol.replace('/', '_')}_prb_snapshot_",
+    )
+
+
+def send_levels_chart(telegram_token, chat_id, symbol, caption):
+    try:
+        if generate_levels_chart is None:
+            raise RuntimeError("Chart generator unavailable")
+
+        chart_data = LAST_LEVELS_CHART_DATA.get(symbol)
+        if not chart_data:
+            raise RuntimeError("No chart data available")
+
+        chart_path = generate_levels_chart(
+            symbol,
+            chart_data["candles"],
+            chart_data["current_price"],
+            chart_data["supports"],
+            chart_data["resistances"],
+            ema21=chart_data["ema21"],
+            ema55=chart_data["ema55"],
+        )
+        send_telegram_photo(telegram_token, chat_id, chart_path, caption=caption)
+        return True
+    except Exception:
+        log_warn(f"Snapshot generation failed for {symbol.split('/')[0]}.")
+        return False
+
+
+POINKLE_EDUCATIONAL_FOOTER = (
+    "━━━━━━━━━━━━━━━━━━\n\n"
+    "⚠️ Not Financial Advice\n\n"
+    "🐷 Poinkle did the research.\n\n"
+    "🎓 The decision is yours.\n\n"
+    "━━━━━━━━━━━━━━━━━━"
+)
+
+
+def poinkle_educational_footer():
+    return POINKLE_EDUCATIONAL_FOOTER
+
+
+def build_levels_snapshot_caption(
+    symbol,
+    current_price,
+    current_location,
+    trend_bias,
+    overall_confidence,
+    accumulation,
+    current_rsi,
+    skill_level=None,
+):
+    display_symbol = symbol.replace("/", " / ")
+    trend_text = trend_bias
+    rsi_text = f"{current_rsi:.2f}"
+    if skill_level == "beginner":
+        if trend_bias == "Bullish":
+            trend_text = f"{trend_bias} (price is leaning above key moving averages)"
+        elif trend_bias == "Bearish":
+            trend_text = f"{trend_bias} (price is leaning below key moving averages)"
+        else:
+            trend_text = f"{trend_bias} (price is not clearly leaning either way yet)"
+
+        rsi_status = get_rsi_status(current_rsi)
+        rsi_text = f"{current_rsi:.2f} ({rsi_status.lower()} momentum)"
+
+    return (
+        f"📍 POINKLE SNAPSHOT — {display_symbol}\n"
+        f"━━━━━━━━━━━━━━━━\n\n"
+        f"💰 PRICE\n"
+        f"{format_zone_price(current_price)}\n\n"
+        f"📈 TREND\n"
+        f"{trend_text}\n\n"
+        f"🎯 FOCUS\n"
+        f"{current_location}\n\n"
+        f"⭐ MARKET SCORE\n"
+        f"{overall_confidence} / 100\n\n"
+        f"🧠 PATIENCE\n"
+        f"{accumulation['grade']} — {accumulation['label']}\n\n"
+        f"📊 RSI\n"
+        f"{rsi_text}\n\n"
+        f"━━━━━━━━━━━━━━━━\n\n"
+        f"👀 LOOK ORDER\n\n"
+        f"① Trend\n"
+        f"Where is price going?\n\n"
+        f"② Key Levels\n"
+        f"Where are the highest-probability reaction zones?\n\n"
+        f"③ Liquidity\n"
+        f"Where are stops likely to be swept?\n\n"
+        f"④ Confirmation\n"
+        f"Did price provide confirmation?\n\n"
+        f"⑤ Decision\n"
+        f"What is the highest-quality plan?\n\n"
+        f"{poinkle_educational_footer()}"
+    )
+
+
+def build_levels_command_message(exchange, symbol, skill_level=None):
     closed_candles = fetch_closed_ohlcv(exchange, symbol, TIMEFRAME, CANDLE_LIMIT)
     if len(closed_candles) < 80:
         raise RuntimeError(f"Not enough candle history for {symbol}")
 
-    four_hour_candles = fetch_closed_ohlcv(
+    one_hour_candles = fetch_closed_ohlcv(
         exchange,
         symbol,
-        "4h",
-        180,
+        "1h",
+        300,
         fallback=closed_candles[-100:],
     )
+    four_hour_candles = resample_candles(one_hour_candles, 4)
     daily_candles = fetch_closed_ohlcv(
         exchange,
         symbol,
@@ -2183,13 +3375,7 @@ def build_levels_command_message(exchange, symbol):
         180,
         fallback=closed_candles[-100:],
     )
-    weekly_candles = fetch_closed_ohlcv(
-        exchange,
-        symbol,
-        "1w",
-        104,
-        fallback=daily_candles[-60:],
-    )
+    weekly_candles = resample_candles(daily_candles, 7)
     latest_closed = closed_candles[-1]
     current_price = get_current_market_price(exchange, symbol, latest_closed[4])
     daily_closes = [candle[4] for candle in daily_candles]
@@ -2276,50 +3462,25 @@ def build_levels_command_message(exchange, symbol):
         ema_21,
         ema_55,
     )
+    store_levels_chart_data(
+        symbol,
+        closed_candles,
+        current_price,
+        ema_21,
+        ema_55,
+        buy_zones,
+        resistance_zones,
+    )
 
-    return (
-        f"📍 <b>{symbol} Market Levels</b>\n\n"
-        f"{alert_time_text(latest_closed[0])}"
-        f"<b>Current Price:</b>\n"
-        f"{format_zone_price(current_price)}\n\n"
-        f"<b>Current Location:</b>\n"
-        f"{current_location}\n\n"
-        f"<b>Trend:</b>\n"
-        f"{trend_bias}\n\n"
-        f"<b>Reason:</b>\n"
-        f"{format_trend_reasons(trend_reasons)}\n\n"
-        f"<b>Overall Confidence:</b> {overall_confidence}%\n\n"
-        f"🧱 <b>Accumulation Rating:</b> {accumulation['grade']}\n"
-        f"{accumulation['label']}\n\n"
-        f"🧠 <b>Summary</b>\n"
-        f"{summary}\n\n"
-        f"📊 <b>Market Structure</b>\n"
-        f"<b>Structure:</b> {market_structure_label}\n"
-        f"<b>Position:</b> {support_distance_label}\n"
-        f"<b>Nearest Support:</b> {nearest_support}\n"
-        f"<b>Nearest Resistance:</b> {nearest_resistance}\n"
-        f"<b>Distance To Nearest Support:</b> "
-        f"{format_distance_pct(distance_to_support)} ({support_distance_label})\n"
-        f"<b>Distance To Nearest Resistance:</b> {format_distance_pct(distance_to_resistance)}\n"
-        f"<b>Volume:</b> {volume_status} ({volume_multiple:.2f}x)\n\n"
-        f"🟢 <b>Accumulation Zones</b>\n"
-        f"{format_numbered_zones('Zone', buy_zones)}\n"
-        f"🔴 <b>Distribution Zones</b>\n"
-        f"{format_numbered_zones('Zone', resistance_zones)}\n"
-        f"<b>EMA Information</b>\n"
-        f"<b>EMA Timeframe:</b> {ema_timeframe}\n"
-        f"<b>EMA21:</b> {format_zone_price(ema_21)}\n"
-        f"<b>EMA55:</b> {format_zone_price(ema_55)}\n\n"
-        f"<b>RSI Information</b>\n"
-        f"<b>RSI:</b> {current_rsi:.2f}\n"
-        f"<b>RSI Status:</b> {rsi_status}\n\n"
-        f"<b>Score Breakdown</b>\n"
-        f"{format_score_breakdown(accumulation['positive_reasons'], accumulation['negative_reasons'])}\n\n"
-        f"🎯 <b>Best Use Case:</b>\n"
-        f"{format_best_use_cases(best_use_cases)}\n\n"
-        f"<b>Disclaimer:</b>\n"
-        f"Educational market structure only. Not financial advice. Use your own risk management.\n\n"
-        f"Levels Engine v1.0"
+    return build_levels_snapshot_caption(
+        symbol,
+        current_price,
+        current_location,
+        trend_bias,
+        overall_confidence,
+        accumulation,
+        current_rsi,
+        skill_level=skill_level,
     )
 
 
@@ -2328,13 +3489,14 @@ def build_levels_scan_snapshot(exchange, symbol):
     if len(closed_candles) < 80:
         raise RuntimeError(f"Not enough candle history for {symbol}")
 
-    four_hour_candles = fetch_closed_ohlcv(
+    one_hour_candles = fetch_closed_ohlcv(
         exchange,
         symbol,
-        "4h",
-        180,
+        "1h",
+        300,
         fallback=closed_candles[-100:],
     )
+    four_hour_candles = resample_candles(one_hour_candles, 4)
     daily_candles = fetch_closed_ohlcv(
         exchange,
         symbol,
@@ -2342,13 +3504,7 @@ def build_levels_scan_snapshot(exchange, symbol):
         180,
         fallback=closed_candles[-100:],
     )
-    weekly_candles = fetch_closed_ohlcv(
-        exchange,
-        symbol,
-        "1w",
-        104,
-        fallback=daily_candles[-60:],
-    )
+    weekly_candles = resample_candles(daily_candles, 7)
     latest_closed = closed_candles[-1]
     current_price = get_current_market_price(exchange, symbol, latest_closed[4])
     daily_closes = [candle[4] for candle in daily_candles]
@@ -2437,28 +3593,474 @@ def build_levels_scan_snapshot(exchange, symbol):
         "distance_to_resistance": distance_to_resistance,
         "market_structure": market_structure,
         "market_structure_label": market_structure_label,
+        "chart_data": build_chart_data(
+            closed_candles,
+            current_price,
+            ema_21,
+            ema_55,
+            buy_zones,
+            resistance_zones,
+        ),
     }
 
 
-def handle_help_command(telegram_token, telegram_chat_id):
-    help_text = (
-        "🤖 Poinkle Beta\n\n"
-        "Commands:\n"
-        "/help - Show this help menu\n"
-        "/status - Show bot status\n"
-        "/levels BTC - Get market levels\n\n"
-        "/scan - Top 100 market opportunities\n"
-        "/scan support - Filter scan results\n\n"
-        "Examples:\n"
-        "/levels BTC\n"
-        "/levels SOL\n"
-        "/levels TAO\n"
-        "/scan bearish\n\n"
-        "Supported coins:\n"
-        + ", ".join(symbol.replace("/USD", "") for symbol in WATCHLIST)
-        + "\n\n⚠️ Beta: Poinkle is under active development."
+def prb_number(symbol, watchlist=None):
+    watchlist = watchlist or WATCHLIST
+    try:
+        return f"PRB-{watchlist.index(symbol) + 1:04d}"
+    except ValueError:
+        return "PRB-0000"
+
+
+def prb_created_date(now=None):
+    now = now or datetime.now(EASTERN_TIME)
+    return f"{now.strftime('%B')} {now.day}, {now.year}"
+
+
+def research_confidence_text(snapshot):
+    score = snapshot.get("market_score")
+    if score is None:
+        return "Pending Evidence"
+    return f"{score / 10:.1f} / 10 (Market Snapshot)"
+
+
+POINKLE_RESEARCH_EMBLEM_PATH = PROJECT_DIR / "assets" / "poinkle_prb_logo.png"
+INNER_CIRCLE_LOGO_PATH = PROJECT_DIR / "assets" / "inner_circle_logo.png"
+
+
+def mike_logo_path():
+    if INNER_CIRCLE_LOGO_PATH.exists():
+        return INNER_CIRCLE_LOGO_PATH
+    return POINKLE_RESEARCH_EMBLEM_PATH
+
+
+REFERENCE_RESEARCH_BRIEFS = {
+    "AAVE/USD": {
+        "title": "AAVE Long-Term Investment Thesis",
+        "status": "Active Research",
+        "overall_rating": "7.4 / 10",
+        "long_term_thesis": (
+            "Constructive, but not because of one headline. The strongest long-term thesis is the combination of "
+            "macro liquidity, Bitcoin market cycles, DeFi adoption, institutional access, and regulatory clarity."
+        ),
+        "short_term_thesis": (
+            "AAVE still needs confirmation from price structure and broader market rotation. Kraken-related interest "
+            "is worth tracking, but it should be treated as one catalyst inside a larger DeFi cycle."
+        ),
+        "what_we_know": [
+            "Kraken/Fed-related news created a credible catalyst to study, but Kraken alone is not enough.",
+            "AAVE outperformed during a window that also included Bitcoin strength, ETF inflows, ETH strength, and capital rotation into DeFi.",
+            "The thesis gets stronger when BTC cycles, ETH strength, DeFi TVL, stablecoin liquidity, and AAVE-specific adoption line up together.",
+            "The April 17 lower high remains a key validation point because it helps separate headline momentum from durable trend strength.",
+        ],
+        "historical_pattern": [
+            "Track BTC -> ETH -> AAVE -> BTC Dominance -> TOTAL3 -> DeFi TVL to understand where liquidity originated and how it rotated.",
+            "Compare AAVE against prior infrastructure catalysts: Coinbase IPO, BlackRock ETF filing, Ethereum Merge, spot ETF approvals, and earlier DeFi cycles.",
+            "The key pattern question is whether AAVE responds best to Bitcoin rallies, falling BTC dominance, rising TVL, ETF inflows, or direct protocol catalysts.",
+        ],
+        "bull_case": [
+            "Kraken becomes meaningful infrastructure rather than a one-off headline.",
+            "Institutional DeFi usage grows and pushes attention toward established lending protocols.",
+            "DeFi TVL expands while Bitcoin remains constructive and liquidity conditions improve.",
+            "Regulatory clarity improves enough for larger capital pools to take DeFi seriously.",
+        ],
+        "bear_case": [
+            "Kraken integration proves limited or fails to drive measurable usage.",
+            "Bitcoin weakens before capital can rotate into ETH, DeFi, and AAVE.",
+            "DeFi TVL stalls, protocol revenue weakens, or competitors capture the narrative.",
+            "Regulation becomes restrictive and reduces institutional appetite for DeFi exposure.",
+        ],
+        "unknowns": [
+            "Depth and durability of Kraken integration.",
+            "Whether institutional DeFi demand becomes real usage or stays narrative-driven.",
+            "Future protocol revenue growth, wallet growth, whale behavior, exchange flows, and governance direction.",
+            "Regulatory path for lending protocols and DeFi infrastructure.",
+        ],
+        "strengthen": [
+            "AAVE reclaims key market structure while BTC and ETH remain supportive.",
+            "DeFi TVL and stablecoin liquidity rise together.",
+            "Protocol revenue, wallet growth, and governance activity improve.",
+            "Kraken/AAVE developments show measurable adoption, not just announcement value.",
+        ],
+        "weaken": [
+            "AAVE breaks support while BTC, ETH, or TOTAL3 also weaken.",
+            "BTC dominance rises in a way that prevents alt and DeFi rotation.",
+            "DeFi TVL contracts or protocol usage fails to confirm the narrative.",
+            "Regulatory pressure or competitor strength damages the long-term adoption case.",
+        ],
+        "scorecard": {
+            "Fundamentals": "8.5/10",
+            "Technical Structure": "7.0/10",
+            "Historical Pattern": "8.0/10",
+            "Macro Environment": "7.5/10",
+            "Institutional Adoption": "8.0/10",
+            "Risk": "5.5/10",
+        },
+        "conclusion": (
+            "The long-term AAVE thesis is strongest when treated as a liquidity-cycle and DeFi-adoption thesis, not a single-headline trade. "
+            "Kraken may matter, but the durable case depends on Bitcoin cycles, ETH strength, DeFi TVL, stablecoin liquidity, regulatory clarity, and measurable protocol usage."
+        ),
+    }
+}
+
+
+def prb_separator():
+    return "━━━━━━━━━━━━━━━━━━"
+
+
+def prb_brand_header():
+    return f"🐷 POINKLE RESEARCH BRIEF\n{prb_separator()}"
+
+
+def collect_market_data(exchange, symbol):
+    market_data = build_levels_scan_snapshot(exchange, symbol)
+    if market_data.get("chart_data"):
+        LAST_RESEARCH_CHART_DATA[symbol] = market_data["chart_data"]
+    return market_data
+
+
+def collect_future_news(symbol):
+    # Future live research source: connect news/catalyst collection here.
+    return {
+        "timeline": "Pending Evidence",
+        "historical_comparison": "Pending Evidence",
+    }
+
+
+def collect_future_fundamentals(symbol):
+    # Future live research source: connect fundamentals, on-chain, and macro data here.
+    return {
+        "fundamentals": "Pending Evidence",
+        "on_chain": "Pending Evidence",
+        "macro": "Pending Evidence",
+        "institutional_adoption": "Pending Evidence",
+        "historical_pattern": "Pending Evidence",
+    }
+
+
+def collect_reference_research(symbol):
+    return REFERENCE_RESEARCH_BRIEFS.get(symbol)
+
+
+def build_research_brief(exchange, symbol):
+    market_data = collect_market_data(exchange, symbol)
+    reference_research = collect_reference_research(symbol)
+    news_data = collect_future_news(symbol)
+    fundamentals_data = collect_future_fundamentals(symbol)
+    return render_prb(market_data, news_data, fundamentals_data, reference_research=reference_research)
+
+
+def render_prb(snapshot, news_data=None, fundamentals_data=None, updated=None, reference_research=None):
+    news_data = news_data or {}
+    fundamentals_data = fundamentals_data or {}
+    reference_research = reference_research or {}
+    symbol = snapshot["symbol"]
+    ticker = symbol.split("/")[0]
+    current_price = snapshot.get("current_price", 0)
+    support_zones = snapshot.get("support_zones", [])
+    resistance_zones = snapshot.get("resistance_zones", [])
+    accumulation_grade = snapshot.get("accumulation_grade", "N/A")
+    accumulation_label = snapshot.get("accumulation_label", "Pending Evidence")
+    bias = snapshot.get("bias", "Pending Evidence")
+    location = snapshot.get("location", "Pending Evidence")
+    market_structure_label = snapshot.get("market_structure_label", "Pending Evidence")
+    rsi_value = snapshot.get("rsi", 0)
+    strategy = snapshot.get("strategy", "watch")
+    support_text = format_zone(support_zones[0]) if support_zones else "Pending Evidence"
+    resistance_text = format_zone(resistance_zones[0]) if resistance_zones else "Pending Evidence"
+    updated = updated or prb_created_date()
+    separator = prb_separator()
+
+    if reference_research:
+        return render_reference_prb(snapshot, reference_research, separator)
+
+    title = f"{ticker} Market-Structure Research Brief"
+    status = "Market-Structure Brief — Full Research Pending"
+    overall_rating = research_confidence_text(snapshot)
+    long_term_thesis = "Full long-term thesis pending. Current evidence is limited to Poinkle market structure, trend, RSI, support, and resistance context."
+    short_term_thesis = f"Price is currently showing {bias.lower()} bias, {location.lower()}, and {market_structure_label.lower()} conditions."
+
+    return (
+        f"{prb_brand_header()}\n\n"
+        f"PRB: {prb_number(symbol)}\n"
+        f"Title: {title}\n"
+        f"Status: {status}\n"
+        f"Overall Rating: {overall_rating}\n"
+        f"Long-Term Thesis: {long_term_thesis}\n"
+        f"Short-Term Thesis: {short_term_thesis}\n"
+        f"\n{separator}\n\n"
+        f"✅ WHAT WE KNOW\n\n"
+        f"• This is not a full fundamental research brief yet.\n"
+        f"• Current Price: {format_zone_price(current_price)}\n"
+        f"• Trend: {bias}\n"
+        f"• RSI: {current_rsi_text(rsi_value)}\n"
+        f"• Market Structure: {market_structure_label}\n"
+        f"• Nearest Support: {support_text}\n"
+        f"• Nearest Resistance: {resistance_text}\n"
+        f"• Best Use Case: {strategy_text_for_research(strategy)}\n\n"
+        f"📈 HISTORICAL PATTERN\n\n"
+        f"Full historical research pending. Use this brief as a market-structure read until saved or live research is connected.\n\n"
+        f"{separator}\n\n"
+        f"🐂 BULL CASE\n\n"
+        f"{ticker} improves if trend strengthens, accumulation holds, resistance is reclaimed, liquidity expands, and fundamental evidence confirms the thesis.\n\n"
+        f"🐻 BEAR CASE\n\n"
+        f"{ticker} weakens if support fails, market structure deteriorates, liquidity contracts, or fundamental evidence contradicts the thesis.\n\n"
+        f"❓ BIGGEST UNKNOWNS\n\n"
+        f"Protocol fundamentals, adoption, token supply dynamics, sector leadership, regulation, macro liquidity, and future catalyst quality.\n\n"
+        f"{separator}\n\n"
+        f"🔍 WHAT WOULD STRENGTHEN THIS THESIS?\n\n"
+        f"• Reclaim resistance with improving trend and volume.\n"
+        f"• Hold support during broader market weakness.\n"
+        f"• Add saved research evidence or future live fundamentals confirming adoption.\n\n"
+        f"⚠️ WHAT WOULD WEAKEN THIS THESIS?\n\n"
+        f"• Lose nearby support.\n"
+        f"• RSI and trend continue weakening.\n"
+        f"• Future research finds weak fundamentals or poor catalyst quality.\n\n"
+        f"{separator}\n\n"
+        f"📊 POINKLE SCORECARD\n\n"
+        f"Fundamentals: Full Research Pending\n"
+        f"Technical Structure: {snapshot.get('market_score', 0) / 10:.1f}/10\n"
+        f"Historical Pattern: Full Research Pending\n"
+        f"Macro Environment: Full Research Pending\n"
+        f"Institutional Adoption: Full Research Pending\n"
+        f"Risk: {accumulation_grade} — {accumulation_label}\n\n"
+        f"{separator}\n\n"
+        f"📌 RESEARCH CONCLUSION\n\n"
+        f"This is a market-structure brief, not a complete investment thesis. "
+        f"The next upgrade should connect saved research, news, fundamentals, on-chain data, and macro context before making a stronger long-term call.\n\n"
+        f"{research_footer(separator)}"
     )
-    send_telegram_message(telegram_token, telegram_chat_id, help_text)
+
+
+def render_reference_prb(snapshot, research, separator):
+    symbol = snapshot["symbol"]
+    return (
+        f"{prb_brand_header()}\n\n"
+        f"PRB: {prb_number(symbol)}\n"
+        f"Title: {research['title']}\n"
+        f"Status: {research['status']}\n"
+        f"Overall Rating: {research['overall_rating']}\n"
+        f"Long-Term Thesis: {research['long_term_thesis']}\n"
+        f"Short-Term Thesis: {research['short_term_thesis']}\n"
+        f"\n{separator}\n\n"
+        f"✅ WHAT WE KNOW\n\n"
+        f"{format_research_bullets(research['what_we_know'])}\n\n"
+        f"{separator}\n\n"
+        f"📈 HISTORICAL PATTERN\n\n"
+        f"{format_research_bullets(research['historical_pattern'])}\n\n"
+        f"🐂 BULL CASE\n\n"
+        f"{format_research_bullets(research['bull_case'])}\n\n"
+        f"🐻 BEAR CASE\n\n"
+        f"{format_research_bullets(research['bear_case'])}\n\n"
+        f"❓ BIGGEST UNKNOWNS\n\n"
+        f"{format_research_bullets(research['unknowns'])}\n\n"
+        f"{separator}\n\n"
+        f"🔍 WHAT WOULD STRENGTHEN THIS THESIS?\n\n"
+        f"{format_research_bullets(research['strengthen'])}\n\n"
+        f"⚠️ WHAT WOULD WEAKEN THIS THESIS?\n\n"
+        f"{format_research_bullets(research['weaken'])}\n\n"
+        f"{separator}\n\n"
+        f"📊 POINKLE SCORECARD\n\n"
+        f"{format_scorecard(research['scorecard'])}\n\n"
+        f"{separator}\n\n"
+        f"📌 RESEARCH CONCLUSION\n\n"
+        f"{research['conclusion']}\n\n"
+        f"{research_footer(separator)}"
+    )
+
+
+def format_research_bullets(items):
+    return "\n".join(f"• {item}" for item in items)
+
+
+def format_scorecard(scorecard):
+    return "\n".join(f"{label}: {score}" for label, score in scorecard.items())
+
+
+def research_footer(separator):
+    return poinkle_educational_footer()
+
+
+def current_rsi_text(current_rsi):
+    return f"{current_rsi:.2f}" if isinstance(current_rsi, (int, float)) else "Pending Evidence"
+
+
+def strategy_text_for_research(strategy):
+    if isinstance(strategy, (list, tuple)):
+        return ", ".join(strategy_text_for_research(item) for item in strategy)
+
+    labels = {
+        "dca": "DCA",
+        "hold": "Long-Term Hold",
+        "breakout": "Breakout Trade",
+        "trim": "Trim Position",
+        "wait": "Wait For Pullback",
+        "watch": "Watch Only",
+    }
+    return labels.get(strategy, str(strategy).replace("_", " ").title())
+
+
+def build_research_command_message(exchange, symbol):
+    return build_research_brief(exchange, symbol)
+
+
+def research_branding_image_exists():
+    return POINKLE_RESEARCH_EMBLEM_PATH.exists()
+
+
+def send_research_branding_image(telegram_token, chat_id):
+    if not research_branding_image_exists():
+        return False
+    return send_telegram_photo(telegram_token, chat_id, POINKLE_RESEARCH_EMBLEM_PATH)
+
+
+def send_research_cards(telegram_token, chat_id, prb_text, symbol=None, chart_data=None):
+    try:
+        if render_prb_cards is None:
+            raise RuntimeError("PRB card renderer unavailable")
+
+        chart_path = None
+        if symbol and chart_data:
+            try:
+                chart_path = render_research_snapshot_chart(symbol, chart_data)
+            except Exception as error:
+                log_warn(f"PRB chart rendering failed for {symbol}: {error}")
+
+        card_paths = render_prb_cards(
+            prb_text,
+            logo_path=POINKLE_RESEARCH_EMBLEM_PATH,
+            chart_path=chart_path,
+        )
+        if not card_paths:
+            raise RuntimeError("No PRB cards rendered")
+
+        if send_telegram_media_group(telegram_token, chat_id, card_paths):
+            return True
+
+        log_warn("PRB media group send failed; falling back to individual cards.")
+        for card_path in card_paths:
+            if not send_telegram_photo(telegram_token, chat_id, card_path):
+                raise RuntimeError("PRB card send failed")
+        return True
+    except Exception as error:
+        log_warn(f"PRB card rendering failed: {error}")
+        return False
+
+
+SNAPSHOT_COMMANDS = ("/snapshot", "/snap", "/levels")
+RESEARCH_COMMANDS = ("/research",)
+REFERENCE_COMMANDS = ("/guide", "/reference")
+
+
+def snapshot_command_name(message_text):
+    return message_text.strip().split()[0].lower().split("@", 1)[0] if message_text.strip() else ""
+
+
+def is_snapshot_command(message_text):
+    return snapshot_command_name(message_text) in SNAPSHOT_COMMANDS
+
+
+def is_research_command(message_text):
+    return snapshot_command_name(message_text) in RESEARCH_COMMANDS
+
+
+def is_reference_command(message_text):
+    return snapshot_command_name(message_text) in REFERENCE_COMMANDS
+
+
+def format_supported_coins_for_help(symbols, per_line=8):
+    coins = [symbol.replace("/USD", "") for symbol in symbols]
+    lines = [
+        ", ".join(coins[index : index + per_line])
+        for index in range(0, len(coins), per_line)
+    ]
+    return "\n".join(lines)
+
+
+def command_example_asset(index=0):
+    if not WATCHLIST:
+        return "SYMBOL"
+    symbol = WATCHLIST[min(index, len(WATCHLIST) - 1)]
+    return symbol.split("/")[0]
+
+
+def poinkle_onboarding_text(kind):
+    supported_coins = format_supported_coins_for_help(WATCHLIST)
+    primary_example = command_example_asset(0)
+    secondary_example = command_example_asset(1)
+    research_example = command_example_asset(2)
+    intro = (
+        "Welcome to Poinkle Alpha.\n\n"
+        "Poinkle helps teach you what to look at next.\n\n"
+        "Start with:\n\n"
+        f"📸 /snapshot {primary_example}\n"
+        f"⚡ /snap {secondary_example}\n"
+        f"📚 /research {research_example}\n"
+        f"📈 /levels {primary_example} (legacy)\n"
+        "❓ /help\n\n"
+        "Layer 1 teaches:\n\n"
+        "• Trend\n"
+        "• Key Levels\n"
+        "• Liquidity\n"
+        "• Confirmation\n"
+        "• Decision\n\n"
+    )
+    if kind == "help":
+        return (
+            "POINKLE HELP\n\n"
+            f"{intro}"
+            "Main Commands\n\n"
+            f"/snapshot {primary_example}\n"
+            f"/snap {secondary_example}\n"
+            f"/research {research_example}\n"
+            f"/levels {primary_example} (legacy)\n"
+            "/help\n\n"
+            "🪙 Current Supported Coins\n\n"
+            f"{supported_coins}\n\n"
+            "Current Features\n\n"
+            "• Snapshot\n"
+            "• Trend\n"
+            "• Key Levels\n"
+            "• Liquidity\n"
+            "• Confirmation\n"
+            "• Decision\n"
+            "• Market Score\n"
+            "• RSI\n"
+            "• Patience Grade\n"
+            "• What To Watch Next\n\n"
+            "Poinkle Alpha\n"
+            "Educational market structure only.\n"
+            "Not financial advice."
+        )
+
+    return (
+        "POINKLE START\n\n"
+        f"{intro}"
+        "🪙 Supported Coins\n\n"
+        f"{supported_coins}\n\n"
+        "Educational market structure only.\n"
+        "Not financial advice."
+    )
+
+
+def handle_start_command(telegram_token, telegram_chat_id):
+    try:
+        if render_welcome_card is None:
+            raise RuntimeError("Welcome card renderer unavailable")
+        card_path = render_welcome_card(
+            reference_card_symbols(),
+            logo_path=POINKLE_RESEARCH_EMBLEM_PATH,
+        )
+        if send_telegram_photo(telegram_token, telegram_chat_id, card_path):
+            return
+        raise RuntimeError("Welcome card send failed")
+    except Exception as error:
+        log_warn(f"Welcome card rendering failed: {error}")
+        send_telegram_message(telegram_token, telegram_chat_id, poinkle_onboarding_text("start"))
+
+
+def handle_help_command(telegram_token, telegram_chat_id):
+    send_telegram_message(telegram_token, telegram_chat_id, poinkle_onboarding_text("help"))
 
 
 def handle_scan_command(
@@ -2492,6 +4094,232 @@ def handle_scan_command(
     send_telegram_message(telegram_token, response_chat_id, message)
 
 
+def format_mike_trend(trend):
+    trend = str(trend or "").strip().lower()
+    if trend in {"bullish", "bearish", "neutral"}:
+        return trend
+    return "neutral"
+
+
+def mike_list_symbols():
+    return list(MIKES_LIST)
+
+
+def create_mike_alternate_exchange():
+    if ccxt is None:
+        raise RuntimeError("Missing ccxt for Mike alternate exchange data")
+
+    exchange_class = getattr(ccxt, MIKE_ALTERNATE_EXCHANGE_ID, None)
+    if exchange_class is None:
+        raise RuntimeError(f"ccxt exchange unavailable: {MIKE_ALTERNATE_EXCHANGE_ID}")
+
+    return exchange_class({"enableRateLimit": True})
+
+
+def mike_alternate_exchange():
+    global MIKE_ALTERNATE_EXCHANGE
+    if MIKE_ALTERNATE_EXCHANGE is None:
+        MIKE_ALTERNATE_EXCHANGE = create_mike_alternate_exchange()
+    return MIKE_ALTERNATE_EXCHANGE
+
+
+def validate_mike_alternate_symbol(exchange, symbol):
+    try:
+        markets = exchange.load_markets()
+    except Exception as error:
+        raise MarketDataError(
+            f"{symbol}: {MIKE_ALTERNATE_EXCHANGE_ID} market list unavailable"
+        ) from error
+
+    if symbol not in markets:
+        raise MarketDataError(
+            f"{symbol}: unsupported {MIKE_ALTERNATE_EXCHANGE_ID} pair"
+        )
+
+
+def build_mike_symbol_snapshot(primary_exchange, symbol):
+    alternate_symbol = MIKE_ALTERNATE_SYMBOLS.get(symbol)
+    if not alternate_symbol:
+        return build_levels_scan_snapshot(primary_exchange, symbol)
+
+    alternate_exchange = mike_alternate_exchange()
+    validate_mike_alternate_symbol(alternate_exchange, alternate_symbol)
+    return build_levels_scan_snapshot(alternate_exchange, alternate_symbol)
+
+
+def build_mike_list_rows(exchange):
+    rows = []
+    for symbol in mike_list_symbols():
+        base = symbol.replace("/USD", "")
+        try:
+            snapshot = build_mike_symbol_snapshot(exchange, symbol)
+            rows.append(
+                {
+                    "symbol": base,
+                    "price": format_level(snapshot["current_price"]),
+                    "trend": format_mike_trend(snapshot["bias"]),
+                    "rsi": f"{snapshot['rsi']:.2f}",
+                    "available": True,
+                }
+            )
+        except Exception as error:
+            log_warn(f"{symbol}: Mike list snapshot unavailable: {error}")
+            rows.append(
+                {
+                    "symbol": base,
+                    "price": "market data unavailable",
+                    "trend": "n/a",
+                    "rsi": "n/a",
+                    "available": False,
+                }
+            )
+    return rows
+
+
+def build_mike_list_message_from_rows(rows):
+    if not rows:
+        return "Mike's list is temporarily unavailable."
+
+    lines = []
+    for row in rows:
+        lines.append(
+            f"{row['symbol']}: Price {row['price']} | "
+            f"Trend {row['trend']} | RSI {row['rsi']}"
+        )
+    return "\n".join(lines)
+
+
+def build_mike_list_message(exchange):
+    return build_mike_list_message_from_rows(build_mike_list_rows(exchange))
+
+
+def send_mike_list_card(telegram_token, chat_id, rows, caption):
+    try:
+        if render_mike_list_card is None:
+            raise RuntimeError("Mike list card renderer unavailable")
+        card_path = render_mike_list_card(rows, logo_path=POINKLE_RESEARCH_EMBLEM_PATH)
+        return send_telegram_photo(telegram_token, chat_id, card_path, caption=caption)
+    except Exception as error:
+        log_warn(f"Mike list card rendering failed: {error}")
+        return False
+
+
+def handle_mike_command(exchange, telegram_token, telegram_chat_id, source_chat=None):
+    source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
+    response_chat_id = str(source_chat.get("id", telegram_chat_id))
+    try:
+        rows = build_mike_list_rows(exchange)
+        message = build_mike_list_message_from_rows(rows)
+    except Exception as error:
+        log_warn(f"Error running /mike: {error}")
+        message = "Mike's list is temporarily unavailable. Please try again soon."
+        send_telegram_message(telegram_token, response_chat_id, message)
+        return
+
+    caption = "The Inner Circle - Mike's List"
+    if not send_mike_list_card(telegram_token, response_chat_id, rows, caption):
+        send_telegram_message(telegram_token, response_chat_id, message)
+
+
+def handle_research_command(
+    exchange,
+    telegram_token,
+    telegram_chat_id,
+    message_text,
+    source_chat=None,
+):
+    parts = message_text.strip().split()
+    command = snapshot_command_name(message_text) or "/research"
+    log_info(f"Received {message_text.strip()}")
+    source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
+    response_chat_id = str(source_chat.get("id", telegram_chat_id))
+
+    if len(parts) < 2:
+        log_warn(f"Missing symbol for {command} command")
+        send_telegram_message(
+            telegram_token,
+            response_chat_id,
+            f"Use: {command} {command_example_asset(0)}\n"
+            f"Example: /research {command_example_asset(2)}",
+        )
+        return
+
+    symbol = normalize_symbol(parts[1])
+    log_info(f"Mapped symbol: {symbol or 'UNKNOWN'}")
+    if symbol is None:
+        log_warn(f"Unsupported {command} symbol: {parts[1]}")
+        send_telegram_message(
+            telegram_token,
+            response_chat_id,
+            "Symbol currently unavailable.",
+        )
+        return
+
+    try:
+        message = build_research_command_message(exchange, symbol)
+    except Exception as error:
+        log_warn(f"{symbol}: {command} unavailable: {error}")
+        send_telegram_message(
+            telegram_token,
+            response_chat_id,
+            "Symbol currently unavailable.",
+        )
+        return
+
+    if not send_research_cards(
+        telegram_token,
+        response_chat_id,
+        message,
+        symbol=symbol,
+        chart_data=LAST_RESEARCH_CHART_DATA.get(symbol),
+    ):
+        send_telegram_message(telegram_token, response_chat_id, message)
+    log_info(f"Answered {command} command for {symbol}")
+
+
+def reference_card_symbols():
+    return [
+        symbol
+        for symbol in WATCHLIST
+        if symbol not in UNSUPPORTED_SYMBOLS_THIS_SESSION
+    ]
+
+
+def reference_text_fallback():
+    coins = " ".join(symbol.replace("/USD", "") for symbol in reference_card_symbols())
+    return (
+        "POINKLE - QUICK REFERENCE\n\n"
+        "/snapshot BTC - full visual chart + breakdown\n"
+        "/snap ETH - quick version of the same\n"
+        "/research SOL - deeper multi-card research brief\n"
+        "/levels BTC - legacy text version\n"
+        "/alerts XRP support - get DM'd when XRP nears a key zone\n"
+        "/myalerts - see your active alerts\n"
+        "/help - full command list anytime\n\n"
+        f"Supported Coins:\n{coins}\n\n"
+        "Every alert is a short-term signal on one specific timeframe - not a call on the overall trend.\n\n"
+        "Educational market structure only. Not financial advice. Poinkle did the research. The decision is yours."
+    )
+
+
+def handle_reference_command(telegram_token, telegram_chat_id, source_chat=None):
+    source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
+    response_chat_id = str(source_chat.get("id", telegram_chat_id))
+    try:
+        if render_reference_card is None:
+            raise RuntimeError("Reference card renderer unavailable")
+        card_path = render_reference_card(
+            reference_card_symbols(),
+            logo_path=POINKLE_RESEARCH_EMBLEM_PATH,
+        )
+        if send_telegram_photo(telegram_token, response_chat_id, card_path):
+            return
+        raise RuntimeError("Reference card send failed")
+    except Exception as error:
+        log_warn(f"Reference card rendering failed: {error}")
+        send_telegram_message(telegram_token, response_chat_id, reference_text_fallback())
+
+
 def handle_status_command(telegram_token, telegram_chat_id, state, source_chat=None):
     source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
     response_chat_id = str(source_chat.get("id", telegram_chat_id))
@@ -2500,6 +4328,77 @@ def handle_status_command(telegram_token, telegram_chat_id, state, source_chat=N
         response_chat_id,
         build_bot_status_message(state, include_details=True),
     )
+
+
+def mode_usage_text(command):
+    return f"Use: /{command} on\nOr: /{command} off"
+
+
+def handle_mode_command(telegram_token, telegram_chat_id, message_text, source_chat=None, from_user=None):
+    parts = message_text.strip().split()
+    command = parts[0].lower().lstrip("/") if parts else ""
+    action = parts[1].lower() if len(parts) > 1 else ""
+    source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
+    response_chat_id = str(source_chat.get("id", telegram_chat_id))
+    user_id = telegram_user_id(source_chat, from_user, telegram_chat_id)
+    log_mode_command_debug(
+        message_text.strip(),
+        user_id,
+        username_from_user(from_user),
+        response_chat_id,
+    )
+
+    if not is_admin_user(user_id):
+        send_telegram_message(telegram_token, response_chat_id, "Admin only.")
+        return
+
+    if action not in {"on", "off"}:
+        send_telegram_message(telegram_token, response_chat_id, mode_usage_text(command))
+        return
+
+    if command == "devmode":
+        config_key = "developer_mode"
+        label = "Developer mode"
+    elif command == "maintenance":
+        config_key = "maintenance_mode"
+        label = "Maintenance mode"
+    else:
+        config_key = "live_alerts_enabled"
+        label = "Live alerts"
+    enabled = action == "on"
+    config = load_bot_config()
+    config[config_key] = enabled
+    save_bot_config(config)
+
+    log_info(f"{label} {'enabled' if enabled else 'disabled'} by Telegram user {user_id}.")
+    send_telegram_message(
+        telegram_token,
+        response_chat_id,
+        f"✅ {label} {'enabled' if enabled else 'disabled'}.",
+    )
+
+
+def command_allowed_by_active_mode(telegram_token, chat_id, source_chat=None, from_user=None):
+    config = load_bot_config()
+    user_id = telegram_user_id(source_chat, from_user, chat_id)
+
+    if config.get("developer_mode") and not is_owner_user(user_id):
+        send_telegram_message(
+            telegram_token,
+            str((source_chat or {}).get("id", chat_id)),
+            "🧪 Poinkle is currently in developer testing mode.",
+        )
+        return False
+
+    if config.get("maintenance_mode") and not is_admin_user(user_id):
+        send_telegram_message(
+            telegram_token,
+            str((source_chat or {}).get("id", chat_id)),
+            "🔧 Poinkle is currently undergoing maintenance. Please try again shortly.",
+        )
+        return False
+
+    return True
 
 
 def base_symbol(symbol):
@@ -2649,25 +4548,28 @@ def handle_levels_command(
     from_user=None,
 ):
     parts = message_text.strip().split()
+    command = snapshot_command_name(message_text) or "/snapshot"
     log_info(f"Received {message_text.strip()}")
     source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
     from_user = from_user or {}
     response_chat_id = str(source_chat.get("id", telegram_chat_id))
     is_private = is_private_chat(source_chat)
+    user_id = str(from_user.get("id") or response_chat_id if is_private else from_user.get("id") or "")
+    skill_level = user_skill_level(user_id) if user_id else None
 
     if len(parts) < 2:
-        log_warn("Missing symbol for /levels command")
+        log_warn(f"Missing symbol for {command} command")
         send_telegram_message(
             telegram_token,
             response_chat_id,
-            "Use: /levels BTC\nExample: /levels DOGE",
+            f"Use: {command} BTC\nExample: /snapshot DOGE",
         )
         return
 
     symbol = normalize_symbol(parts[1])
     log_info(f"Mapped symbol: {symbol or 'UNKNOWN'}")
     if symbol is None:
-        log_warn(f"Unsupported /levels symbol: {parts[1]}")
+        log_warn(f"Unsupported {command} symbol: {parts[1]}")
         send_telegram_message(
             telegram_token,
             response_chat_id,
@@ -2675,10 +4577,16 @@ def handle_levels_command(
         )
         return
 
+    if not is_private:
+        maybe_send_skill_onboarding(telegram_token, source_chat, from_user)
+
     try:
-        message = build_levels_command_message(exchange, symbol)
+        if skill_level:
+            message = build_levels_command_message(exchange, symbol, skill_level=skill_level)
+        else:
+            message = build_levels_command_message(exchange, symbol)
     except Exception as error:
-        log_warn(f"{symbol}: /levels unavailable: {error}")
+        log_warn(f"{symbol}: {command} unavailable: {error}")
         send_telegram_message(
             telegram_token,
             response_chat_id,
@@ -2687,25 +4595,26 @@ def handle_levels_command(
         return
 
     if is_private:
-        log_info("Sending levels response")
-        send_telegram_message(telegram_token, response_chat_id, message)
-        log_info(f"Answered /levels command for {symbol}")
+        log_info("Sending Poinkle snapshot")
+        if not send_levels_chart(telegram_token, response_chat_id, symbol, message):
+            send_telegram_message(telegram_token, response_chat_id, message)
+        log_info(f"Answered {command} command for {symbol}")
         return
 
-    user_id = from_user.get("id")
     if not user_id:
         log_warn("Missing Telegram user id for DM delivery")
         send_telegram_message(telegram_token, response_chat_id, levels_dm_failed_message())
         return
 
     try:
-        send_telegram_message(telegram_token, str(user_id), message)
+        if not send_levels_chart(telegram_token, str(user_id), symbol, message):
+            send_telegram_message(telegram_token, str(user_id), message)
         send_telegram_message(
             telegram_token,
             response_chat_id,
             levels_dm_success_message(symbol),
         )
-        log_info(f"Sent {symbol} levels to DM for user {user_id}")
+        log_info(f"Sent {symbol} snapshot to DM for user {user_id}")
     except Exception as error:
         log_warn(f"Could not DM levels to user {user_id}: {error}")
         send_telegram_message(telegram_token, response_chat_id, levels_dm_failed_message())
@@ -2795,7 +4704,7 @@ def check_user_level_alerts(exchange, telegram_token):
             except Exception as error:
                 throttled_log_warn(
                     symbol,
-                    f"user-alert:{alert_type}:{error}",
+                    f"user-alert:{alert_type}",
                     f"{symbol}: Could not check {alert_type} user alert. Will retry quietly.",
                 )
                 continue
@@ -2851,7 +4760,7 @@ def process_telegram_commands(exchange, telegram_token, telegram_chat_id, state)
     except Exception as error:
         throttled_log_warn(
             "telegram",
-            f"updates:{error}",
+            "updates",
             "Telegram command polling failed. Will retry quietly.",
         )
         return
@@ -2863,9 +4772,43 @@ def process_telegram_commands(exchange, telegram_token, telegram_chat_id, state)
         chat_id = str(chat.get("id", ""))
         text = (message.get("text") or "").strip()
         lower_text = text.lower()
+        from_user = message.get("from", {})
 
-        if lower_text.startswith("/help"):
-           handle_help_command(telegram_token, chat_id)
+        if maybe_send_alpha_onboarding(telegram_token, chat, text, from_user):
+            pass
+        elif handle_skill_level_reply(telegram_token, chat, text, from_user):
+            pass
+        elif lower_text.startswith("/start"):
+            handle_start_command(telegram_token, chat_id)
+        elif lower_text.startswith("/help"):
+            handle_help_command(telegram_token, chat_id)
+        elif not text.startswith("/"):
+            pass
+        elif (
+            lower_text.startswith("/devmode")
+            or lower_text.startswith("/maintenance")
+            or lower_text.startswith("/livealerts")
+        ):
+            if command_allowed_by_active_mode(
+                telegram_token,
+                chat_id,
+                source_chat=chat,
+                from_user=from_user,
+            ):
+                handle_mode_command(
+                    telegram_token,
+                    chat_id,
+                    text,
+                    source_chat=chat,
+                    from_user=from_user,
+                )
+        elif not command_allowed_by_active_mode(
+            telegram_token,
+            chat_id,
+            source_chat=chat,
+            from_user=from_user,
+        ):
+            pass
         elif lower_text.startswith("/status"):
             handle_status_command(
                 telegram_token,
@@ -2878,7 +4821,7 @@ def process_telegram_commands(exchange, telegram_token, telegram_chat_id, state)
                 telegram_token,
                 chat_id,
                 source_chat=chat,
-                from_user=message.get("from", {}),
+                from_user=from_user,
             )
         elif lower_text.startswith("/alerts"):
             handle_alerts_command(
@@ -2886,7 +4829,7 @@ def process_telegram_commands(exchange, telegram_token, telegram_chat_id, state)
                 chat_id,
                 text,
                 source_chat=chat,
-                from_user=message.get("from", {}),
+                from_user=from_user,
             )
         elif lower_text.startswith("/scan"):
             handle_scan_command(
@@ -2896,14 +4839,35 @@ def process_telegram_commands(exchange, telegram_token, telegram_chat_id, state)
                 text,
                 source_chat=chat,
             )
-        elif lower_text.startswith("/levels"):
-                handle_levels_command(
+        elif lower_text.startswith("/mike"):
+            handle_mike_command(
+                exchange,
+                telegram_token,
+                chat_id,
+                source_chat=chat,
+            )
+        elif is_reference_command(text):
+            handle_reference_command(
+                telegram_token,
+                chat_id,
+                source_chat=chat,
+            )
+        elif is_research_command(text):
+            handle_research_command(
                 exchange,
                 telegram_token,
                 chat_id,
                 text,
                 source_chat=chat,
-                from_user=message.get("from", {}),
+            )
+        elif is_snapshot_command(text):
+            handle_levels_command(
+                exchange,
+                telegram_token,
+                chat_id,
+                text,
+                source_chat=chat,
+                from_user=from_user,
             )
 
         command_state["last_update_id"] = update_id
@@ -3288,7 +5252,7 @@ def evaluate_active_trade(trade, price, candles):
 
 
 def monitor_active_trades(exchange, telegram_token, telegram_chat_id, state):
-    if MAIN_CHAT_SAFE_MODE:
+    if main_chat_safe_mode_enabled():
         if state.setdefault("__active_trades", {}):
             log_info("MAIN_CHAT_SAFE_MODE active - trade tracking Telegram updates are disabled.")
         return
@@ -3337,7 +5301,7 @@ def monitor_active_trades(exchange, telegram_token, telegram_chat_id, state):
         except Exception as error:
             throttled_log_warn(
                 symbol,
-                f"active-trade:{error}",
+                "active-trade",
                 f"{symbol}: Active trade monitor failed. Will retry quietly.",
             )
 
@@ -3709,14 +5673,25 @@ def scan_symbol(exchange, symbol):
         volume_average,
         range_low,
         range_high,
+        closed_candles,
     )
 
 
 def run_once(exchange, telegram_token, telegram_chat_id, state):
+    scan_start = time.perf_counter()
+    scanned_symbols = 0
+    skipped_symbols = 0
+    failed_symbols = 0
     compact_scan_lines = []
+    main_chat_safe_mode = main_chat_safe_mode_enabled()
     for symbol in WATCHLIST:
+        if symbol in UNSUPPORTED_SYMBOLS_THIS_SESSION:
+            skipped_symbols += 1
+            continue
         try:
+            scanned_symbols += 1
             symbol_state = state.setdefault(symbol, {})
+            scan_result = scan_symbol(exchange, symbol)
             (
                 previous_candle,
                 candle,
@@ -3728,7 +5703,8 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
                 volume_avg,
                 range_low,
                 range_high,
-            ) = scan_symbol(exchange, symbol)
+            ) = scan_result[:10]
+            alert_candles = scan_result[10] if len(scan_result) > 10 else [previous_candle, candle]
             candle_id = str(candle[0])
             sent_alerts = symbol_state.setdefault("sent_alerts", {})
 
@@ -3738,13 +5714,13 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
             pending_before_scan = bool(symbol_state.get("pending_setups"))
             tracking_is_active = symbol in state.setdefault("__active_trades", {})
             current_market_price = get_current_market_price(exchange, symbol, candle[4])
-            if MAIN_CHAT_SAFE_MODE:
-                if alerts:
+            if main_chat_safe_mode:
+                if alerts and not LIVE_ALERT_TEST_CHAT_ID:
                     log_info(
                         f"MAIN_CHAT_SAFE_MODE active - suppressed automatic alerts for {symbol}: "
                         f"{', '.join(alert['label'] for alert in alerts)}"
                     )
-                alerts = []
+                    alerts = []
             else:
                 alerts.extend(
                     build_level_alerts(
@@ -3763,28 +5739,16 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
                     )
                 )
 
-            sent_alert_labels = []
-            sent_alert_types = []
+            active_trade_status = (
+                state.setdefault("__active_trades", {})
+                .get(symbol, {})
+                .get("last_status")
+            )
+            pending_alerts = []
             for alert in alerts:
                 event_key = f"{candle_id}:{alert['type']}"
                 if sent_alerts.get(alert["type"]) == event_key:
                     continue
-
-                if MAIN_CHAT_SAFE_MODE:
-                    log_info(
-                        f"MAIN_CHAT_SAFE_MODE active - skipped Telegram alert for {symbol}: "
-                        f"{alert['label']}"
-                    )
-                    sent_alerts[alert["type"]] = event_key
-                    sent_alert_types.append(alert["type"])
-                    save_state(state)
-                    continue
-
-                active_trade_status = (
-                    state.setdefault("__active_trades", {})
-                    .get(symbol, {})
-                    .get("last_status")
-                )
                 if not should_send_telegram_alert(alert, alerts, active_trade_status):
                     log_suppressed_volume_alert(
                         symbol,
@@ -3797,26 +5761,122 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
                         ),
                     )
                     sent_alerts[alert["type"]] = event_key
-                    sent_alert_types.append(alert["type"])
                     save_state(state)
                     continue
+                pending_alerts.append(alert)
 
-                location_filter = alert.get("location_filter")
-                if location_filter:
-                    print_confirmation_debug(
+            log_accuracy_audit_snapshot(
+                symbol,
+                candle,
+                current_market_price,
+                ema_21,
+                ema_55,
+                current_rsi,
+            )
+
+            sent_alert_labels = []
+            sent_alert_types = []
+            alert_group = pending_alerts
+            if pending_alerts:
+                now = int(time.time())
+                alert_group = rolling_confluence_alerts(state, symbol, pending_alerts, now)
+                record_scan_alert_history(state, symbol, pending_alerts, now)
+                if all(is_lightweight_alert(alert) for alert in alert_group) and not has_lightweight_confluence(alert_group):
+                    log_suppressed_lightweight_alert(
                         symbol,
-                        alert,
                         candle,
-                        ema_21,
-                        ema_55,
-                        current_rsi,
-                        volume_avg,
+                        alert_group,
+                        "Waiting for another distinct lightweight signal within 15 minutes.",
                     )
+                    for alert in pending_alerts:
+                        sent_alerts[alert["type"]] = f"{candle_id}:{alert['type']}"
+                    save_state(state)
+                    pending_alerts = []
+                    alert_group = []
 
-                message = build_alert(
-                    symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg
+            if pending_alerts:
+                should_send_group, cooldown_tier, remaining_seconds = should_send_scan_alert_group(
+                    state,
+                    symbol,
+                    alert_group,
                 )
-                send_telegram_message(telegram_token, telegram_chat_id, message)
+                if not should_send_group:
+                    log_info(
+                        f"Suppressed {cooldown_tier} scanner alert for {symbol}: "
+                        f"cooldown active for {remaining_seconds}s."
+                    )
+                    for alert in pending_alerts:
+                        sent_alerts[alert["type"]] = f"{candle_id}:{alert['type']}"
+                    save_state(state)
+                    pending_alerts = []
+                    alert_group = []
+
+            if pending_alerts:
+                destination_chat_id = telegram_chat_id
+                if main_chat_safe_mode:
+                    if LIVE_ALERT_TEST_CHAT_ID:
+                        destination_chat_id = LIVE_ALERT_TEST_CHAT_ID
+                    else:
+                        log_info(
+                            f"MAIN_CHAT_SAFE_MODE active - skipped Telegram alert for {symbol}: "
+                            f"{', '.join(alert['label'] for alert in pending_alerts)}"
+                        )
+                        pending_alerts = []
+
+            if pending_alerts:
+                for alert in pending_alerts:
+                    location_filter = alert.get("location_filter")
+                    if location_filter:
+                        print_confirmation_debug(
+                            symbol,
+                            alert,
+                            candle,
+                            ema_21,
+                            ema_55,
+                            current_rsi,
+                            volume_avg,
+                        )
+
+                log_info(
+                    "Alert timing candidate: "
+                    f"{symbol} "
+                    f"{' + '.join(alert['label'] for alert in alert_group)} | "
+                    f"candle close {eastern_time_from_timestamp(candle_close_timestamp_ms(candle))} | "
+                    f"scan time {eastern_time_now()}"
+                )
+                image_sent = send_alert_group_to_chat(
+                    telegram_token,
+                    destination_chat_id,
+                    symbol,
+                    candle,
+                    alert_group,
+                    ema_21,
+                    ema_55,
+                    current_rsi,
+                    volume_avg,
+                    alert_candles=alert_candles,
+                    supports=[range_low],
+                    resistances=[range_high],
+                )
+                sent_at = time.time()
+                metric = record_alert_delivery_metric(
+                    state,
+                    symbol,
+                    candle,
+                    alert_group,
+                    sent_at=sent_at,
+                    delivery_type="photo" if image_sent else "text_fallback",
+                )
+                log_alert_delivery_metric(metric, alert_delivery_metrics(state))
+                if main_chat_safe_mode and LIVE_ALERT_TEST_CHAT_ID:
+                    log_info(
+                        f"MAIN_CHAT_SAFE_MODE active - routed live alert for {symbol} "
+                        "to test chat instead of main chat."
+                    )
+                mark_scan_alert_group_sent(state, symbol, alert_group)
+
+            for alert in pending_alerts:
+                event_key = f"{candle_id}:{alert['type']}"
                 sent_alerts[alert["type"]] = event_key
                 sent_alert_labels.append(alert["label"])
                 sent_alert_types.append(alert["type"])
@@ -3857,17 +5917,27 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
             save_state(state)
 
         except Exception as error:
+            failed_symbols += 1
             throttled_log_warn(
                 symbol,
                 str(error),
                 candle_error_message(symbol, error),
             )
 
+    benchmark = scan_cycle_benchmark(
+        time.perf_counter() - scan_start,
+        scanned_symbols,
+        skipped_symbols=skipped_symbols,
+        failed_symbols=failed_symbols,
+    )
+    log_info(format_scan_cycle_benchmark(benchmark))
     print_compact_scan_summary(compact_scan_lines)
     save_state(state)
 
 
 def main():
+    global LIVE_ALERT_TEST_CHAT_ID
+
     load_dotenv()
 
     if ccxt is None:
@@ -3877,6 +5947,7 @@ def main():
 
     telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
     telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID")
+    LIVE_ALERT_TEST_CHAT_ID = os.getenv("LIVE_ALERT_TEST_CHAT_ID", "").strip()
 
     if not telegram_token or not telegram_chat_id:
         raise SystemExit(
@@ -3884,9 +5955,12 @@ def main():
         )
 
     exchange = ccxt.coinbase()
+    supported_symbols, unsupported_symbols = validate_watchlist_against_exchange(exchange, WATCHLIST)
+    UNSUPPORTED_SYMBOLS_THIS_SESSION.update(unsupported_symbols)
     state = load_state()
     update_bot_status(state, "Online", "Starting")
     save_state(state)
+    register_bot_commands(telegram_token)
     send_status_update(telegram_token, telegram_chat_id, state, indicator="🟢")
 
     log_info("Poinkle scanner started.")
@@ -3897,18 +5971,36 @@ def main():
 
     try:
         while True:
+            loop_phase_start = time.perf_counter()
             update_bot_status(state, "Online", "Checking commands")
             save_state(state)
             process_telegram_commands(exchange, telegram_token, telegram_chat_id, state)
+            command_seconds = time.perf_counter() - loop_phase_start
 
+            scan_phase_start = time.perf_counter()
             update_bot_status(state, "Online", "Scanning")
             save_state(state)
             run_once(exchange, telegram_token, telegram_chat_id, state)
             update_bot_status(state, "Online", "Scan complete", last_scan_time=eastern_time_now())
             save_state(state)
+            scan_seconds = time.perf_counter() - scan_phase_start
 
+            user_alert_phase_start = time.perf_counter()
             check_user_level_alerts(exchange, telegram_token)
+            user_alert_seconds = time.perf_counter() - user_alert_phase_start
+
+            active_trade_phase_start = time.perf_counter()
             monitor_active_trades(exchange, telegram_token, telegram_chat_id, state)
+            active_trade_seconds = time.perf_counter() - active_trade_phase_start
+
+            log_info(
+                format_loop_phase_benchmark(
+                    command_seconds,
+                    scan_seconds,
+                    user_alert_seconds,
+                    active_trade_seconds,
+                )
+            )
 
             update_bot_status(state, "Online", "Waiting")
             save_state(state)

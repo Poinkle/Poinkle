@@ -51,7 +51,7 @@ Supported `/levels` symbols:
 
 Uppercase and lowercase both work. If a symbol is not available from the exchange/data source, the bot replies with `Symbol currently unavailable.`
 
-If `/levels SYMBOL` is used in a group chat, the full report is sent privately to the user who requested it. The group only receives a short confirmation or a note asking the user to start the bot first. Set `TELEGRAM_BOT_USERNAME` in `.env` so that start-bot note points to the right bot username.
+If `/levels SYMBOL` is used in a group chat, the full report is sent privately to the user who requested it. The group only receives a short confirmation or a note asking the user to start the bot first. Set `TELEGRAM_BOT_USERNAME=Poinkle_Bot` in `.env` so that start-bot note points to `@Poinkle_Bot`.
 
 The bot replies with broad 4H/daily/weekly zones, not exact penny levels:
 

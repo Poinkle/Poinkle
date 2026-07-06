@@ -1,220 +1,3603 @@
 {
+  "1INCH/USD": {},
   "AAVE/USD": {
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
-    "sent_alerts": {}
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_above": "1783314000000:ema_cross_above",
+      "ema_cross_below": "1783308600000:ema_cross_below",
+      "rsi_cross_above_70": "1783352700000:rsi_cross_above_70",
+      "volume_spike": "1783350000000:volume_spike"
+    }
+  },
+  "ACH/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "volume_spike": "1783360800000:volume_spike"
+    }
   },
   "ADA/USD": {
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
-    "sent_alerts": {}
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "rsi_cross_above_70": "1783352700000:rsi_cross_above_70",
+      "rsi_cross_below_30": "1783341000000:rsi_cross_below_30",
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "AERO/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "rsi_cross_above_70": "1783353600000:rsi_cross_above_70",
+      "test:breakout:0.58522464:early_warning": "1783371600000:test:breakout:0.58522464:early_warning",
+      "volume_spike": "1783372500000:volume_spike"
+    }
+  },
+  "AIOZ/USD": {
+    "last_checked_candle": "1783371600000",
+    "last_checked_time": "2026-07-06 21:00 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "volume_spike": "1783371600000:volume_spike"
+    }
   },
   "AKT/USD": {
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
-    "sent_alerts": {}
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_above": "1783348200000:ema_cross_above",
+      "ema_cross_below": "1783339200000:ema_cross_below",
+      "rsi_cross_above_70": "1783350000000:rsi_cross_above_70",
+      "test:breakout:0.6276269999999999:confirmation": "1783371600000:test:breakout:0.6276269999999999:confirmation",
+      "test:breakout:0.6276269999999999:early_warning": "1783370700000:test:breakout:0.6276269999999999:early_warning",
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "ALGO/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_above": "1783361700000:ema_cross_above",
+      "ema_cross_below": "1783307700000:ema_cross_below",
+      "rsi_cross_below_30": "1783338300000:rsi_cross_below_30",
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "ANKR/USD": {},
+  "APE/USD": {},
+  "API3/USD": {},
+  "APT/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "rsi_cross_above_70": "1783371600000:rsi_cross_above_70",
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "ARB/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {
+      "test:breakdown:0.0810189": {
+        "break_strength_score": 34,
+        "direction": "breakdown",
+        "expected_confirmation_candle": 1783373400000,
+        "first_candle": 1783372500000,
+        "first_candle_close": 0.0808,
+        "first_candle_high": 0.0812,
+        "first_candle_low": 0.0808,
+        "first_candle_open": 0.0811,
+        "first_candle_volume": 33255.25,
+        "level": 0.0810189,
+        "setup_quality": "F",
+        "setup_status": "Weak Setup / Avoid Chasing"
+      }
+    },
+    "sent_alerts": {
+      "rsi_cross_above_70": "1783371600000:rsi_cross_above_70",
+      "test:breakdown:0.0810189:early_warning": "1783372500000:test:breakdown:0.0810189:early_warning",
+      "volume_spike": "1783371600000:volume_spike"
+    }
   },
   "ATOM/USD": {
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
-    "sent_alerts": {}
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {
+      "test:breakout:1.6226209999999999": {
+        "break_strength_score": 59,
+        "direction": "breakout",
+        "expected_confirmation_candle": 1783373400000,
+        "first_candle": 1783372500000,
+        "first_candle_close": 1.623,
+        "first_candle_high": 1.625,
+        "first_candle_low": 1.62,
+        "first_candle_open": 1.62,
+        "first_candle_volume": 10548.95,
+        "level": 1.6226209999999999,
+        "setup_quality": "D",
+        "setup_status": "Weak Setup / Avoid Chasing"
+      }
+    },
+    "sent_alerts": {
+      "ema_cross_below": "1783340100000:ema_cross_below",
+      "rsi_cross_above_70": "1783371600000:rsi_cross_above_70",
+      "rsi_cross_below_30": "1783339200000:rsi_cross_below_30",
+      "test:breakout:1.6226209999999999:early_warning": "1783372500000:test:breakout:1.6226209999999999:early_warning",
+      "volume_spike": "1783372500000:volume_spike"
+    }
   },
+  "AUDIO/USD": {},
   "AVAX/USD": {
     "EMA 21 crossed above EMA 55": "1782185400000:EMA 21 crossed above EMA 55",
     "EMA 21 crossed below EMA 55": "1782193500000:EMA 21 crossed below EMA 55",
     "RSI is below 30": "1782202500000:RSI is below 30",
     "Volume is 2x higher than the 20-candle average": "1782202500000:Volume is 2x higher than the 20-candle average",
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
     "sent_alerts": {
-      "ema_cross_above": "1782222300000:ema_cross_above",
-      "ema_cross_below": "1782306900000:ema_cross_below",
-      "rsi_cross_above_70": "1782223200000:rsi_cross_above_70",
-      "rsi_cross_below_30": "1782308700000:rsi_cross_below_30",
-      "volume_spike": "1782310500000:volume_spike"
+      "ema_cross_above": "1783323000000:ema_cross_above",
+      "ema_cross_below": "1783327500000:ema_cross_below",
+      "rsi_cross_above_70": "1783353600000:rsi_cross_above_70",
+      "rsi_cross_below_30": "1783341000000:rsi_cross_below_30",
+      "volume_spike": "1783371600000:volume_spike"
     }
   },
+  "AXS/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "rsi_cross_above_70": "1783353600000:rsi_cross_above_70",
+      "test:breakout:1.019018:early_warning": "1783371600000:test:breakout:1.019018:early_warning",
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "BAL/USD": {},
+  "BAND/USD": {},
+  "BAT/USD": {
+    "last_checked_candle": "1783371600000",
+    "last_checked_time": "2026-07-06 21:00 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_above": "1783351800000:ema_cross_above",
+      "rsi_cross_above_70": "1783357200000:rsi_cross_above_70",
+      "volume_spike": "1783357200000:volume_spike"
+    }
+  },
+  "BCH/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_above": "1783358100000:ema_cross_above",
+      "rsi_cross_above_70": "1783371600000:rsi_cross_above_70",
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "BEAM/USD": {},
+  "BLUR/USD": {},
   "BNB/USD": {
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
-    "sent_alerts": {}
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_above": "1783358100000:ema_cross_above",
+      "ema_cross_below": "1783314900000:ema_cross_below",
+      "rsi_cross_above_70": "1783371600000:rsi_cross_above_70",
+      "rsi_cross_below_30": "1783341000000:rsi_cross_below_30",
+      "volume_spike": "1783359000000:volume_spike"
+    }
+  },
+  "BONK/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "rsi_cross_below_30": "1783359000000:rsi_cross_below_30",
+      "volume_spike": "1783361700000:volume_spike"
+    }
   },
   "BTC/USD": {
     "RSI is below 30": "1782204300000:RSI is below 30",
     "Volume is 2x higher than the 20-candle average": "1782203400000:Volume is 2x higher than the 20-candle average",
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
     "sent_alerts": {
       "ema_cross_above": "1782303300000:ema_cross_above",
-      "ema_cross_below": "1782306000000:ema_cross_below",
-      "rsi_cross_below_30": "1782306900000:rsi_cross_below_30",
-      "volume_spike": "1782310500000:volume_spike"
+      "ema_cross_below": "1783322100000:ema_cross_below",
+      "rsi_cross_above_70": "1783371600000:rsi_cross_above_70",
+      "rsi_cross_below_30": "1783339200000:rsi_cross_below_30",
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "CAKE/USD": {
+    "last_checked_candle": "1783371600000",
+    "last_checked_time": "2026-07-06 21:00 UTC",
+    "pending_setups": {
+      "test:breakout:1.4504489999999999": {
+        "break_strength_score": 46,
+        "direction": "breakout",
+        "expected_confirmation_candle": 1783372500000,
+        "first_candle": 1783371600000,
+        "first_candle_close": 1.451,
+        "first_candle_high": 1.453,
+        "first_candle_low": 1.449,
+        "first_candle_open": 1.449,
+        "first_candle_volume": 184.04,
+        "level": 1.4504489999999999,
+        "setup_quality": "F",
+        "setup_status": "Weak Setup / Avoid Chasing"
+      }
+    },
+    "sent_alerts": {
+      "ema_cross_above": "1783370700000:ema_cross_above",
+      "ema_cross_below": "1783369800000:ema_cross_below",
+      "test:breakout:1.4504489999999999:early_warning": "1783371600000:test:breakout:1.4504489999999999:early_warning",
+      "volume_spike": "1783370700000:volume_spike"
+    }
+  },
+  "CELO/USD": {},
+  "CHZ/USD": {},
+  "COMP/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "volume_spike": "1783372500000:volume_spike"
+    }
+  },
+  "COTI/USD": {},
+  "CRO/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "volume_spike": "1783353600000:volume_spike"
+    }
+  },
+  "CRV/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_above": "1783359900000:ema_cross_above",
+      "rsi_cross_above_70": "1783358100000:rsi_cross_above_70",
+      "volume_spike": "1783359900000:volume_spike"
+    }
+  },
+  "CVX/USD": {},
+  "DAI/USD": {},
+  "DASH/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_above": "1783359900000:ema_cross_above",
+      "ema_cross_below": "1783313100000:ema_cross_below",
+      "rsi_cross_below_30": "1783342800000:rsi_cross_below_30",
+      "test:breakout:35.315279999999994:early_warning": "1783371600000:test:breakout:35.315279999999994:early_warning",
+      "test:breakout:35.315279999999994:late_move": "1783372500000:test:breakout:35.315279999999994:late_move",
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "DEGEN/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {
+      "test:breakout:0.0015985969999999998": {
+        "break_strength_score": 53,
+        "direction": "breakout",
+        "expected_confirmation_candle": 1783373400000,
+        "first_candle": 1783372500000,
+        "first_candle_close": 0.001599,
+        "first_candle_high": 0.001599,
+        "first_candle_low": 0.001592,
+        "first_candle_open": 0.001597,
+        "first_candle_volume": 10807.0,
+        "level": 0.0015985969999999998,
+        "setup_quality": "D",
+        "setup_status": "Weak Setup / Avoid Chasing"
+      }
+    },
+    "sent_alerts": {
+      "test:breakout:0.0015845829999999999:early_warning": "1783370700000:test:breakout:0.0015845829999999999:early_warning",
+      "test:breakout:0.0015845829999999999:weak_break": "1783371600000:test:breakout:0.0015845829999999999:weak_break",
+      "test:breakout:0.0015985969999999998:early_warning": "1783372500000:test:breakout:0.0015985969999999998:early_warning"
     }
   },
   "DOGE/USD": {
     "RSI is below 30": "1782210600000:RSI is below 30",
     "Volume is 2x higher than the 20-candle average": "1782202500000:Volume is 2x higher than the 20-candle average",
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
     "sent_alerts": {
-      "rsi_cross_above_70": "1782265500000:rsi_cross_above_70",
-      "rsi_cross_below_30": "1782306900000:rsi_cross_below_30",
-      "volume_spike": "1782310500000:volume_spike"
+      "ema_cross_below": "1783315800000:ema_cross_below",
+      "rsi_cross_above_70": "1783371600000:rsi_cross_above_70",
+      "rsi_cross_below_30": "1783341000000:rsi_cross_below_30",
+      "volume_spike": "1783371600000:volume_spike"
     }
   },
   "DOT/USD": {
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
-    "sent_alerts": {}
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_below": "1783308600000:ema_cross_below",
+      "rsi_cross_above_70": "1783371600000:rsi_cross_above_70",
+      "rsi_cross_below_30": "1783314900000:rsi_cross_below_30",
+      "volume_spike": "1783371600000:volume_spike"
+    }
   },
   "EDEL/USD": {},
+  "EIGEN/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {
+      "test:breakdown:0.23476499999999997": {
+        "break_strength_score": 30,
+        "direction": "breakdown",
+        "expected_confirmation_candle": 1783373400000,
+        "first_candle": 1783372500000,
+        "first_candle_close": 0.234,
+        "first_candle_high": 0.236,
+        "first_candle_low": 0.234,
+        "first_candle_open": 0.236,
+        "first_candle_volume": 7237.76,
+        "level": 0.23476499999999997,
+        "setup_quality": "F",
+        "setup_status": "Weak Setup / Avoid Chasing"
+      }
+    },
+    "sent_alerts": {
+      "ema_cross_above": "1783363500000:ema_cross_above",
+      "rsi_cross_above_70": "1783363500000:rsi_cross_above_70",
+      "test:breakdown:0.23476499999999997:early_warning": "1783372500000:test:breakdown:0.23476499999999997:early_warning",
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "ENA/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_above": "1783360800000:ema_cross_above",
+      "volume_spike": "1783361700000:volume_spike"
+    }
+  },
+  "ENS/USD": {
+    "last_checked_candle": "1783371600000",
+    "last_checked_time": "2026-07-06 21:00 UTC",
+    "pending_setups": {
+      "test:breakout:4.294289999999999": {
+        "break_strength_score": 59,
+        "direction": "breakout",
+        "expected_confirmation_candle": 1783372500000,
+        "first_candle": 1783371600000,
+        "first_candle_close": 4.3,
+        "first_candle_high": 4.33,
+        "first_candle_low": 4.3,
+        "first_candle_open": 4.3,
+        "first_candle_volume": 513.798,
+        "level": 4.294289999999999,
+        "setup_quality": "D",
+        "setup_status": "Weak Setup / Avoid Chasing"
+      }
+    },
+    "sent_alerts": {
+      "test:breakout:4.294289999999999:early_warning": "1783371600000:test:breakout:4.294289999999999:early_warning",
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "EOS/USD": {},
+  "ETC/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
   "ETH/USD": {
     "RSI is below 30": "1782211500000:RSI is below 30",
     "Volume is 2x higher than the 20-candle average": "1782202500000:Volume is 2x higher than the 20-candle average",
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
     "sent_alerts": {
       "ema_cross_above": "1782301500000:ema_cross_above",
-      "ema_cross_below": "1782306900000:ema_cross_below",
-      "rsi_cross_below_30": "1782308700000:rsi_cross_below_30",
-      "volume_spike": "1782309600000:volume_spike"
+      "ema_cross_below": "1783315800000:ema_cross_below",
+      "rsi_cross_above_70": "1783371600000:rsi_cross_above_70",
+      "rsi_cross_below_30": "1783341000000:rsi_cross_below_30",
+      "volume_spike": "1783371600000:volume_spike"
     }
   },
   "FARTCOIN/USD": {
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
-    "sent_alerts": {}
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_below": "1783320300000:ema_cross_below",
+      "rsi_cross_below_30": "1783339200000:rsi_cross_below_30",
+      "test:breakout:0.16736719999999997:early_warning": "1783371600000:test:breakout:0.16736719999999997:early_warning",
+      "volume_spike": "1783353600000:volume_spike"
+    }
   },
   "FET/USD": {
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
-    "sent_alerts": {}
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_above": "1783359900000:ema_cross_above",
+      "ema_cross_below": "1783305000000:ema_cross_below",
+      "rsi_cross_above_70": "1783371600000:rsi_cross_above_70",
+      "rsi_cross_below_30": "1783341000000:rsi_cross_below_30",
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "FIL/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_below": "1783314900000:ema_cross_below",
+      "rsi_cross_above_70": "1783351800000:rsi_cross_above_70",
+      "rsi_cross_below_30": "1783314900000:rsi_cross_below_30",
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "FLOKI/USD": {},
+  "FLOW/USD": {},
+  "FLR/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "GLM/USD": {},
+  "GMT/USD": {},
+  "GRT/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {
+      "test:breakout:0.018618599999999996": {
+        "break_strength_score": 94,
+        "direction": "breakout",
+        "expected_confirmation_candle": 1783372500000,
+        "first_candle": 1783371600000,
+        "first_candle_close": 0.0187,
+        "first_candle_high": 0.0187,
+        "first_candle_low": 0.0185,
+        "first_candle_open": 0.0185,
+        "first_candle_volume": 631468.76,
+        "level": 0.018618599999999996,
+        "setup_quality": "A+",
+        "setup_status": "High Interest Setup"
+      }
+    },
+    "sent_alerts": {
+      "rsi_cross_above_70": "1783353600000:rsi_cross_above_70",
+      "test:breakdown:0.018481499999999998:early_warning": "1783369800000:test:breakdown:0.018481499999999998:early_warning",
+      "test:breakout:0.018618599999999996:early_warning": "1783371600000:test:breakout:0.018618599999999996:early_warning",
+      "volume_spike": "1783371600000:volume_spike"
+    }
   },
   "HBAR/USD": {
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
-    "sent_alerts": {}
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_below": "1783314900000:ema_cross_below",
+      "rsi_cross_below_30": "1783339200000:rsi_cross_below_30",
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "HNT/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_above": "1783357200000:ema_cross_above",
+      "test:breakout:0.24023999999999995:early_warning": "1783369800000:test:breakout:0.24023999999999995:early_warning",
+      "volume_spike": "1783372500000:volume_spike"
+    }
   },
   "HYPE/USD": {
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
-    "sent_alerts": {}
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_below": "1783329300000:ema_cross_below",
+      "rsi_cross_below_30": "1783341900000:rsi_cross_below_30",
+      "test:breakout:71.38131:early_warning": "1783371600000:test:breakout:71.38131:early_warning",
+      "volume_spike": "1783362600000:volume_spike"
+    }
   },
   "ICP/USD": {
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
-    "sent_alerts": {}
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_above": "1783352700000:ema_cross_above",
+      "ema_cross_below": "1783314000000:ema_cross_below",
+      "rsi_cross_above_70": "1783371600000:rsi_cross_above_70",
+      "rsi_cross_below_30": "1783315800000:rsi_cross_below_30",
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "IMX/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "volume_spike": "1783369800000:volume_spike"
+    }
   },
   "INJ/USD": {
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
-    "sent_alerts": {}
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_below": "1783343700000:ema_cross_below",
+      "test:breakout:4.91491:early_warning": "1783371600000:test:breakout:4.91491:early_warning",
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "IOTX/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {
+      "test:breakout:0.007197189999999999": {
+        "break_strength_score": 49,
+        "direction": "breakout",
+        "expected_confirmation_candle": 1783373400000,
+        "first_candle": 1783372500000,
+        "first_candle_close": 0.0073,
+        "first_candle_high": 0.00731,
+        "first_candle_low": 0.00719,
+        "first_candle_open": 0.00725,
+        "first_candle_volume": 67783.0,
+        "level": 0.007197189999999999,
+        "setup_quality": "F",
+        "setup_status": "Weak Setup / Avoid Chasing"
+      }
+    },
+    "sent_alerts": {
+      "test:breakout:0.007197189999999999:early_warning": "1783372500000:test:breakout:0.007197189999999999:early_warning"
+    }
   },
   "JASMY/USD": {
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
-    "sent_alerts": {}
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_above": "1783353600000:ema_cross_above",
+      "ema_cross_below": "1783312200000:ema_cross_below",
+      "rsi_cross_above_70": "1783363500000:rsi_cross_above_70",
+      "rsi_cross_below_30": "1783322100000:rsi_cross_below_30",
+      "test:breakout:0.004644639999999999:early_warning": "1783371600000:test:breakout:0.004644639999999999:early_warning",
+      "volume_spike": "1783363500000:volume_spike"
+    }
+  },
+  "KAVA/USD": {},
+  "KSM/USD": {
+    "last_checked_candle": "1783371600000",
+    "last_checked_time": "2026-07-06 21:00 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "volume_spike": "1783352700000:volume_spike"
+    }
+  },
+  "LDO/USD": {
+    "last_checked_candle": "1783371600000",
+    "last_checked_time": "2026-07-06 21:00 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_above": "1783353600000:ema_cross_above",
+      "rsi_cross_above_70": "1783371600000:rsi_cross_above_70",
+      "volume_spike": "1783371600000:volume_spike"
+    }
   },
   "LINK/USD": {
     "RSI is below 30": "1782210600000:RSI is below 30",
     "Volume is 2x higher than the 20-candle average": "1782202500000:Volume is 2x higher than the 20-candle average",
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
     "sent_alerts": {
       "ema_cross_above": "1782294300000:ema_cross_above",
-      "ema_cross_below": "1782296100000:ema_cross_below",
-      "rsi_cross_below_30": "1782308700000:rsi_cross_below_30",
-      "volume_spike": "1782309600000:volume_spike"
+      "ema_cross_below": "1783314900000:ema_cross_below",
+      "rsi_cross_above_70": "1783353600000:rsi_cross_above_70",
+      "rsi_cross_below_30": "1783341900000:rsi_cross_below_30",
+      "volume_spike": "1783372500000:volume_spike"
     }
   },
-  "NEAR/USD": {
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
-    "sent_alerts": {}
+  "LPT/USD": {},
+  "LTC/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_above": "1783359000000:ema_cross_above",
+      "ema_cross_below": "1783313100000:ema_cross_below",
+      "rsi_cross_below_30": "1783341000000:rsi_cross_below_30",
+      "volume_spike": "1783369800000:volume_spike"
+    }
   },
+  "MANA/USD": {
+    "last_checked_candle": "1783371600000",
+    "last_checked_time": "2026-07-06 21:00 UTC",
+    "pending_setups": {
+      "test:breakout:0.07027019999999999": {
+        "break_strength_score": 59,
+        "direction": "breakout",
+        "expected_confirmation_candle": 1783372500000,
+        "first_candle": 1783371600000,
+        "first_candle_close": 0.0703,
+        "first_candle_high": 0.0707,
+        "first_candle_low": 0.07,
+        "first_candle_open": 0.07,
+        "first_candle_volume": 37145.04,
+        "level": 0.07027019999999999,
+        "setup_quality": "D",
+        "setup_status": "Weak Setup / Avoid Chasing"
+      }
+    },
+    "sent_alerts": {
+      "test:breakout:0.07007:early_warning": "1783370700000:test:breakout:0.07007:early_warning",
+      "test:breakout:0.07007:late_move": "1783371600000:test:breakout:0.07007:late_move",
+      "test:breakout:0.07027019999999999:early_warning": "1783371600000:test:breakout:0.07027019999999999:early_warning",
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "MASK/USD": {},
+  "MATIC/USD": {},
+  "MINA/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "rsi_cross_above_70": "1783362600000:rsi_cross_above_70",
+      "volume_spike": "1783361700000:volume_spike"
+    }
+  },
+  "MOG/USD": {},
+  "NEAR/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_above": "1783347300000:ema_cross_above",
+      "ema_cross_below": "1783342800000:ema_cross_below",
+      "rsi_cross_above_70": "1783351800000:rsi_cross_above_70",
+      "volume_spike": "1783351800000:volume_spike"
+    }
+  },
+  "NEO/USD": {},
   "NOBODY/USD": {},
   "ONDO/USD": {
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
-    "sent_alerts": {}
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_above": "1783336500000:ema_cross_above",
+      "ema_cross_below": "1783341900000:ema_cross_below",
+      "rsi_cross_above_70": "1783353600000:rsi_cross_above_70",
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "OP/USD": {
+    "last_checked_candle": "1783371600000",
+    "last_checked_time": "2026-07-06 21:00 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "OSMO/USD": {},
+  "PENDLE/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "rsi_cross_above_70": "1783371600000:rsi_cross_above_70",
+      "test:breakdown:1.455543:early_warning": "1783370700000:test:breakdown:1.455543:early_warning",
+      "volume_spike": "1783369800000:volume_spike"
+    }
   },
   "PENGU/USD": {
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
-    "sent_alerts": {}
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_below": "1783318500000:ema_cross_below",
+      "rsi_cross_above_70": "1783353600000:rsi_cross_above_70",
+      "rsi_cross_below_30": "1783341000000:rsi_cross_below_30",
+      "test:breakout:0.006834827999999999:early_warning": "1783371600000:test:breakout:0.006834827999999999:early_warning",
+      "volume_spike": "1783371600000:volume_spike"
+    }
   },
   "PEPE/USD": {
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_below": "1783315800000:ema_cross_below",
+      "rsi_cross_above_70": "1783353600000:rsi_cross_above_70",
+      "rsi_cross_below_30": "1783341000000:rsi_cross_below_30",
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "POL/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "rsi_cross_above_70": "1783352700000:rsi_cross_above_70",
+      "test:breakout:0.0752752:early_warning": "1783370700000:test:breakout:0.0752752:early_warning",
+      "test:breakout:0.0752752:late_move": "1783371600000:test:breakout:0.0752752:late_move",
+      "test:breakout:0.07547539999999998:early_warning": "1783371600000:test:breakout:0.07547539999999998:early_warning",
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "POPCAT/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_below": "1783361700000:ema_cross_below",
+      "test:breakdown:0.0494505:early_warning": "1783369800000:test:breakdown:0.0494505:early_warning",
+      "volume_spike": "1783361700000:volume_spike"
+    }
+  },
+  "PYTH/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "volume_spike": "1783353600000:volume_spike"
+    }
+  },
+  "QNT/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
     "sent_alerts": {}
   },
+  "RAY/USD": {},
   "RENDER/USD": {
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_above": "1783358100000:ema_cross_above",
+      "ema_cross_below": "1783317600000:ema_cross_below",
+      "rsi_cross_below_30": "1783342800000:rsi_cross_below_30",
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "ROSE/USD": {},
+  "RPL/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "SAFE/USD": {
+    "last_checked_candle": "1783371600000",
+    "last_checked_time": "2026-07-06 21:00 UTC",
+    "pending_setups": {},
     "sent_alerts": {}
+  },
+  "SAND/USD": {
+    "last_checked_candle": "1783371600000",
+    "last_checked_time": "2026-07-06 21:00 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_above": "1783360800000:ema_cross_above",
+      "rsi_cross_above_70": "1783369800000:rsi_cross_above_70",
+      "volume_spike": "1783369800000:volume_spike"
+    }
+  },
+  "SEI/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_above": "1783352700000:ema_cross_above",
+      "rsi_cross_above_70": "1783371600000:rsi_cross_above_70",
+      "volume_spike": "1783371600000:volume_spike"
+    }
   },
   "SHIB/USD": {
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {
+      "test:breakdown:4.42557e-06": {
+        "break_strength_score": 50,
+        "direction": "breakdown",
+        "expected_confirmation_candle": 1783373400000,
+        "first_candle": 1783372500000,
+        "first_candle_close": 4.42e-06,
+        "first_candle_high": 4.45e-06,
+        "first_candle_low": 4.42e-06,
+        "first_candle_open": 4.44e-06,
+        "first_candle_volume": 3331882837.0,
+        "level": 4.42557e-06,
+        "setup_quality": "D",
+        "setup_status": "Weak Setup / Avoid Chasing"
+      }
+    },
+    "sent_alerts": {
+      "ema_cross_below": "1783317600000:ema_cross_below",
+      "rsi_cross_above_70": "1783371600000:rsi_cross_above_70",
+      "rsi_cross_below_30": "1783341900000:rsi_cross_below_30",
+      "test:breakdown:4.42557e-06:early_warning": "1783372500000:test:breakdown:4.42557e-06:early_warning",
+      "test:breakout:4.43443e-06:early_warning": "1783371600000:test:breakout:4.43443e-06:early_warning",
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "SKL/USD": {},
+  "SNX/USD": {
+    "last_checked_candle": "1783371600000",
+    "last_checked_time": "2026-07-06 21:00 UTC",
+    "pending_setups": {},
     "sent_alerts": {}
   },
   "SOL/USD": {
     "RSI is below 30": "1782210600000:RSI is below 30",
     "Volume is 2x higher than the 20-candle average": "1782202500000:Volume is 2x higher than the 20-candle average",
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
     "sent_alerts": {
-      "ema_cross_above": "1782304200000:ema_cross_above",
-      "ema_cross_below": "1782306000000:ema_cross_below",
-      "volume_spike": "1782310500000:volume_spike"
+      "ema_cross_above": "1783353600000:ema_cross_above",
+      "ema_cross_below": "1783309500000:ema_cross_below",
+      "rsi_cross_above_70": "1783371600000:rsi_cross_above_70",
+      "rsi_cross_below_30": "1783342800000:rsi_cross_below_30",
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "STRK/USD": {},
+  "STX/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_above": "1783356300000:ema_cross_above"
     }
   },
   "SUI/USD": {
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
-    "sent_alerts": {}
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_above": "1783361700000:ema_cross_above",
+      "ema_cross_below": "1783308600000:ema_cross_below",
+      "rsi_cross_above_70": "1783371600000:rsi_cross_above_70",
+      "rsi_cross_below_30": "1783341000000:rsi_cross_below_30",
+      "volume_spike": "1783371600000:volume_spike"
+    }
   },
+  "SUPER/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {
+      "test:breakdown:0.08996994": {
+        "break_strength_score": 34,
+        "direction": "breakdown",
+        "expected_confirmation_candle": 1783373400000,
+        "first_candle": 1783372500000,
+        "first_candle_close": 0.08992,
+        "first_candle_high": 0.09008,
+        "first_candle_low": 0.08992,
+        "first_candle_open": 0.09008,
+        "first_candle_volume": 8746.99,
+        "level": 0.08996994,
+        "setup_quality": "F",
+        "setup_status": "Weak Setup / Avoid Chasing"
+      }
+    },
+    "sent_alerts": {
+      "ema_cross_above": "1783353600000:ema_cross_above",
+      "rsi_cross_above_70": "1783353600000:rsi_cross_above_70",
+      "test:breakdown:0.08996994:early_warning": "1783372500000:test:breakdown:0.08996994:early_warning",
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "SUSHI/USD": {},
   "TAO/USD": {
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
-    "sent_alerts": {}
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_above": "1783357200000:ema_cross_above",
+      "ema_cross_below": "1783316700000:ema_cross_below",
+      "rsi_cross_below_30": "1783341900000:rsi_cross_below_30",
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "TIA/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_above": "1783371600000:ema_cross_above",
+      "volume_spike": "1783372500000:volume_spike"
+    }
   },
   "TON/USD": {
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_below": "1783302300000:ema_cross_below",
+      "rsi_cross_below_30": "1783342800000:rsi_cross_below_30",
+      "volume_spike": "1783372500000:volume_spike"
+    }
+  },
+  "TRAC/USD": {},
+  "TRX/USD": {},
+  "TURBO/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_above": "1783358100000:ema_cross_above",
+      "volume_spike": "1783372500000:volume_spike"
+    }
+  },
+  "UMA/USD": {},
+  "UNI/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_above": "1783351800000:ema_cross_above",
+      "ema_cross_below": "1783312200000:ema_cross_below",
+      "rsi_cross_above_70": "1783371600000:rsi_cross_above_70",
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "USDT/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
     "sent_alerts": {}
   },
-  "UNI/USD": {
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
-    "sent_alerts": {}
+  "VET/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_above": "1783351800000:ema_cross_above",
+      "ema_cross_below": "1783310400000:ema_cross_below",
+      "rsi_cross_above_70": "1783362600000:rsi_cross_above_70",
+      "rsi_cross_below_30": "1783315800000:rsi_cross_below_30",
+      "test:breakdown:0.00495504:early_warning": "1783369800000:test:breakdown:0.00495504:early_warning",
+      "test:breakdown:0.00495504:weak_break": "1783370700000:test:breakdown:0.00495504:weak_break",
+      "volume_spike": "1783362600000:volume_spike"
+    }
+  },
+  "W/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "volume_spike": "1783363500000:volume_spike"
+    }
   },
   "WIF/USD": {
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
-    "sent_alerts": {}
+    "last_checked_candle": "1783371600000",
+    "last_checked_time": "2026-07-06 21:00 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "volume_spike": "1783371600000:volume_spike"
+    }
   },
+  "WLD/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_below": "1783359000000:ema_cross_below",
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "XAU/USD": {},
+  "XLM/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "XMR/USD": {},
   "XRP/USD": {
     "RSI is below 30": "1782204300000:RSI is below 30",
     "Volume is 2x higher than the 20-candle average": "1782202500000:Volume is 2x higher than the 20-candle average",
-    "last_checked_candle": "1782525600000",
-    "last_checked_time": "2026-06-27 02:00 UTC",
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
     "sent_alerts": {
-      "ema_cross_above": "1782260100000:ema_cross_above",
-      "ema_cross_below": "1782270900000:ema_cross_below",
-      "rsi_cross_below_30": "1782307800000:rsi_cross_below_30",
-      "volume_spike": "1782309600000:volume_spike"
+      "ema_cross_above": "1783357200000:ema_cross_above",
+      "ema_cross_below": "1783319400000:ema_cross_below",
+      "rsi_cross_below_30": "1783340100000:rsi_cross_below_30",
+      "volume_spike": "1783371600000:volume_spike"
     }
   },
-  "__active_trades": {},
+  "XTZ/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {
+      "test:breakdown:0.25134839999999997": {
+        "break_strength_score": 26,
+        "direction": "breakdown",
+        "expected_confirmation_candle": 1783373400000,
+        "first_candle": 1783372500000,
+        "first_candle_close": 0.2512,
+        "first_candle_high": 0.2523,
+        "first_candle_low": 0.2512,
+        "first_candle_open": 0.2523,
+        "first_candle_volume": 2923.87,
+        "level": 0.25134839999999997,
+        "setup_quality": "F",
+        "setup_status": "Weak Setup / Avoid Chasing"
+      }
+    },
+    "sent_alerts": {
+      "ema_cross_above": "1783358100000:ema_cross_above",
+      "ema_cross_below": "1783308600000:ema_cross_below",
+      "rsi_cross_below_30": "1783341000000:rsi_cross_below_30",
+      "test:breakdown:0.25134839999999997:early_warning": "1783372500000:test:breakdown:0.25134839999999997:early_warning",
+      "volume_spike": "1783371600000:volume_spike"
+    }
+  },
+  "YFI/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "volume_spike": "1783353600000:volume_spike"
+    }
+  },
+  "ZEC/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "ema_cross_above": "1783371600000:ema_cross_above",
+      "ema_cross_below": "1783305000000:ema_cross_below",
+      "rsi_cross_above_70": "1783371600000:rsi_cross_above_70",
+      "rsi_cross_below_30": "1783338300000:rsi_cross_below_30",
+      "test:breakout:457.9074499999999:early_warning": "1783371600000:test:breakout:457.9074499999999:early_warning",
+      "volume_spike": "1783352700000:volume_spike"
+    }
+  },
+  "ZK/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {
+      "test:breakout:0.011041029999999999": {
+        "break_strength_score": 61,
+        "direction": "breakout",
+        "expected_confirmation_candle": 1783372500000,
+        "first_candle": 1783371600000,
+        "first_candle_close": 0.01107,
+        "first_candle_high": 0.01107,
+        "first_candle_low": 0.01092,
+        "first_candle_open": 0.01092,
+        "first_candle_volume": 50797.5,
+        "level": 0.011041029999999999,
+        "setup_quality": "C",
+        "setup_status": "Watch Only"
+      }
+    },
+    "sent_alerts": {
+      "rsi_cross_above_70": "1783352700000:rsi_cross_above_70",
+      "test:breakdown:0.01090908:early_warning": "1783370700000:test:breakdown:0.01090908:early_warning",
+      "test:breakout:0.011041029999999999:early_warning": "1783371600000:test:breakout:0.011041029999999999:early_warning",
+      "volume_spike": "1783353600000:volume_spike"
+    }
+  },
+  "ZRO/USD": {
+    "last_checked_candle": "1783372500000",
+    "last_checked_time": "2026-07-06 21:15 UTC",
+    "pending_setups": {},
+    "sent_alerts": {
+      "rsi_cross_above_70": "1783357200000:rsi_cross_above_70",
+      "test:breakout:1.0500489999999998:early_warning": "1783371600000:test:breakout:1.0500489999999998:early_warning",
+      "volume_spike": "1783372500000:volume_spike"
+    }
+  },
+  "__active_trades": {
+    "AKT/USD": {
+      "direction": "LONG",
+      "distance_to_target_pct": 3.34394904458599,
+      "early_break_strength_score": 47,
+      "fake_break_checked": false,
+      "last_monitor_at": 1783371827539,
+      "last_rsi": null,
+      "last_status": null,
+      "last_volume": null,
+      "level": 0.6276269999999999,
+      "location_quality": "A",
+      "lower_tf_candles_checked": 0,
+      "next_target": 0.649,
+      "range_position": "Middle Range",
+      "retest_seen": false,
+      "setup_candle": 1783370700000,
+      "setup_quality": "F",
+      "setup_status": "Weak Setup / Avoid Chasing",
+      "source_alert": "Breakout Attempt",
+      "started_at": 1783371827539,
+      "symbol": "AKT/USD"
+    },
+    "AXS/USD": {
+      "direction": "LONG",
+      "distance_to_target_pct": 0.19607843137254918,
+      "early_break_strength_score": 59,
+      "fake_break_checked": false,
+      "last_monitor_at": 1783372636585,
+      "last_rsi": null,
+      "last_status": null,
+      "last_volume": null,
+      "level": 1.019018,
+      "location_quality": "C",
+      "lower_tf_candles_checked": 0,
+      "next_target": 1.022,
+      "range_position": "Upper Range",
+      "retest_seen": false,
+      "setup_candle": 1783371600000,
+      "setup_quality": "D",
+      "setup_status": "Weak Setup / Avoid Chasing",
+      "source_alert": "Breakout Attempt",
+      "started_at": 1783372636585,
+      "symbol": "AXS/USD"
+    },
+    "DASH/USD": {
+      "direction": "LONG",
+      "distance_to_target_pct": 1.8544733861834688,
+      "early_break_strength_score": 59,
+      "fake_break_checked": false,
+      "last_monitor_at": 1783372658429,
+      "last_rsi": null,
+      "last_status": null,
+      "last_volume": null,
+      "level": 35.315279999999994,
+      "location_quality": "A",
+      "lower_tf_candles_checked": 0,
+      "next_target": 35.975,
+      "range_position": "Upper Range",
+      "retest_seen": false,
+      "setup_candle": 1783371600000,
+      "setup_quality": "D",
+      "setup_status": "Weak Setup / Avoid Chasing",
+      "source_alert": "Breakout Attempt",
+      "started_at": 1783372658429,
+      "symbol": "DASH/USD"
+    },
+    "DEGEN/USD": {
+      "direction": "LONG",
+      "distance_to_target_pct": 3.5894206549118373,
+      "early_break_strength_score": 61,
+      "fake_break_checked": false,
+      "last_monitor_at": 1783371865266,
+      "last_rsi": null,
+      "last_status": null,
+      "last_volume": null,
+      "level": 0.0015845829999999999,
+      "location_quality": "A",
+      "lower_tf_candles_checked": 0,
+      "next_target": 0.001645,
+      "range_position": "Middle Range",
+      "retest_seen": false,
+      "setup_candle": 1783370700000,
+      "setup_quality": "C",
+      "setup_status": "Watch Only",
+      "source_alert": "Breakout Attempt",
+      "started_at": 1783371865266,
+      "symbol": "DEGEN/USD"
+    },
+    "EIGEN/USD": {
+      "direction": "SHORT",
+      "distance_to_target_pct": 5.982905982905988,
+      "early_break_strength_score": 30,
+      "fake_break_checked": false,
+      "last_monitor_at": 1783373549380,
+      "last_rsi": null,
+      "last_status": null,
+      "last_volume": null,
+      "level": 0.23476499999999997,
+      "location_quality": "A",
+      "lower_tf_candles_checked": 0,
+      "next_target": 0.22,
+      "range_position": "Upper Range",
+      "retest_seen": false,
+      "setup_candle": 1783372500000,
+      "setup_quality": "F",
+      "setup_status": "Weak Setup / Avoid Chasing",
+      "source_alert": "Breakdown Attempt",
+      "started_at": 1783373549380,
+      "symbol": "EIGEN/USD"
+    },
+    "ENS/USD": {
+      "direction": "LONG",
+      "distance_to_target_pct": 2.7906976744186074,
+      "early_break_strength_score": 59,
+      "fake_break_checked": false,
+      "last_monitor_at": 1783372802593,
+      "last_rsi": null,
+      "last_status": null,
+      "last_volume": null,
+      "level": 4.294289999999999,
+      "location_quality": "A",
+      "lower_tf_candles_checked": 0,
+      "next_target": 4.42,
+      "range_position": "Upper Range",
+      "retest_seen": false,
+      "setup_candle": 1783371600000,
+      "setup_quality": "D",
+      "setup_status": "Weak Setup / Avoid Chasing",
+      "source_alert": "Breakout Attempt",
+      "started_at": 1783372802593,
+      "symbol": "ENS/USD"
+    },
+    "GRT/USD": {
+      "direction": "SHORT",
+      "distance_to_target_pct": 2.1739130434782665,
+      "early_break_strength_score": 49,
+      "fake_break_checked": false,
+      "last_monitor_at": 1783372000144,
+      "last_rsi": null,
+      "last_status": null,
+      "last_volume": null,
+      "level": 0.018481499999999998,
+      "location_quality": "A",
+      "lower_tf_candles_checked": 0,
+      "next_target": 0.018,
+      "range_position": "Middle Range",
+      "retest_seen": false,
+      "setup_candle": 1783369800000,
+      "setup_quality": "F",
+      "setup_status": "Weak Setup / Avoid Chasing",
+      "source_alert": "Breakdown Attempt",
+      "started_at": 1783372000144,
+      "symbol": "GRT/USD"
+    },
+    "HNT/USD": {
+      "direction": "LONG",
+      "distance_to_target_pct": 0.8298755186721999,
+      "early_break_strength_score": 58,
+      "fake_break_checked": false,
+      "last_monitor_at": 1783371133591,
+      "last_rsi": null,
+      "last_status": null,
+      "last_volume": null,
+      "level": 0.24023999999999995,
+      "location_quality": "B",
+      "lower_tf_candles_checked": 0,
+      "next_target": 0.243,
+      "range_position": "Upper Range",
+      "retest_seen": false,
+      "setup_candle": 1783369800000,
+      "setup_quality": "D",
+      "setup_status": "Weak Setup / Avoid Chasing",
+      "source_alert": "Breakout Attempt",
+      "started_at": 1783371133591,
+      "symbol": "HNT/USD"
+    },
+    "IOTX/USD": {
+      "direction": "LONG",
+      "distance_to_target_pct": 21.506849315068486,
+      "early_break_strength_score": 49,
+      "fake_break_checked": false,
+      "last_monitor_at": 1783373558421,
+      "last_rsi": null,
+      "last_status": null,
+      "last_volume": null,
+      "level": 0.007197189999999999,
+      "location_quality": "A",
+      "lower_tf_candles_checked": 0,
+      "next_target": 0.00887,
+      "range_position": "Lower Range",
+      "retest_seen": false,
+      "setup_candle": 1783372500000,
+      "setup_quality": "F",
+      "setup_status": "Weak Setup / Avoid Chasing",
+      "source_alert": "Breakout Attempt",
+      "started_at": 1783373558421,
+      "symbol": "IOTX/USD"
+    },
+    "JASMY/USD": {
+      "direction": "LONG",
+      "distance_to_target_pct": 1.287553648068673,
+      "early_break_strength_score": 81,
+      "fake_break_checked": false,
+      "last_monitor_at": 1783372701194,
+      "last_rsi": null,
+      "last_status": null,
+      "last_volume": null,
+      "level": 0.004644639999999999,
+      "location_quality": "A",
+      "lower_tf_candles_checked": 0,
+      "next_target": 0.00472,
+      "range_position": "Middle Range",
+      "retest_seen": false,
+      "setup_candle": 1783371600000,
+      "setup_quality": "A",
+      "setup_status": "High Interest Setup",
+      "source_alert": "Breakout Attempt",
+      "started_at": 1783372701194,
+      "symbol": "JASMY/USD"
+    },
+    "MANA/USD": {
+      "direction": "LONG",
+      "distance_to_target_pct": 0.997150997151006,
+      "early_break_strength_score": 58,
+      "fake_break_checked": false,
+      "last_monitor_at": 1783372038162,
+      "last_rsi": null,
+      "last_status": null,
+      "last_volume": null,
+      "level": 0.07007,
+      "location_quality": "B",
+      "lower_tf_candles_checked": 0,
+      "next_target": 0.0709,
+      "range_position": "Upper Range",
+      "retest_seen": false,
+      "setup_candle": 1783370700000,
+      "setup_quality": "D",
+      "setup_status": "Weak Setup / Avoid Chasing",
+      "source_alert": "Breakout Attempt",
+      "started_at": 1783372038162,
+      "symbol": "MANA/USD"
+    },
+    "PENDLE/USD": {
+      "direction": "SHORT",
+      "distance_to_target_pct": 5.777166437414021,
+      "early_break_strength_score": 50,
+      "fake_break_checked": false,
+      "last_monitor_at": 1783371716795,
+      "last_rsi": null,
+      "last_status": null,
+      "last_volume": null,
+      "level": 1.455543,
+      "location_quality": "A",
+      "lower_tf_candles_checked": 0,
+      "next_target": 1.37,
+      "range_position": "Upper Range",
+      "retest_seen": false,
+      "setup_candle": 1783370700000,
+      "setup_quality": "D",
+      "setup_status": "Weak Setup / Avoid Chasing",
+      "source_alert": "Breakdown Attempt",
+      "started_at": 1783371716795,
+      "symbol": "PENDLE/USD"
+    },
+    "POL/USD": {
+      "direction": "LONG",
+      "distance_to_target_pct": 0.5312084993359861,
+      "early_break_strength_score": 50,
+      "fake_break_checked": false,
+      "last_monitor_at": 1783371749520,
+      "last_rsi": null,
+      "last_status": null,
+      "last_volume": null,
+      "level": 0.0752752,
+      "location_quality": "B",
+      "lower_tf_candles_checked": 0,
+      "next_target": 0.0757,
+      "range_position": "Upper Range",
+      "retest_seen": false,
+      "setup_candle": 1783370700000,
+      "setup_quality": "D",
+      "setup_status": "Weak Setup / Avoid Chasing",
+      "source_alert": "Breakout Attempt",
+      "started_at": 1783371749520,
+      "symbol": "POL/USD"
+    },
+    "POPCAT/USD": {
+      "direction": "SHORT",
+      "distance_to_target_pct": 2.226720647773273,
+      "early_break_strength_score": 53,
+      "fake_break_checked": false,
+      "last_monitor_at": 1783371375087,
+      "last_rsi": null,
+      "last_status": null,
+      "last_volume": null,
+      "level": 0.0494505,
+      "location_quality": "A",
+      "lower_tf_candles_checked": 0,
+      "next_target": 0.0483,
+      "range_position": "Middle Range",
+      "retest_seen": false,
+      "setup_candle": 1783369800000,
+      "setup_quality": "D",
+      "setup_status": "Weak Setup / Avoid Chasing",
+      "source_alert": "Breakdown Attempt",
+      "started_at": 1783371375087,
+      "symbol": "POPCAT/USD"
+    },
+    "SHIB/USD": {
+      "direction": "LONG",
+      "distance_to_target_pct": 1.6853932584269693,
+      "early_break_strength_score": 59,
+      "fake_break_checked": false,
+      "last_monitor_at": 1783372687376,
+      "last_rsi": null,
+      "last_status": null,
+      "last_volume": null,
+      "level": 4.43443e-06,
+      "location_quality": "A",
+      "lower_tf_candles_checked": 0,
+      "next_target": 4.525e-06,
+      "range_position": "Upper Range",
+      "retest_seen": false,
+      "setup_candle": 1783371600000,
+      "setup_quality": "D",
+      "setup_status": "Weak Setup / Avoid Chasing",
+      "source_alert": "Breakout Attempt",
+      "started_at": 1783372687376,
+      "symbol": "SHIB/USD"
+    },
+    "SUPER/USD": {
+      "direction": "SHORT",
+      "distance_to_target_pct": 4.02580071174377,
+      "early_break_strength_score": 34,
+      "fake_break_checked": false,
+      "last_monitor_at": 1783373766380,
+      "last_rsi": null,
+      "last_status": null,
+      "last_volume": null,
+      "level": 0.08996994,
+      "location_quality": "A",
+      "lower_tf_candles_checked": 0,
+      "next_target": 0.0863,
+      "range_position": "Upper Range",
+      "retest_seen": false,
+      "setup_candle": 1783372500000,
+      "setup_quality": "F",
+      "setup_status": "Weak Setup / Avoid Chasing",
+      "source_alert": "Breakdown Attempt",
+      "started_at": 1783373766380,
+      "symbol": "SUPER/USD"
+    },
+    "VET/USD": {
+      "direction": "SHORT",
+      "distance_to_target_pct": 6.275303643724704,
+      "early_break_strength_score": 30,
+      "fake_break_checked": false,
+      "last_monitor_at": 1783371201328,
+      "last_rsi": null,
+      "last_status": null,
+      "last_volume": null,
+      "level": 0.00495504,
+      "location_quality": "A",
+      "lower_tf_candles_checked": 0,
+      "next_target": 0.00463,
+      "range_position": "Middle Range",
+      "retest_seen": false,
+      "setup_candle": 1783369800000,
+      "setup_quality": "F",
+      "setup_status": "Weak Setup / Avoid Chasing",
+      "source_alert": "Breakdown Attempt",
+      "started_at": 1783371201328,
+      "symbol": "VET/USD"
+    },
+    "XTZ/USD": {
+      "direction": "SHORT",
+      "distance_to_target_pct": 4.179936305732477,
+      "early_break_strength_score": 26,
+      "fake_break_checked": false,
+      "last_monitor_at": 1783373605243,
+      "last_rsi": null,
+      "last_status": null,
+      "last_volume": null,
+      "level": 0.25134839999999997,
+      "location_quality": "A",
+      "lower_tf_candles_checked": 0,
+      "next_target": 0.2407,
+      "range_position": "Upper Range",
+      "retest_seen": false,
+      "setup_candle": 1783372500000,
+      "setup_quality": "F",
+      "setup_status": "Weak Setup / Avoid Chasing",
+      "source_alert": "Breakdown Attempt",
+      "started_at": 1783373605243,
+      "symbol": "XTZ/USD"
+    },
+    "ZK/USD": {
+      "direction": "SHORT",
+      "distance_to_target_pct": 4.86238532110091,
+      "early_break_strength_score": 45,
+      "fake_break_checked": false,
+      "last_monitor_at": 1783371680392,
+      "last_rsi": null,
+      "last_status": null,
+      "last_volume": null,
+      "level": 0.01090908,
+      "location_quality": "A",
+      "lower_tf_candles_checked": 0,
+      "next_target": 0.01037,
+      "range_position": "Middle Range",
+      "retest_seen": false,
+      "setup_candle": 1783370700000,
+      "setup_quality": "F",
+      "setup_status": "Weak Setup / Avoid Chasing",
+      "source_alert": "Breakdown Attempt",
+      "started_at": 1783371680392,
+      "symbol": "ZK/USD"
+    }
+  },
+  "__alert_delivery_metrics": [
+    {
+      "alert_labels": [
+        "RSI crossed above 70",
+        "Bullish Volume Spike"
+      ],
+      "alert_types": [
+        "rsi_cross_above_70",
+        "volume_spike"
+      ],
+      "candle_close_time": "2026-07-06 01:15 PM ET",
+      "delay_seconds": 507.9085750579834,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 01:23:27 PM ET",
+      "symbol": "BAT/USD"
+    },
+    {
+      "alert_labels": [
+        "RSI crossed above 70",
+        "Bullish Volume Spike"
+      ],
+      "alert_types": [
+        "rsi_cross_above_70",
+        "volume_spike"
+      ],
+      "candle_close_time": "2026-07-06 01:30 PM ET",
+      "delay_seconds": 53.40816903114319,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 01:30:53 PM ET",
+      "symbol": "VET/USD"
+    },
+    {
+      "alert_labels": [
+        "EMA 21 crossed below EMA 55",
+        "Bearish Volume Spike"
+      ],
+      "alert_types": [
+        "ema_cross_below",
+        "volume_spike"
+      ],
+      "candle_close_time": "2026-07-06 01:45 PM ET",
+      "delay_seconds": 24.577659845352173,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 01:45:24 PM ET",
+      "symbol": "WLD/USD"
+    },
+    {
+      "alert_labels": [
+        "Bearish Volume Spike",
+        "RSI crossed below 30"
+      ],
+      "alert_types": [
+        "volume_spike",
+        "rsi_cross_below_30"
+      ],
+      "candle_close_time": "2026-07-06 01:45 PM ET",
+      "delay_seconds": 27.897852897644043,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 01:45:27 PM ET",
+      "symbol": "BONK/USD"
+    },
+    {
+      "alert_labels": [
+        "EMA 21 crossed above EMA 55",
+        "Bullish Volume Spike"
+      ],
+      "alert_types": [
+        "ema_cross_above",
+        "volume_spike"
+      ],
+      "candle_close_time": "2026-07-06 02:00 PM ET",
+      "delay_seconds": 70.97517108917236,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 02:01:10 PM ET",
+      "symbol": "CRV/USD"
+    },
+    {
+      "alert_labels": [
+        "EMA 21 crossed above EMA 55",
+        "Bullish Volume Spike"
+      ],
+      "alert_types": [
+        "ema_cross_above",
+        "volume_spike"
+      ],
+      "candle_close_time": "2026-07-06 02:15 PM ET",
+      "delay_seconds": 100.14939904212952,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 02:16:40 PM ET",
+      "symbol": "ENA/USD"
+    },
+    {
+      "alert_labels": [
+        "Bearish Volume Spike",
+        "EMA 21 crossed below EMA 55"
+      ],
+      "alert_types": [
+        "volume_spike",
+        "ema_cross_below"
+      ],
+      "candle_close_time": "2026-07-06 02:30 PM ET",
+      "delay_seconds": 176.91299200057983,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 02:32:56 PM ET",
+      "symbol": "POPCAT/USD"
+    },
+    {
+      "alert_labels": [
+        "RSI crossed above 70",
+        "Bullish Volume Spike"
+      ],
+      "alert_types": [
+        "rsi_cross_above_70",
+        "volume_spike"
+      ],
+      "candle_close_time": "2026-07-06 02:45 PM ET",
+      "delay_seconds": 627.4491980075836,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 02:55:27 PM ET",
+      "symbol": "VET/USD"
+    },
+    {
+      "alert_labels": [
+        "EMA 21 crossed above EMA 55",
+        "RSI crossed above 70",
+        "Bullish Volume Spike"
+      ],
+      "alert_types": [
+        "ema_cross_above",
+        "rsi_cross_above_70",
+        "volume_spike"
+      ],
+      "candle_close_time": "2026-07-06 03:00 PM ET",
+      "delay_seconds": 101.81278419494629,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 03:01:41 PM ET",
+      "symbol": "EIGEN/USD"
+    },
+    {
+      "alert_labels": [
+        "RSI crossed above 70",
+        "Bullish Volume Spike"
+      ],
+      "alert_types": [
+        "rsi_cross_above_70",
+        "volume_spike"
+      ],
+      "candle_close_time": "2026-07-06 03:00 PM ET",
+      "delay_seconds": 199.39711785316467,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 03:03:19 PM ET",
+      "symbol": "JASMY/USD"
+    },
+    {
+      "alert_labels": [
+        "Breakout Attempt"
+      ],
+      "alert_types": [
+        "test:breakout:0.24023999999999995:early_warning"
+      ],
+      "candle_close_time": "2026-07-06 04:45 PM ET",
+      "delay_seconds": 433.59092712402344,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 04:52:13 PM ET",
+      "symbol": "HNT/USD"
+    },
+    {
+      "alert_labels": [
+        "Breakdown Attempt"
+      ],
+      "alert_types": [
+        "test:breakdown:0.00495504:early_warning"
+      ],
+      "candle_close_time": "2026-07-06 04:45 PM ET",
+      "delay_seconds": 501.32872796058655,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 04:53:21 PM ET",
+      "symbol": "VET/USD"
+    },
+    {
+      "alert_labels": [
+        "Breakdown Attempt"
+      ],
+      "alert_types": [
+        "test:breakdown:0.0494505:early_warning"
+      ],
+      "candle_close_time": "2026-07-06 04:45 PM ET",
+      "delay_seconds": 675.0872588157654,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 04:56:15 PM ET",
+      "symbol": "POPCAT/USD"
+    },
+    {
+      "alert_labels": [
+        "Breakdown Attempt"
+      ],
+      "alert_types": [
+        "test:breakdown:0.01090908:early_warning"
+      ],
+      "candle_close_time": "2026-07-06 05:00 PM ET",
+      "delay_seconds": 80.39216804504395,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:01:20 PM ET",
+      "symbol": "ZK/USD"
+    },
+    {
+      "alert_labels": [
+        "Breakdown Attempt"
+      ],
+      "alert_types": [
+        "test:breakdown:1.455543:early_warning"
+      ],
+      "candle_close_time": "2026-07-06 05:00 PM ET",
+      "delay_seconds": 116.79495406150818,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:01:56 PM ET",
+      "symbol": "PENDLE/USD"
+    },
+    {
+      "alert_labels": [
+        "Breakout Attempt"
+      ],
+      "alert_types": [
+        "test:breakout:0.0752752:early_warning"
+      ],
+      "candle_close_time": "2026-07-06 05:00 PM ET",
+      "delay_seconds": 149.52055501937866,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:02:29 PM ET",
+      "symbol": "POL/USD"
+    },
+    {
+      "alert_labels": [
+        "Breakout Attempt"
+      ],
+      "alert_types": [
+        "test:breakout:0.6276269999999999:early_warning"
+      ],
+      "candle_close_time": "2026-07-06 05:00 PM ET",
+      "delay_seconds": 227.53938698768616,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:03:47 PM ET",
+      "symbol": "AKT/USD"
+    },
+    {
+      "alert_labels": [
+        "Breakout Attempt"
+      ],
+      "alert_types": [
+        "test:breakout:0.0015845829999999999:early_warning"
+      ],
+      "candle_close_time": "2026-07-06 05:00 PM ET",
+      "delay_seconds": 265.2662100791931,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:04:25 PM ET",
+      "symbol": "DEGEN/USD"
+    },
+    {
+      "alert_labels": [
+        "Breakdown Attempt"
+      ],
+      "alert_types": [
+        "test:breakdown:0.018481499999999998:early_warning"
+      ],
+      "candle_close_time": "2026-07-06 04:45 PM ET",
+      "delay_seconds": 1300.1442911624908,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:06:40 PM ET",
+      "symbol": "GRT/USD"
+    },
+    {
+      "alert_labels": [
+        "Breakout Attempt"
+      ],
+      "alert_types": [
+        "test:breakout:0.07007:early_warning"
+      ],
+      "candle_close_time": "2026-07-06 05:00 PM ET",
+      "delay_seconds": 438.1623170375824,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:07:18 PM ET",
+      "symbol": "MANA/USD"
+    },
+    {
+      "alert_labels": [
+        "RSI crossed above 70",
+        "Bullish Volume Spike"
+      ],
+      "alert_types": [
+        "rsi_cross_above_70",
+        "volume_spike"
+      ],
+      "candle_close_time": "2026-07-06 04:45 PM ET",
+      "delay_seconds": 1481.444750070572,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:09:41 PM ET",
+      "symbol": "SAND/USD"
+    },
+    {
+      "alert_labels": [
+        "EMA 21 crossed above EMA 55",
+        "Bullish Volume Spike"
+      ],
+      "alert_types": [
+        "ema_cross_above",
+        "volume_spike"
+      ],
+      "candle_close_time": "2026-07-06 05:00 PM ET",
+      "delay_seconds": 587.5159080028534,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:09:47 PM ET",
+      "symbol": "CAKE/USD"
+    },
+    {
+      "alert_labels": [
+        "RSI crossed above 70",
+        "Bullish Volume Spike"
+      ],
+      "alert_types": [
+        "rsi_cross_above_70",
+        "volume_spike"
+      ],
+      "candle_close_time": "2026-07-06 05:15 PM ET",
+      "delay_seconds": 46.38288998603821,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:15:46 PM ET",
+      "symbol": "BTC/USD"
+    },
+    {
+      "alert_labels": [
+        "RSI crossed above 70",
+        "Bullish Volume Spike"
+      ],
+      "alert_types": [
+        "rsi_cross_above_70",
+        "volume_spike"
+      ],
+      "candle_close_time": "2026-07-06 05:15 PM ET",
+      "delay_seconds": 51.0285382270813,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:15:51 PM ET",
+      "symbol": "ETH/USD"
+    },
+    {
+      "alert_labels": [
+        "RSI crossed above 70",
+        "Bullish Volume Spike"
+      ],
+      "alert_types": [
+        "rsi_cross_above_70",
+        "volume_spike"
+      ],
+      "candle_close_time": "2026-07-06 05:15 PM ET",
+      "delay_seconds": 56.00595498085022,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:15:56 PM ET",
+      "symbol": "SOL/USD"
+    },
+    {
+      "alert_labels": [
+        "RSI crossed above 70",
+        "Bullish Volume Spike"
+      ],
+      "alert_types": [
+        "rsi_cross_above_70",
+        "volume_spike"
+      ],
+      "candle_close_time": "2026-07-06 05:15 PM ET",
+      "delay_seconds": 60.7154061794281,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:16:00 PM ET",
+      "symbol": "DOGE/USD"
+    },
+    {
+      "alert_labels": [
+        "Breakout Attempt"
+      ],
+      "alert_types": [
+        "test:breakout:71.38131:early_warning"
+      ],
+      "candle_close_time": "2026-07-06 05:15 PM ET",
+      "delay_seconds": 66.44350910186768,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:16:06 PM ET",
+      "symbol": "HYPE/USD"
+    },
+    {
+      "alert_labels": [
+        "RSI crossed above 70",
+        "Bullish Volume Spike"
+      ],
+      "alert_types": [
+        "rsi_cross_above_70",
+        "volume_spike"
+      ],
+      "candle_close_time": "2026-07-06 05:15 PM ET",
+      "delay_seconds": 70.68507385253906,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:16:10 PM ET",
+      "symbol": "SUI/USD"
+    },
+    {
+      "alert_labels": [
+        "RSI crossed above 70",
+        "Bullish Volume Spike"
+      ],
+      "alert_types": [
+        "rsi_cross_above_70",
+        "volume_spike"
+      ],
+      "candle_close_time": "2026-07-06 05:15 PM ET",
+      "delay_seconds": 75.88689684867859,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:16:15 PM ET",
+      "symbol": "BCH/USD"
+    },
+    {
+      "alert_labels": [
+        "RSI crossed above 70",
+        "Bullish Volume Spike"
+      ],
+      "alert_types": [
+        "rsi_cross_above_70",
+        "volume_spike"
+      ],
+      "candle_close_time": "2026-07-06 05:15 PM ET",
+      "delay_seconds": 81.32991194725037,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:16:21 PM ET",
+      "symbol": "DOT/USD"
+    },
+    {
+      "alert_labels": [
+        "RSI crossed above 70",
+        "Bullish Volume Spike"
+      ],
+      "alert_types": [
+        "rsi_cross_above_70",
+        "volume_spike"
+      ],
+      "candle_close_time": "2026-07-06 05:15 PM ET",
+      "delay_seconds": 86.34611296653748,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:16:26 PM ET",
+      "symbol": "UNI/USD"
+    },
+    {
+      "alert_labels": [
+        "RSI crossed above 70",
+        "Bullish Volume Spike"
+      ],
+      "alert_types": [
+        "rsi_cross_above_70",
+        "volume_spike"
+      ],
+      "candle_close_time": "2026-07-06 05:15 PM ET",
+      "delay_seconds": 90.70968508720398,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:16:30 PM ET",
+      "symbol": "ICP/USD"
+    },
+    {
+      "alert_labels": [
+        "RSI crossed above 70",
+        "Bullish Volume Spike"
+      ],
+      "alert_types": [
+        "rsi_cross_above_70",
+        "volume_spike"
+      ],
+      "candle_close_time": "2026-07-06 05:15 PM ET",
+      "delay_seconds": 96.45467901229858,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:16:36 PM ET",
+      "symbol": "APT/USD"
+    },
+    {
+      "alert_labels": [
+        "RSI crossed above 70",
+        "Bullish Volume Spike"
+      ],
+      "alert_types": [
+        "rsi_cross_above_70",
+        "volume_spike"
+      ],
+      "candle_close_time": "2026-07-06 05:15 PM ET",
+      "delay_seconds": 101.65951418876648,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:16:41 PM ET",
+      "symbol": "ATOM/USD"
+    },
+    {
+      "alert_labels": [
+        "RSI crossed above 70",
+        "Bullish Volume Spike"
+      ],
+      "alert_types": [
+        "rsi_cross_above_70",
+        "volume_spike"
+      ],
+      "candle_close_time": "2026-07-06 05:15 PM ET",
+      "delay_seconds": 106.84134602546692,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:16:46 PM ET",
+      "symbol": "FET/USD"
+    },
+    {
+      "alert_labels": [
+        "RSI crossed above 70",
+        "Bullish Volume Spike"
+      ],
+      "alert_types": [
+        "rsi_cross_above_70",
+        "volume_spike"
+      ],
+      "candle_close_time": "2026-07-06 05:15 PM ET",
+      "delay_seconds": 111.84353399276733,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:16:51 PM ET",
+      "symbol": "SEI/USD"
+    },
+    {
+      "alert_labels": [
+        "Bullish Volume Spike",
+        "Breakout Attempt"
+      ],
+      "alert_types": [
+        "volume_spike",
+        "test:breakout:4.91491:early_warning"
+      ],
+      "candle_close_time": "2026-07-06 05:15 PM ET",
+      "delay_seconds": 117.3519139289856,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:16:57 PM ET",
+      "symbol": "INJ/USD"
+    },
+    {
+      "alert_labels": [
+        "Breakout Attempt"
+      ],
+      "alert_types": [
+        "test:breakout:0.16736719999999997:early_warning"
+      ],
+      "candle_close_time": "2026-07-06 05:15 PM ET",
+      "delay_seconds": 122.31510996818542,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:17:02 PM ET",
+      "symbol": "FARTCOIN/USD"
+    },
+    {
+      "alert_labels": [
+        "Bullish Volume Spike",
+        "Breakout Attempt"
+      ],
+      "alert_types": [
+        "volume_spike",
+        "test:breakout:0.006834827999999999:early_warning"
+      ],
+      "candle_close_time": "2026-07-06 05:15 PM ET",
+      "delay_seconds": 126.98004412651062,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:17:06 PM ET",
+      "symbol": "PENGU/USD"
+    },
+    {
+      "alert_labels": [
+        "EMA 21 crossed above EMA 55",
+        "RSI crossed above 70",
+        "Breakout Attempt"
+      ],
+      "alert_types": [
+        "ema_cross_above",
+        "rsi_cross_above_70",
+        "test:breakout:457.9074499999999:early_warning"
+      ],
+      "candle_close_time": "2026-07-06 05:15 PM ET",
+      "delay_seconds": 132.44946002960205,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:17:12 PM ET",
+      "symbol": "ZEC/USD"
+    },
+    {
+      "alert_labels": [
+        "Bullish Volume Spike",
+        "Breakout Attempt"
+      ],
+      "alert_types": [
+        "volume_spike",
+        "test:breakout:1.019018:early_warning"
+      ],
+      "candle_close_time": "2026-07-06 05:15 PM ET",
+      "delay_seconds": 136.57956194877625,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:17:16 PM ET",
+      "symbol": "AXS/USD"
+    },
+    {
+      "alert_labels": [
+        "Bullish Volume Spike",
+        "Breakout Attempt"
+      ],
+      "alert_types": [
+        "volume_spike",
+        "test:breakout:0.58522464:early_warning"
+      ],
+      "candle_close_time": "2026-07-06 05:15 PM ET",
+      "delay_seconds": 141.97563195228577,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:17:21 PM ET",
+      "symbol": "AERO/USD"
+    },
+    {
+      "alert_labels": [
+        "EMA 21 crossed above EMA 55",
+        "Bullish Volume Spike"
+      ],
+      "alert_types": [
+        "ema_cross_above",
+        "volume_spike"
+      ],
+      "candle_close_time": "2026-07-06 05:15 PM ET",
+      "delay_seconds": 148.05882287025452,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:17:28 PM ET",
+      "symbol": "TIA/USD"
+    },
+    {
+      "alert_labels": [
+        "Bullish Volume Spike",
+        "Breakout Attempt"
+      ],
+      "alert_types": [
+        "volume_spike",
+        "test:breakout:1.0500489999999998:early_warning"
+      ],
+      "candle_close_time": "2026-07-06 05:15 PM ET",
+      "delay_seconds": 152.75717878341675,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:17:32 PM ET",
+      "symbol": "ZRO/USD"
+    },
+    {
+      "alert_labels": [
+        "Bullish Volume Spike",
+        "Breakout Attempt"
+      ],
+      "alert_types": [
+        "volume_spike",
+        "test:breakout:35.315279999999994:early_warning"
+      ],
+      "candle_close_time": "2026-07-06 05:15 PM ET",
+      "delay_seconds": 158.4178249835968,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:17:38 PM ET",
+      "symbol": "DASH/USD"
+    },
+    {
+      "alert_labels": [
+        "RSI crossed above 70",
+        "Bullish Volume Spike",
+        "Breakout Attempt"
+      ],
+      "alert_types": [
+        "rsi_cross_above_70",
+        "volume_spike",
+        "test:breakout:4.43443e-06:early_warning"
+      ],
+      "candle_close_time": "2026-07-06 05:15 PM ET",
+      "delay_seconds": 187.36361384391785,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:18:07 PM ET",
+      "symbol": "SHIB/USD"
+    },
+    {
+      "alert_labels": [
+        "RSI crossed above 70",
+        "Bullish Volume Spike"
+      ],
+      "alert_types": [
+        "rsi_cross_above_70",
+        "volume_spike"
+      ],
+      "candle_close_time": "2026-07-06 05:15 PM ET",
+      "delay_seconds": 193.8885600566864,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:18:13 PM ET",
+      "symbol": "ARB/USD"
+    },
+    {
+      "alert_labels": [
+        "Breakout Attempt"
+      ],
+      "alert_types": [
+        "test:breakout:0.004644639999999999:early_warning"
+      ],
+      "candle_close_time": "2026-07-06 05:15 PM ET",
+      "delay_seconds": 201.1941900253296,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:18:21 PM ET",
+      "symbol": "JASMY/USD"
+    },
+    {
+      "alert_labels": [
+        "RSI crossed above 70",
+        "Bullish Volume Spike"
+      ],
+      "alert_types": [
+        "rsi_cross_above_70",
+        "volume_spike"
+      ],
+      "candle_close_time": "2026-07-06 05:15 PM ET",
+      "delay_seconds": 297.74890899658203,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:19:57 PM ET",
+      "symbol": "LDO/USD"
+    },
+    {
+      "alert_labels": [
+        "Bullish Volume Spike",
+        "Breakout Attempt"
+      ],
+      "alert_types": [
+        "volume_spike",
+        "test:breakout:4.294289999999999:early_warning"
+      ],
+      "candle_close_time": "2026-07-06 05:15 PM ET",
+      "delay_seconds": 302.5829041004181,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:20:02 PM ET",
+      "symbol": "ENS/USD"
+    },
+    {
+      "alert_labels": [
+        "Breakdown Attempt"
+      ],
+      "alert_types": [
+        "test:breakdown:0.23476499999999997:early_warning"
+      ],
+      "candle_close_time": "2026-07-06 05:30 PM ET",
+      "delay_seconds": 149.3807430267334,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:32:29 PM ET",
+      "symbol": "EIGEN/USD"
+    },
+    {
+      "alert_labels": [
+        "Breakout Attempt"
+      ],
+      "alert_types": [
+        "test:breakout:0.007197189999999999:early_warning"
+      ],
+      "candle_close_time": "2026-07-06 05:30 PM ET",
+      "delay_seconds": 158.42142415046692,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:32:38 PM ET",
+      "symbol": "IOTX/USD"
+    },
+    {
+      "alert_labels": [
+        "Breakdown Attempt"
+      ],
+      "alert_types": [
+        "test:breakdown:0.25134839999999997:early_warning"
+      ],
+      "candle_close_time": "2026-07-06 05:30 PM ET",
+      "delay_seconds": 205.2434799671173,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:33:25 PM ET",
+      "symbol": "XTZ/USD"
+    },
+    {
+      "alert_labels": [
+        "Breakdown Attempt"
+      ],
+      "alert_types": [
+        "test:breakdown:0.08996994:early_warning"
+      ],
+      "candle_close_time": "2026-07-06 05:30 PM ET",
+      "delay_seconds": 366.38085293769836,
+      "delivery_type": "photo",
+      "sent_time": "2026-07-06 05:36:06 PM ET",
+      "symbol": "SUPER/USD"
+    }
+  ],
   "__bot_status": {
-    "last_scan_time": "2026-06-26 10:22:44 PM ET",
+    "last_scan_time": "2026-07-06 05:41:50 PM ET",
     "mode": "TEST",
     "scanner_state": "Updating...",
     "status": "Offline",
-    "updated_at": "2026-06-26 10:22:48 PM ET"
+    "updated_at": "2026-07-06 05:42:21 PM ET"
+  },
+  "__scan_alert_cooldowns": {
+    "AAVE/USD": {
+      "tier1": 1783353679
+    },
+    "ADA/USD": {
+      "tier1": 1783346416,
+      "tier2": 1783353662
+    },
+    "AERO/USD": {
+      "tier1": 1783354568,
+      "tier2": 1783372641
+    },
+    "AKT/USD": {
+      "tier1": 1783349162,
+      "tier2": 1783371827
+    },
+    "ALGO/USD": {
+      "tier1": 1783354660
+    },
+    "APT/USD": {
+      "tier2": 1783372596
+    },
+    "ARB/USD": {
+      "tier1": 1783353401,
+      "tier2": 1783372693
+    },
+    "ATOM/USD": {
+      "tier1": 1783346492,
+      "tier2": 1783372601
+    },
+    "AVAX/USD": {
+      "tier1": 1783353669,
+      "tier2": 1783354526
+    },
+    "AXS/USD": {
+      "tier1": 1783353735,
+      "tier2": 1783372636
+    },
+    "BAT/USD": {
+      "tier2": 1783358607
+    },
+    "BCH/USD": {
+      "tier2": 1783372575
+    },
+    "BNB/USD": {
+      "tier1": 1783354606
+    },
+    "BONK/USD": {
+      "tier1": 1783353406,
+      "tier2": 1783359927
+    },
+    "BTC/USD": {
+      "tier1": 1783348310,
+      "tier2": 1783372546
+    },
+    "CAKE/USD": {
+      "tier2": 1783372187
+    },
+    "COMP/USD": {
+      "tier1": 1783353619
+    },
+    "CRO/USD": {
+      "tier1": 1783353392
+    },
+    "CRV/USD": {
+      "tier1": 1783354627,
+      "tier2": 1783360870
+    },
+    "DASH/USD": {
+      "tier2": 1783372658
+    },
+    "DEGEN/USD": {
+      "tier2": 1783371865
+    },
+    "DOGE/USD": {
+      "tier1": 1783353659,
+      "tier2": 1783372560
+    },
+    "DOT/USD": {
+      "tier2": 1783372581
+    },
+    "EIGEN/USD": {
+      "tier1": 1783354733,
+      "tier2": 1783373549
+    },
+    "ENA/USD": {
+      "tier2": 1783361800
+    },
+    "ENS/USD": {
+      "tier2": 1783372802
+    },
+    "ETC/USD": {
+      "tier1": 1783354536
+    },
+    "ETH/USD": {
+      "tier1": 1783353655,
+      "tier2": 1783372551
+    },
+    "FARTCOIN/USD": {
+      "tier1": 1783354558,
+      "tier2": 1783372622
+    },
+    "FET/USD": {
+      "tier1": 1783353725,
+      "tier2": 1783372606
+    },
+    "FIL/USD": {
+      "tier2": 1783353398
+    },
+    "GRT/USD": {
+      "tier1": 1783353909,
+      "tier2": 1783372000
+    },
+    "HBAR/USD": {
+      "tier1": 1783349136
+    },
+    "HNT/USD": {
+      "tier2": 1783371133
+    },
+    "HYPE/USD": {
+      "tier1": 1783348328,
+      "tier2": 1783372566
+    },
+    "ICP/USD": {
+      "tier1": 1783353715,
+      "tier2": 1783372590
+    },
+    "INJ/USD": {
+      "tier1": 1783345444,
+      "tier2": 1783372617
+    },
+    "IOTX/USD": {
+      "tier2": 1783373558
+    },
+    "JASMY/USD": {
+      "tier1": 1783354621,
+      "tier2": 1783372701
+    },
+    "KSM/USD": {
+      "tier1": 1783353756
+    },
+    "LDO/USD": {
+      "tier1": 1783353411,
+      "tier2": 1783372797
+    },
+    "LINK/USD": {
+      "tier1": 1783354523
+    },
+    "LTC/USD": {
+      "tier1": 1783346425,
+      "tier2": 1783341945
+    },
+    "MANA/USD": {
+      "tier1": 1783354012,
+      "tier2": 1783372038
+    },
+    "MINA/USD": {
+      "tier1": 1783354573
+    },
+    "NEAR/USD": {
+      "tier1": 1783350926,
+      "tier2": 1783353387
+    },
+    "ONDO/USD": {
+      "tier1": 1783354540
+    },
+    "PENDLE/USD": {
+      "tier2": 1783371716
+    },
+    "PENGU/USD": {
+      "tier1": 1783354561,
+      "tier2": 1783372626
+    },
+    "PEPE/USD": {
+      "tier1": 1783353676,
+      "tier2": 1783354614
+    },
+    "POL/USD": {
+      "tier2": 1783371749
+    },
+    "POPCAT/USD": {
+      "tier2": 1783371375
+    },
+    "PYTH/USD": {
+      "tier1": 1783354554
+    },
+    "RENDER/USD": {
+      "tier2": 1783344001
+    },
+    "SAND/USD": {
+      "tier2": 1783372181
+    },
+    "SEI/USD": {
+      "tier2": 1783372611
+    },
+    "SHIB/USD": {
+      "tier1": 1783353378,
+      "tier2": 1783372687
+    },
+    "SOL/USD": {
+      "tier1": 1783353373,
+      "tier2": 1783372556
+    },
+    "SUI/USD": {
+      "tier1": 1783350924,
+      "tier2": 1783372570
+    },
+    "SUPER/USD": {
+      "tier2": 1783373766
+    },
+    "TAO/USD": {
+      "tier1": 1783343998
+    },
+    "TIA/USD": {
+      "tier2": 1783372648
+    },
+    "TON/USD": {
+      "tier1": 1783354610,
+      "tier2": 1783343995
+    },
+    "UNI/USD": {
+      "tier1": 1783353383,
+      "tier2": 1783372586
+    },
+    "VET/USD": {
+      "tier1": 1783345949,
+      "tier2": 1783371201
+    },
+    "W/USD": {
+      "tier1": 1783353752
+    },
+    "WIF/USD": {
+      "tier1": 1783348380
+    },
+    "WLD/USD": {
+      "tier2": 1783359924
+    },
+    "XLM/USD": {
+      "tier1": 1783353666
+    },
+    "XRP/USD": {
+      "tier1": 1783348312
+    },
+    "XTZ/USD": {
+      "tier1": 1783348405,
+      "tier2": 1783373605
+    },
+    "YFI/USD": {
+      "tier1": 1783353427
+    },
+    "ZEC/USD": {
+      "tier1": 1783353614,
+      "tier2": 1783372632
+    },
+    "ZK/USD": {
+      "tier1": 1783353740,
+      "tier2": 1783371680
+    },
+    "ZRO/USD": {
+      "tier1": 1783354579,
+      "tier2": 1783372652
+    }
+  },
+  "__scan_alert_history": {
+    "AAVE/USD": [
+      {
+        "direction": "",
+        "emoji": "\ud83d\udd25",
+        "label": "RSI crossed above 70",
+        "timestamp": 1783353677,
+        "type": "rsi_cross_above_70",
+        "volume_multiple": null
+      }
+    ],
+    "ACH/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783361975,
+        "type": "volume_spike",
+        "volume_multiple": 2.734902385638967
+      }
+    ],
+    "ADA/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372560,
+        "type": "volume_spike",
+        "volume_multiple": 2.3318169521866965
+      }
+    ],
+    "AERO/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372636,
+        "type": "volume_spike",
+        "volume_multiple": 3.95387465734705
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783373472,
+        "type": "volume_spike",
+        "volume_multiple": 2.50876467419546
+      }
+    ],
+    "AIOZ/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372705,
+        "type": "volume_spike",
+        "volume_multiple": 2.0255991866326286
+      }
+    ],
+    "AKT/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372649,
+        "type": "volume_spike",
+        "volume_multiple": 3.2775292624732546
+      }
+    ],
+    "ALGO/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372754,
+        "type": "volume_spike",
+        "volume_multiple": 3.042497858111329
+      }
+    ],
+    "APT/USD": [
+      {
+        "direction": "",
+        "emoji": "\ud83d\udd25",
+        "label": "RSI crossed above 70",
+        "timestamp": 1783372591,
+        "type": "rsi_cross_above_70",
+        "volume_multiple": null
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372591,
+        "type": "volume_spike",
+        "volume_multiple": 4.320284735569017
+      }
+    ],
+    "ARB/USD": [],
+    "ATOM/USD": [
+      {
+        "direction": "",
+        "emoji": "\ud83d\udd25",
+        "label": "RSI crossed above 70",
+        "timestamp": 1783372597,
+        "type": "rsi_cross_above_70",
+        "volume_multiple": null
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372597,
+        "type": "volume_spike",
+        "volume_multiple": 9.170092733466474
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783373468,
+        "type": "volume_spike",
+        "volume_multiple": 3.065868085960967
+      }
+    ],
+    "AVAX/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372576,
+        "type": "volume_spike",
+        "volume_multiple": 10.90476408887852
+      }
+    ],
+    "AXS/USD": [
+      {
+        "direction": "bearish",
+        "emoji": "\ud83d\udd34",
+        "label": "Bearish Volume Spike",
+        "timestamp": 1783371896,
+        "type": "volume_spike",
+        "volume_multiple": 2.7563468158581306
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372633,
+        "type": "volume_spike",
+        "volume_multiple": 6.616127775687828
+      }
+    ],
+    "BAT/USD": [
+      {
+        "direction": "",
+        "emoji": "\ud83d\udd25",
+        "label": "RSI crossed above 70",
+        "timestamp": 1783358604,
+        "type": "rsi_cross_above_70",
+        "volume_multiple": null
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783358604,
+        "type": "volume_spike",
+        "volume_multiple": 2.589260545800457
+      }
+    ],
+    "BCH/USD": [
+      {
+        "direction": "",
+        "emoji": "\ud83d\udd25",
+        "label": "RSI crossed above 70",
+        "timestamp": 1783372571,
+        "type": "rsi_cross_above_70",
+        "volume_multiple": null
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372571,
+        "type": "volume_spike",
+        "volume_multiple": 6.908820508322245
+      }
+    ],
+    "BNB/USD": [
+      {
+        "direction": "",
+        "emoji": "\ud83d\udd25",
+        "label": "RSI crossed above 70",
+        "timestamp": 1783372551,
+        "type": "rsi_cross_above_70",
+        "volume_multiple": null
+      }
+    ],
+    "BONK/USD": [
+      {
+        "direction": "bearish",
+        "emoji": "\ud83d\udd34",
+        "label": "Bearish Volume Spike",
+        "timestamp": 1783362637,
+        "type": "volume_spike",
+        "volume_multiple": 2.7771292372667418
+      }
+    ],
+    "BTC/USD": [
+      {
+        "direction": "",
+        "emoji": "\ud83d\udd25",
+        "label": "RSI crossed above 70",
+        "timestamp": 1783372542,
+        "type": "rsi_cross_above_70",
+        "volume_multiple": null
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372542,
+        "type": "volume_spike",
+        "volume_multiple": 3.0174259830682764
+      }
+    ],
+    "CAKE/USD": [
+      {
+        "direction": "",
+        "emoji": "\ud83d\udfe2",
+        "label": "EMA 21 crossed above EMA 55",
+        "timestamp": 1783372184,
+        "type": "ema_cross_above",
+        "volume_multiple": null
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372184,
+        "type": "volume_spike",
+        "volume_multiple": 6.993678864512376
+      }
+    ],
+    "COMP/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783373544,
+        "type": "volume_spike",
+        "volume_multiple": 3.452211856532243
+      }
+    ],
+    "CRO/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783353389,
+        "type": "volume_spike",
+        "volume_multiple": 6.339116024781789
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783354615,
+        "type": "volume_spike",
+        "volume_multiple": 2.2211897228665456
+      }
+    ],
+    "CRV/USD": [
+      {
+        "direction": "",
+        "emoji": "\ud83d\udfe2",
+        "label": "EMA 21 crossed above EMA 55",
+        "timestamp": 1783360867,
+        "type": "ema_cross_above",
+        "volume_multiple": null
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783360867,
+        "type": "volume_spike",
+        "volume_multiple": 5.122153647999114
+      }
+    ],
+    "DASH/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372653,
+        "type": "volume_spike",
+        "volume_multiple": 2.3746654043798427
+      }
+    ],
+    "DEGEN/USD": [],
+    "DOGE/USD": [
+      {
+        "direction": "",
+        "emoji": "\ud83d\udd25",
+        "label": "RSI crossed above 70",
+        "timestamp": 1783372556,
+        "type": "rsi_cross_above_70",
+        "volume_multiple": null
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372556,
+        "type": "volume_spike",
+        "volume_multiple": 6.052807679001826
+      }
+    ],
+    "DOT/USD": [
+      {
+        "direction": "",
+        "emoji": "\ud83d\udd25",
+        "label": "RSI crossed above 70",
+        "timestamp": 1783372577,
+        "type": "rsi_cross_above_70",
+        "volume_multiple": null
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372577,
+        "type": "volume_spike",
+        "volume_multiple": 9.247011264185032
+      }
+    ],
+    "EIGEN/USD": [],
+    "ENA/USD": [
+      {
+        "direction": "",
+        "emoji": "\ud83d\udfe2",
+        "label": "EMA 21 crossed above EMA 55",
+        "timestamp": 1783361797,
+        "type": "ema_cross_above",
+        "volume_multiple": null
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783361797,
+        "type": "volume_spike",
+        "volume_multiple": 2.201999490876818
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783362636,
+        "type": "volume_spike",
+        "volume_multiple": 3.027195030458627
+      }
+    ],
+    "ENS/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372182,
+        "type": "volume_spike",
+        "volume_multiple": 4.050466521657278
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372799,
+        "type": "volume_spike",
+        "volume_multiple": 3.1896871760170353
+      }
+    ],
+    "ETC/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372834,
+        "type": "volume_spike",
+        "volume_multiple": 8.287086504664064
+      }
+    ],
+    "ETH/USD": [
+      {
+        "direction": "",
+        "emoji": "\ud83d\udd25",
+        "label": "RSI crossed above 70",
+        "timestamp": 1783372546,
+        "type": "rsi_cross_above_70",
+        "volume_multiple": null
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372546,
+        "type": "volume_spike",
+        "volume_multiple": 3.3203751266207355
+      }
+    ],
+    "FARTCOIN/USD": [],
+    "FET/USD": [
+      {
+        "direction": "",
+        "emoji": "\ud83d\udd25",
+        "label": "RSI crossed above 70",
+        "timestamp": 1783372601,
+        "type": "rsi_cross_above_70",
+        "volume_multiple": null
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372601,
+        "type": "volume_spike",
+        "volume_multiple": 3.663759211671725
+      }
+    ],
+    "FIL/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372597,
+        "type": "volume_spike",
+        "volume_multiple": 8.125095116004188
+      }
+    ],
+    "FLR/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372701,
+        "type": "volume_spike",
+        "volume_multiple": 6.094843078969755
+      }
+    ],
+    "GRT/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783373117,
+        "type": "volume_spike",
+        "volume_multiple": 5.575661787198822
+      }
+    ],
+    "HBAR/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372576,
+        "type": "volume_spike",
+        "volume_multiple": 2.379693085213126
+      }
+    ],
+    "HNT/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783373640,
+        "type": "volume_spike",
+        "volume_multiple": 2.0536651990963875
+      }
+    ],
+    "HYPE/USD": [],
+    "ICP/USD": [
+      {
+        "direction": "",
+        "emoji": "\ud83d\udd25",
+        "label": "RSI crossed above 70",
+        "timestamp": 1783372587,
+        "type": "rsi_cross_above_70",
+        "volume_multiple": null
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372587,
+        "type": "volume_spike",
+        "volume_multiple": 5.134485471385119
+      }
+    ],
+    "IMX/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783370954,
+        "type": "volume_spike",
+        "volume_multiple": 2.016436831558289
+      }
+    ],
+    "INJ/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372612,
+        "type": "volume_spike",
+        "volume_multiple": 2.4808378177525925
+      }
+    ],
+    "IOTX/USD": [],
+    "JASMY/USD": [],
+    "KSM/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783353753,
+        "type": "volume_spike",
+        "volume_multiple": 3.720639482096323
+      }
+    ],
+    "LDO/USD": [
+      {
+        "direction": "",
+        "emoji": "\ud83d\udd25",
+        "label": "RSI crossed above 70",
+        "timestamp": 1783372794,
+        "type": "rsi_cross_above_70",
+        "volume_multiple": null
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372794,
+        "type": "volume_spike",
+        "volume_multiple": 2.028329222967972
+      }
+    ],
+    "LINK/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372571,
+        "type": "volume_spike",
+        "volume_multiple": 11.717375226545721
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783373428,
+        "type": "volume_spike",
+        "volume_multiple": 3.0291372634290687
+      }
+    ],
+    "LTC/USD": [
+      {
+        "direction": "neutral",
+        "emoji": "\u26aa",
+        "label": "High Volume Alert",
+        "timestamp": 1783370948,
+        "type": "volume_spike",
+        "volume_multiple": 2.6703776825706558
+      }
+    ],
+    "MANA/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783373153,
+        "type": "volume_spike",
+        "volume_multiple": 3.789733816504745
+      }
+    ],
+    "MINA/USD": [
+      {
+        "direction": "",
+        "emoji": "\ud83d\udd25",
+        "label": "RSI crossed above 70",
+        "timestamp": 1783364136,
+        "type": "rsi_cross_above_70",
+        "volume_multiple": null
+      }
+    ],
+    "NEAR/USD": [
+      {
+        "direction": "",
+        "emoji": "\ud83d\udd25",
+        "label": "RSI crossed above 70",
+        "timestamp": 1783353384,
+        "type": "rsi_cross_above_70",
+        "volume_multiple": null
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783353384,
+        "type": "volume_spike",
+        "volume_multiple": 2.3219723959138703
+      }
+    ],
+    "ONDO/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372591,
+        "type": "volume_spike",
+        "volume_multiple": 2.5733782040853637
+      }
+    ],
+    "OP/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372612,
+        "type": "volume_spike",
+        "volume_multiple": 7.590426680622732
+      }
+    ],
+    "PENDLE/USD": [
+      {
+        "direction": "",
+        "emoji": "\ud83d\udd25",
+        "label": "RSI crossed above 70",
+        "timestamp": 1783372702,
+        "type": "rsi_cross_above_70",
+        "volume_multiple": null
+      }
+    ],
+    "PENGU/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372623,
+        "type": "volume_spike",
+        "volume_multiple": 9.133782031202758
+      }
+    ],
+    "PEPE/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372581,
+        "type": "volume_spike",
+        "volume_multiple": 2.424147132510481
+      }
+    ],
+    "POL/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372789,
+        "type": "volume_spike",
+        "volume_multiple": 5.08610324031531
+      }
+    ],
+    "POPCAT/USD": [],
+    "PYTH/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783354551,
+        "type": "volume_spike",
+        "volume_multiple": 2.294715363044856
+      }
+    ],
+    "RENDER/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372607,
+        "type": "volume_spike",
+        "volume_multiple": 15.043248620876545
+      }
+    ],
+    "RPL/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372649,
+        "type": "volume_spike",
+        "volume_multiple": 6.3080481698176065
+      }
+    ],
+    "SAND/USD": [
+      {
+        "direction": "",
+        "emoji": "\ud83d\udd25",
+        "label": "RSI crossed above 70",
+        "timestamp": 1783372178,
+        "type": "rsi_cross_above_70",
+        "volume_multiple": null
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372178,
+        "type": "volume_spike",
+        "volume_multiple": 3.927676517712461
+      }
+    ],
+    "SEI/USD": [
+      {
+        "direction": "",
+        "emoji": "\ud83d\udd25",
+        "label": "RSI crossed above 70",
+        "timestamp": 1783372607,
+        "type": "rsi_cross_above_70",
+        "volume_multiple": null
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372607,
+        "type": "volume_spike",
+        "volume_multiple": 3.9365996920949637
+      }
+    ],
+    "SHIB/USD": [
+      {
+        "direction": "",
+        "emoji": "\ud83d\udd25",
+        "label": "RSI crossed above 70",
+        "timestamp": 1783372683,
+        "type": "rsi_cross_above_70",
+        "volume_multiple": null
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372683,
+        "type": "volume_spike",
+        "volume_multiple": 20.397397745615248
+      }
+    ],
+    "SOL/USD": [
+      {
+        "direction": "",
+        "emoji": "\ud83d\udd25",
+        "label": "RSI crossed above 70",
+        "timestamp": 1783372551,
+        "type": "rsi_cross_above_70",
+        "volume_multiple": null
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372551,
+        "type": "volume_spike",
+        "volume_multiple": 4.356624570668454
+      }
+    ],
+    "STX/USD": [
+      {
+        "direction": "",
+        "emoji": "\ud83d\udfe2",
+        "label": "EMA 21 crossed above EMA 55",
+        "timestamp": 1783358594,
+        "type": "ema_cross_above",
+        "volume_multiple": null
+      }
+    ],
+    "SUI/USD": [
+      {
+        "direction": "",
+        "emoji": "\ud83d\udd25",
+        "label": "RSI crossed above 70",
+        "timestamp": 1783372567,
+        "type": "rsi_cross_above_70",
+        "volume_multiple": null
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372567,
+        "type": "volume_spike",
+        "volume_multiple": 5.990680768868832
+      }
+    ],
+    "SUPER/USD": [],
+    "TAO/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372586,
+        "type": "volume_spike",
+        "volume_multiple": 2.960661453037587
+      }
+    ],
+    "TIA/USD": [
+      {
+        "direction": "",
+        "emoji": "\ud83d\udfe2",
+        "label": "EMA 21 crossed above EMA 55",
+        "timestamp": 1783372645,
+        "type": "ema_cross_above",
+        "volume_multiple": null
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372645,
+        "type": "volume_spike",
+        "volume_multiple": 2.415265722451628
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783373438,
+        "type": "volume_spike",
+        "volume_multiple": 5.67061914164034
+      }
+    ],
+    "TON/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783373429,
+        "type": "volume_spike",
+        "volume_multiple": 14.149395175249493
+      }
+    ],
+    "TURBO/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783374075,
+        "type": "volume_spike",
+        "volume_multiple": 2.2212693843462086
+      }
+    ],
+    "UNI/USD": [
+      {
+        "direction": "",
+        "emoji": "\ud83d\udd25",
+        "label": "RSI crossed above 70",
+        "timestamp": 1783372581,
+        "type": "rsi_cross_above_70",
+        "volume_multiple": null
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372581,
+        "type": "volume_spike",
+        "volume_multiple": 4.525382246077663
+      }
+    ],
+    "VET/USD": [],
+    "W/USD": [
+      {
+        "direction": "bearish",
+        "emoji": "\ud83d\udd34",
+        "label": "Bearish Volume Spike",
+        "timestamp": 1783364535,
+        "type": "volume_spike",
+        "volume_multiple": 2.5278819825461425
+      }
+    ],
+    "WIF/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372804,
+        "type": "volume_spike",
+        "volume_multiple": 2.4242319634435447
+      }
+    ],
+    "WLD/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372607,
+        "type": "volume_spike",
+        "volume_multiple": 3.039688909169652
+      }
+    ],
+    "XLM/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372571,
+        "type": "volume_spike",
+        "volume_multiple": 6.41467673606122
+      }
+    ],
+    "XRP/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372551,
+        "type": "volume_spike",
+        "volume_multiple": 3.2695681765978684
+      }
+    ],
+    "XTZ/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372838,
+        "type": "volume_spike",
+        "volume_multiple": 2.1174657883796573
+      }
+    ],
+    "YFI/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783353424,
+        "type": "volume_spike",
+        "volume_multiple": 7.7683453105816795
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783354583,
+        "type": "volume_spike",
+        "volume_multiple": 4.256120780529818
+      }
+    ],
+    "ZEC/USD": [
+      {
+        "direction": "",
+        "emoji": "\ud83d\udfe2",
+        "label": "EMA 21 crossed above EMA 55",
+        "timestamp": 1783372627,
+        "type": "ema_cross_above",
+        "volume_multiple": null
+      },
+      {
+        "direction": "",
+        "emoji": "\ud83d\udd25",
+        "label": "RSI crossed above 70",
+        "timestamp": 1783372627,
+        "type": "rsi_cross_above_70",
+        "volume_multiple": null
+      }
+    ],
+    "ZK/USD": [],
+    "ZRO/USD": [
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783372649,
+        "type": "volume_spike",
+        "volume_multiple": 2.4652277284874575
+      },
+      {
+        "direction": "bullish",
+        "emoji": "\ud83d\udfe2",
+        "label": "Bullish Volume Spike",
+        "timestamp": 1783373476,
+        "type": "volume_spike",
+        "volume_multiple": 2.0864611746098713
+      }
+    ]
   },
   "__telegram_commands": {
-    "last_update_id": 263415012
+    "last_update_id": 263415253
   }
 }
