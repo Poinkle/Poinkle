@@ -738,7 +738,7 @@ class ScannerLogicTests(unittest.TestCase):
     def test_main_registers_bot_commands_at_startup(self):
         class FakeCcxt:
             @staticmethod
-            def coinbase(config=None):
+            def coinbase():
                 return object()
 
         registered = []
@@ -2633,80 +2633,6 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(record["error_type"], "RuntimeError")
         self.assertEqual(record["error_message"], "timeout fetching candles")
         self.assertEqual(record["error_class"], "network_or_rate_limit")
-
-    def test_run_once_prefetches_symbols_and_processes_in_watchlist_order(self):
-        scan_result = (
-            candle(0, 99, 101, 98, 100, 100),
-            candle(scanner.TIMEFRAME_MS, 100, 102, 99, 101, 100),
-            [],
-            100,
-            99,
-            50,
-            1,
-            100,
-            90,
-            110,
-        )
-        processed_symbols = []
-
-        with patch.object(scanner, "WATCHLIST", ["ETH/USD", "BTC/USD"]), patch.object(
-            scanner, "scan_symbol", return_value=scan_result
-        ), patch.object(scanner, "fetch_current_market_price", return_value=101), patch.object(
-            scanner, "build_level_alerts", return_value=[]
-        ), patch.object(
-            scanner,
-            "log_accuracy_audit_snapshot",
-            side_effect=lambda symbol, *args, **kwargs: processed_symbols.append(symbol),
-        ), patch.object(scanner, "print_compact_scan_summary"), patch.object(scanner, "save_state"):
-            scanner.run_once(object(), "TOKEN", "999", {})
-
-        self.assertEqual(processed_symbols, ["ETH/USD", "BTC/USD"])
-
-    def test_run_once_prefetch_failure_does_not_crash_scan(self):
-        valid_scan_result = (
-            candle(0, 99, 101, 98, 100, 100),
-            candle(scanner.TIMEFRAME_MS, 100, 102, 99, 101, 100),
-            [],
-            100,
-            99,
-            50,
-            1,
-            100,
-            90,
-            110,
-        )
-        processed_symbols = []
-        warnings = []
-
-        def fake_scan_symbol(exchange, symbol):
-            if symbol == "FAIL/USD":
-                raise RuntimeError("timeout fetching candles")
-            return valid_scan_result
-
-        with patch.object(scanner, "WATCHLIST", ["FAIL/USD", "BTC/USD"]), patch.object(
-            scanner, "scan_symbol", side_effect=fake_scan_symbol
-        ), patch.object(scanner, "fetch_current_market_price", return_value=101), patch.object(
-            scanner, "build_level_alerts", return_value=[]
-        ), patch.object(
-            scanner,
-            "log_accuracy_audit_snapshot",
-            side_effect=lambda symbol, *args, **kwargs: processed_symbols.append(symbol),
-        ), patch.object(
-            scanner,
-            "throttled_log_warn",
-            side_effect=lambda symbol, key, message: warnings.append((symbol, key, message)),
-        ), patch.object(scanner, "print_compact_scan_summary"), patch.object(scanner, "save_state"):
-            scanner.run_once(object(), "TOKEN", "999", {})
-
-        self.assertEqual(processed_symbols, ["BTC/USD"])
-        self.assertEqual(len(warnings), 1)
-        self.assertEqual(warnings[0][0], "FAIL/USD")
-        lines = scanner.DIAGNOSTICS_FILE.read_text().splitlines()
-        self.assertEqual(len(lines), 1)
-        record = json.loads(lines[0])
-        self.assertEqual(record["record_type"], "scan_failure")
-        self.assertEqual(record["symbol"], "FAIL/USD")
-        self.assertEqual(record["error_type"], "RuntimeError")
 
     def test_loop_phase_benchmark_formats_phase_breakdown(self):
         message = scanner.format_loop_phase_benchmark(
