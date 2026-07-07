@@ -8,3 +8,7 @@ user_alerts.json
 snapshots/
 
 scanner_state.json
+
+diagnostics/*.jsonl
+
+diagnostics/*.jsonl
