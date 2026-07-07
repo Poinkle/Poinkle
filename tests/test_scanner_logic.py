@@ -1146,7 +1146,7 @@ class ScannerLogicTests(unittest.TestCase):
             ), patch.object(scanner.time, "time", side_effect=lambda: current_time["now"]):
                 state = {}
                 scanner.run_once(object(), "TOKEN", "MAIN_CHAT", state)
-                current_time["now"] += 900
+                current_time["now"] += scanner.ROLLING_CONFLUENCE_WINDOW_SECONDS
                 scanner.run_once(object(), "TOKEN", "MAIN_CHAT", state)
         finally:
             scanner.WATCHLIST = original_watchlist
