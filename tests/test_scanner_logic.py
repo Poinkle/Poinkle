@@ -249,6 +249,45 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(len(warnings), 1)
         self.assertIn("Kraken candle fetch failed", warnings[0])
 
+    def test_scan_symbol_uses_kraken_fetch_for_resolved_kraken_symbol(self):
+        candles = make_ohlcv_series([100 + index for index in range(120)])
+
+        class FailingCoinbase:
+            def fetch_ohlcv(self, symbol, timeframe, limit):
+                raise AssertionError("Coinbase fetch should not be used")
+
+        with patch.object(scanner, "fetch_kraken_ohlcv", return_value=candles) as kraken_fetch:
+            result = scanner.scan_symbol(FailingCoinbase(), "XMR/USD")
+
+        kraken_fetch.assert_called_once_with(
+            "XMR/USD",
+            timeframe=scanner.TIMEFRAME,
+            limit=scanner.CANDLE_LIMIT,
+        )
+        self.assertEqual(result[1], candles[-2])
+
+    def test_scan_symbol_keeps_coinbase_fetch_for_resolved_coinbase_symbol(self):
+        candles = make_ohlcv_series([100 + index for index in range(120)])
+
+        class RecordingCoinbase:
+            def __init__(self):
+                self.calls = []
+
+            def fetch_ohlcv(self, symbol, timeframe, limit):
+                self.calls.append((symbol, timeframe, limit))
+                return candles[-limit:]
+
+        exchange = RecordingCoinbase()
+        with patch.object(
+            scanner,
+            "fetch_kraken_ohlcv",
+            side_effect=AssertionError("Kraken fetch should not be used"),
+        ):
+            result = scanner.scan_symbol(exchange, "BTC/USD")
+
+        self.assertEqual(exchange.calls, [("BTC/USD", scanner.TIMEFRAME, scanner.CANDLE_LIMIT)])
+        self.assertEqual(result[1], candles[-2])
+
     def test_mike_card_renders_mike_knows_branding_and_watermark(self):
         centered_text = []
         watermarks = []

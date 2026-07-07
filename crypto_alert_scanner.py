@@ -5701,7 +5701,10 @@ def build_level_alerts(
 
 def scan_symbol(exchange, symbol):
     try:
-        candles = exchange.fetch_ohlcv(symbol, timeframe=TIMEFRAME, limit=CANDLE_LIMIT)
+        if resolve_data_source(symbol) == "kraken":
+            candles = fetch_kraken_ohlcv(symbol, timeframe=TIMEFRAME, limit=CANDLE_LIMIT)
+        else:
+            candles = exchange.fetch_ohlcv(symbol, timeframe=TIMEFRAME, limit=CANDLE_LIMIT)
         validate_ohlcv_candles(candles, symbol, min_count=80)
     except Exception as error:
         raise MarketDataError(candle_error_message(symbol, error)) from error
