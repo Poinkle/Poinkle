@@ -6082,6 +6082,11 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
                         pending_alerts = []
 
             if pending_alerts:
+                secondary_timeframe_context = get_secondary_timeframe_context(exchange, symbol)
+                if secondary_timeframe_context:
+                    for alert in alert_group:
+                        alert["secondary_timeframe_context"] = secondary_timeframe_context
+
                 for alert in pending_alerts:
                     location_filter = alert.get("location_filter")
                     if location_filter:

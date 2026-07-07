@@ -1354,6 +1354,141 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertEqual(sent_alert_groups, [])
 
+    def test_run_once_does_not_fetch_secondary_context_without_daily_alerts(self):
+        original_watchlist = scanner.WATCHLIST[:]
+        scanner.WATCHLIST = ["BTC/USD"]
+        scan_result = (
+            candle(0, 99, 101, 98, 100, 100),
+            candle(scanner.TIMEFRAME_MS, 100, 102, 99, 101, 100),
+            [],
+            101,
+            99,
+            55,
+            1,
+            100,
+            90,
+            110,
+        )
+
+        try:
+            with patch.object(scanner, "scan_symbol", return_value=scan_result), patch.object(
+                scanner, "get_current_market_price", return_value=101
+            ), patch.object(scanner, "build_level_alerts", return_value=[]), patch.object(
+                scanner,
+                "get_secondary_timeframe_context",
+                side_effect=AssertionError("secondary context should not be fetched"),
+            ), patch.object(scanner, "send_alert_group_to_chat") as send_group, patch.object(
+                scanner, "load_bot_config", return_value={"live_alerts_enabled": True}
+            ), patch.object(scanner, "save_state"):
+                scanner.run_once(object(), "TOKEN", "MAIN_CHAT", {})
+        finally:
+            scanner.WATCHLIST = original_watchlist
+
+        send_group.assert_not_called()
+
+    def test_run_once_attaches_secondary_context_to_outgoing_alert_group(self):
+        original_watchlist = scanner.WATCHLIST[:]
+        scanner.WATCHLIST = ["BTC/USD"]
+        sent_alert_groups = []
+        secondary_context = {"4h": {"latest_close": 101}, "8h": {"latest_close": 102}}
+        volume_alert = {
+            "type": "volume_spike",
+            "label": "Bullish Volume Spike",
+            "emoji": "🟢",
+            "direction": "bullish",
+            "volume_multiple": 2.5,
+        }
+        ema_alert = {
+            "type": "ema_cross_above",
+            "label": "EMA 21 crossed above EMA 55",
+            "emoji": "🟢",
+        }
+        scan_result = (
+            candle(0, 99, 101, 98, 100, 100),
+            candle(scanner.TIMEFRAME_MS, 100, 102, 99, 101, 250),
+            [volume_alert, ema_alert],
+            101,
+            99,
+            55,
+            1,
+            100,
+            90,
+            110,
+        )
+
+        try:
+            with patch.object(scanner, "scan_symbol", return_value=scan_result), patch.object(
+                scanner, "get_current_market_price", return_value=101
+            ), patch.object(scanner, "build_level_alerts", return_value=[]), patch.object(
+                scanner, "get_secondary_timeframe_context", return_value=secondary_context
+            ) as secondary_fetch, patch.object(
+                scanner,
+                "send_alert_group_to_chat",
+                side_effect=lambda token, chat_id, symbol, candle_arg, alerts, *args, **kwargs: sent_alert_groups.append(
+                    alerts
+                ),
+            ), patch.object(scanner, "load_bot_config", return_value={"live_alerts_enabled": True}), patch.object(
+                scanner, "save_state"
+            ):
+                scanner.run_once(object(), "TOKEN", "MAIN_CHAT", {})
+        finally:
+            scanner.WATCHLIST = original_watchlist
+
+        secondary_fetch.assert_called_once_with(ANY, "BTC/USD")
+        self.assertEqual(len(sent_alert_groups), 1)
+        self.assertTrue(
+            all(alert["secondary_timeframe_context"] == secondary_context for alert in sent_alert_groups[0])
+        )
+
+    def test_run_once_sends_daily_alert_when_secondary_context_is_unavailable(self):
+        original_watchlist = scanner.WATCHLIST[:]
+        scanner.WATCHLIST = ["BTC/USD"]
+        sent_alert_groups = []
+        volume_alert = {
+            "type": "volume_spike",
+            "label": "Bullish Volume Spike",
+            "emoji": "🟢",
+            "direction": "bullish",
+            "volume_multiple": 2.5,
+        }
+        ema_alert = {
+            "type": "ema_cross_above",
+            "label": "EMA 21 crossed above EMA 55",
+            "emoji": "🟢",
+        }
+        scan_result = (
+            candle(0, 99, 101, 98, 100, 100),
+            candle(scanner.TIMEFRAME_MS, 100, 102, 99, 101, 250),
+            [volume_alert, ema_alert],
+            101,
+            99,
+            55,
+            1,
+            100,
+            90,
+            110,
+        )
+
+        try:
+            with patch.object(scanner, "scan_symbol", return_value=scan_result), patch.object(
+                scanner, "get_current_market_price", return_value=101
+            ), patch.object(scanner, "build_level_alerts", return_value=[]), patch.object(
+                scanner, "get_secondary_timeframe_context", return_value=None
+            ), patch.object(
+                scanner,
+                "send_alert_group_to_chat",
+                side_effect=lambda token, chat_id, symbol, candle_arg, alerts, *args, **kwargs: sent_alert_groups.append(
+                    [alert["type"] for alert in alerts]
+                ),
+            ), patch.object(scanner, "load_bot_config", return_value={"live_alerts_enabled": True}), patch.object(
+                scanner, "save_state"
+            ):
+                scanner.run_once(object(), "TOKEN", "MAIN_CHAT", {})
+        finally:
+            scanner.WATCHLIST = original_watchlist
+
+        self.assertEqual(sent_alert_groups, [["volume_spike", "ema_cross_above"]])
+
     def test_run_once_suppresses_level_attempts_without_suppressing_confluence(self):
         original_watchlist = scanner.WATCHLIST[:]
         scanner.WATCHLIST = ["BTC/USD"]
