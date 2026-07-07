@@ -115,7 +115,7 @@ def validate_watchlist_against_exchange(exchange, watchlist):
     supported = []
     unsupported = []
     for symbol in watchlist:
-        if symbol in markets:
+        if symbol in markets or resolve_data_source(symbol) == "kraken":
             supported.append(symbol)
         else:
             unsupported.append(symbol)

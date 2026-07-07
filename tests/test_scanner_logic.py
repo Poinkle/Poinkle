@@ -2674,11 +2674,11 @@ class ScannerLogicTests(unittest.TestCase):
         with patch.object(scanner, "log_warn") as warn:
             supported, unsupported = scanner.validate_watchlist_against_exchange(
                 ExchangeWithMarkets(),
-                ["BTC/USD", "ZEC/USD", "XMR/USD"],
+                ["BTC/USD", "ZEC/USD", "XMR/USD", "EOS/USD", "HOT/USD", "NEXO/USD"],
             )
 
-        self.assertEqual(supported, ["BTC/USD", "ZEC/USD"])
-        self.assertEqual(unsupported, ["XMR/USD"])
+        self.assertEqual(supported, ["BTC/USD", "ZEC/USD", "XMR/USD"])
+        self.assertEqual(unsupported, ["EOS/USD", "HOT/USD", "NEXO/USD"])
         self.assertEqual(warn.call_count, 2)
 
     def test_run_once_skips_unsupported_symbols_for_session(self):
