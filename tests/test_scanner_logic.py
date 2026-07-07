@@ -919,6 +919,50 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(status, "Trade Confirmed")
         self.assertGreaterEqual(metrics["break_strength_score"], 70)
 
+    def test_monitor_active_trades_mutes_telegram_but_updates_state_when_live(self):
+        class TrackingExchange:
+            def __init__(self, candles):
+                self.candles = candles
+
+            def fetch_ohlcv(self, symbol, timeframe, limit):
+                return self.candles[-limit:]
+
+            def fetch_ticker(self, symbol):
+                return {"last": self.candles[-2][4]}
+
+        closes = [101 + index * 0.08 for index in range(80)]
+        volumes = [100 for _ in closes]
+        candles = make_tracking_candles(closes, volumes)
+        state = {
+            "__active_trades": {
+                "BTC/USD": {
+                    "direction": "LONG",
+                    "level": 100,
+                    "started_at": scanner.current_time_ms(),
+                    "last_monitor_at": 0,
+                    "last_status": None,
+                    "last_rsi": 50,
+                    "last_volume": 100,
+                    "retest_seen": False,
+                    "lower_tf_candles_checked": 0,
+                    "distance_to_target_pct": 2,
+                    "next_target": 115,
+                }
+            }
+        }
+
+        with patch.object(scanner, "load_bot_config", return_value={"live_alerts_enabled": True}), patch.object(
+            scanner, "send_telegram_message", side_effect=AssertionError("tracking send should be muted")
+        ), patch.object(scanner, "save_state") as save_state:
+            scanner.monitor_active_trades(TrackingExchange(candles), "TOKEN", "MAIN_CHAT", state)
+
+        trade = state["__active_trades"]["BTC/USD"]
+        self.assertEqual(trade["last_status"], "Weakening")
+        self.assertGreater(trade["last_monitor_at"], 0)
+        self.assertIsNotNone(trade["last_rsi"])
+        self.assertEqual(trade["last_volume"], 100)
+        save_state.assert_called()
+
     def test_levels_command_returns_market_levels_not_exact_key_levels(self):
         scanner.TEST_MODE = True
         scanner.KEY_LEVELS = {

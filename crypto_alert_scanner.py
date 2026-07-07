@@ -159,6 +159,7 @@ CANDLE_LIMIT = 120
 POLL_SECONDS = 15
 TRADE_TRACK_POLL_SECONDS = 60
 TRADE_TRACK_MAX_MINUTES = 60
+TRADE_TRACKING_TELEGRAM_ENABLED = False
 STATE_FILE = Path("scanner_state.json")
 DIAGNOSTICS_FILE = PROJECT_DIR / "diagnostics" / "alert_diagnostics.jsonl"
 USER_ALERTS_FILE = PROJECT_DIR / "user_alerts.json"
@@ -5467,9 +5468,10 @@ def monitor_active_trades(exchange, telegram_token, telegram_chat_id, state):
             trade["last_volume"] = metrics["current_volume"]
 
             if trade.get("last_status") != status:
-                message = build_trade_tracking_message(symbol, trade, status, reason, metrics)
-                send_telegram_message(telegram_token, telegram_chat_id, message)
-                log_info(f"Trade tracking update: {symbol} - {status}")
+                if TRADE_TRACKING_TELEGRAM_ENABLED:
+                    message = build_trade_tracking_message(symbol, trade, status, reason, metrics)
+                    send_telegram_message(telegram_token, telegram_chat_id, message)
+                    log_info(f"Trade tracking update: {symbol} - {status}")
                 trade["last_status"] = status
 
             if status in {
