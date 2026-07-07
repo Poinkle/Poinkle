@@ -2290,8 +2290,111 @@ class ScannerLogicTests(unittest.TestCase):
         render_chart.assert_called_once()
         self.assertEqual(len(sent_photos), 1)
         self.assertEqual(sent_photos[0][1], "/tmp/confluence.png")
-        self.assertIn("Confluence Alert", sent_photos[0][2])
+        self.assertEqual(
+            sent_photos[0][2],
+            "<b>BTC/USD Confluence Alert</b> — "
+            "Bullish Volume Spike (2.50x) + EMA 21 crossed above EMA 55\n"
+            "Learn more: https://bitcoin.org",
+        )
         self.assertEqual(sent_messages, [])
+
+    def test_severity_label_for_alerts_counts_distinct_signal_types(self):
+        self.assertEqual(
+            scanner.severity_label_for_alerts(
+                [
+                    {"type": "volume_spike"},
+                    {"type": "ema_cross_above"},
+                ]
+            ),
+            "",
+        )
+        self.assertEqual(
+            scanner.severity_label_for_alerts(
+                [
+                    {"type": "volume_spike"},
+                    {"type": "volume_spike"},
+                    {"type": "ema_cross_above"},
+                ]
+            ),
+            "",
+        )
+        self.assertEqual(
+            scanner.severity_label_for_alerts(
+                [
+                    {"type": "volume_spike"},
+                    {"type": "ema_cross_above"},
+                    {"type": "rsi_cross_above_70"},
+                ]
+            ),
+            "🟡 3 signals",
+        )
+        self.assertEqual(
+            scanner.severity_label_for_alerts(
+                [
+                    {"type": "volume_spike"},
+                    {"type": "ema_cross_above"},
+                    {"type": "rsi_cross_above_70"},
+                    {"type": "live:breakout:100:early_warning"},
+                ]
+            ),
+            "🔴 4 signals",
+        )
+        self.assertEqual(
+            scanner.severity_label_for_alerts(
+                [
+                    {"type": "volume_spike"},
+                    {"type": "ema_cross_above"},
+                    {"type": "rsi_cross_above_70"},
+                    {"type": "live:breakout:100:early_warning"},
+                    {"type": "live:breakdown:90:early_warning"},
+                ]
+            ),
+            "🔴 5 signals",
+        )
+
+    def test_confluence_caption_adds_severity_for_three_or_more_signals(self):
+        sent_photos = []
+        alerts = [
+            {
+                "type": "volume_spike",
+                "label": "Bullish Volume Spike",
+                "emoji": "🟢",
+                "volume_multiple": 2.5,
+            },
+            {
+                "type": "ema_cross_above",
+                "label": "EMA 21 crossed above EMA 55",
+                "emoji": "🟢",
+            },
+            {
+                "type": "rsi_cross_above_70",
+                "label": "RSI crossed above 70",
+                "emoji": "🔥",
+            },
+        ]
+
+        with patch.object(scanner, "render_alert_snapshot_chart", return_value="/tmp/confluence.png"), patch.object(
+            scanner,
+            "send_telegram_photo",
+            side_effect=lambda token, chat_id, path, caption="": sent_photos.append((str(chat_id), path, caption)) or True,
+        ), patch.object(scanner, "send_telegram_message"):
+            scanner.send_alert_group_to_chat(
+                "TOKEN",
+                "999",
+                "BTC/USD",
+                candle(0, 100, 105, 99, 104, 250),
+                alerts,
+                ema_21=101,
+                ema_55=99,
+                current_rsi=58,
+                volume_avg=100,
+                alert_candles=[
+                    candle(0, 100, 105, 99, 104, 100),
+                    candle(scanner.TIMEFRAME_MS, 104, 108, 103, 107, 250),
+                ],
+            )
+
+        self.assertTrue(sent_photos[0][2].startswith("🟡 3 signals\n<b>BTC/USD Confluence Alert</b> — "))
 
     def test_research_command_sends_image_cards_when_renderer_succeeds(self):
         sent_groups = []

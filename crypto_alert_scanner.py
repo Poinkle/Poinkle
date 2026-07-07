@@ -2995,6 +2995,15 @@ def alert_signal_summary(alert):
     return label
 
 
+def severity_label_for_alerts(alerts):
+    count = len({alert.get("type") for alert in alerts if alert.get("type")})
+    if count <= 2:
+        return ""
+    if count == 3:
+        return "🟡 3 signals"
+    return f"🔴 {count} signals"
+
+
 def alert_card_data(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, skill_level=None):
     timestamp, open_price, high, low, close, volume = candle
     stats = [
@@ -3188,7 +3197,10 @@ def send_alert_group_to_chat(
             resistances=resistances,
         )
 
+    severity_label = severity_label_for_alerts(alerts)
     fallback_message = build_combined_alert_message(symbol, candle, alerts, ema_21, ema_55, current_rsi, volume_avg)
+    if severity_label:
+        fallback_message = f"{severity_label}\n{fallback_message}"
     try:
         chart_path = render_alert_snapshot_chart(
             symbol,
@@ -3204,6 +3216,8 @@ def send_alert_group_to_chat(
         )
         signal_label = " + ".join(alert_signal_summary(alert) for alert in alerts)
         caption = f"<b>{symbol} Confluence Alert</b> — {signal_label}"
+        if severity_label:
+            caption = f"{severity_label}\n{caption}"
         link = official_coin_link(symbol)
         if link:
             caption = f"{caption}\nLearn more: {link}"
