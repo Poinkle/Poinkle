@@ -1158,15 +1158,23 @@ def fetch_closed_ohlcv(exchange, symbol, timeframe, limit, fallback=None):
 
 
 def get_current_market_price(exchange, symbol, fallback_price):
+    source = resolve_data_source(symbol)
+    source_label = "Kraken" if source == "kraken" else "Coinbase"
     try:
-        ticker = exchange.fetch_ticker(symbol)
+        if source == "kraken":
+            ticker_exchange = kraken_exchange()
+            if ticker_exchange is None:
+                raise RuntimeError("Kraken exchange unavailable")
+            ticker = ticker_exchange.fetch_ticker(kraken_ohlcv_symbol(symbol))
+        else:
+            ticker = exchange.fetch_ticker(symbol)
         price = ticker.get("last") or ticker.get("close") or fallback_price
         return float(price)
     except Exception as error:
         throttled_log_warn(
             symbol,
             "ticker",
-            f"{symbol}: Coinbase ticker fetch failed. Using fallback price.",
+            f"{symbol}: {source_label} ticker fetch failed. Using fallback price.",
         )
         return float(fallback_price)
 

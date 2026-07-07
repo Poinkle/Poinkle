@@ -288,6 +288,67 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(exchange.calls, [("BTC/USD", scanner.TIMEFRAME, scanner.CANDLE_LIMIT)])
         self.assertEqual(result[1], candles[-2])
 
+    def test_get_current_market_price_uses_kraken_ticker_for_resolved_kraken_symbol(self):
+        class FailingCoinbase:
+            def fetch_ticker(self, symbol):
+                raise AssertionError("Coinbase ticker should not be used")
+
+        class RecordingKraken:
+            def __init__(self):
+                self.calls = []
+
+            def fetch_ticker(self, symbol):
+                self.calls.append(symbol)
+                return {"last": 172.25}
+
+        kraken = RecordingKraken()
+        with patch.object(scanner, "kraken_exchange", return_value=kraken):
+            price = scanner.get_current_market_price(FailingCoinbase(), "XMR/USD", 100)
+
+        self.assertEqual(price, 172.25)
+        self.assertEqual(kraken.calls, ["XMR/USD"])
+
+    def test_get_current_market_price_keeps_coinbase_ticker_for_resolved_coinbase_symbol(self):
+        class RecordingCoinbase:
+            def __init__(self):
+                self.calls = []
+
+            def fetch_ticker(self, symbol):
+                self.calls.append(symbol)
+                return {"last": 101.5}
+
+        exchange = RecordingCoinbase()
+        with patch.object(
+            scanner,
+            "kraken_exchange",
+            side_effect=AssertionError("Kraken ticker should not be used"),
+        ):
+            price = scanner.get_current_market_price(exchange, "BTC/USD", 100)
+
+        self.assertEqual(price, 101.5)
+        self.assertEqual(exchange.calls, ["BTC/USD"])
+
+    def test_get_current_market_price_falls_back_on_kraken_ticker_failure(self):
+        warnings = []
+
+        class FailingCoinbase:
+            def fetch_ticker(self, symbol):
+                raise AssertionError("Coinbase ticker should not be used")
+
+        class FailingKraken:
+            def fetch_ticker(self, symbol):
+                raise RuntimeError("ticker unavailable")
+
+        with patch.object(scanner, "kraken_exchange", return_value=FailingKraken()), patch.object(
+            scanner,
+            "throttled_log_warn",
+            side_effect=lambda symbol, key, message: warnings.append((symbol, key, message)),
+        ):
+            price = scanner.get_current_market_price(FailingCoinbase(), "XMR/USD", 99.25)
+
+        self.assertEqual(price, 99.25)
+        self.assertEqual(warnings, [("XMR/USD", "ticker", "XMR/USD: Kraken ticker fetch failed. Using fallback price.")])
+
     def test_mike_card_renders_mike_knows_branding_and_watermark(self):
         centered_text = []
         watermarks = []
