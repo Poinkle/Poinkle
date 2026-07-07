@@ -211,6 +211,8 @@ MIKE_ALTERNATE_SYMBOLS = {
     "JCT/USD": "JCT/USDT",
 }
 MIKE_ALTERNATE_EXCHANGE = None
+KRAKEN_EXCHANGE_ID = "kraken"
+KRAKEN_EXCHANGE = None
 
 
 class MarketDataError(RuntimeError):
@@ -4161,6 +4163,52 @@ def mike_alternate_exchange():
     if MIKE_ALTERNATE_EXCHANGE is None:
         MIKE_ALTERNATE_EXCHANGE = create_mike_alternate_exchange()
     return MIKE_ALTERNATE_EXCHANGE
+
+
+def kraken_exchange():
+    global KRAKEN_EXCHANGE
+    if KRAKEN_EXCHANGE is not None:
+        return KRAKEN_EXCHANGE
+
+    if ccxt is None:
+        log_warn("Missing ccxt for Kraken fallback exchange data")
+        return None
+
+    exchange_class = getattr(ccxt, KRAKEN_EXCHANGE_ID, None)
+    if exchange_class is None:
+        log_warn(f"ccxt exchange unavailable: {KRAKEN_EXCHANGE_ID}")
+        return None
+
+    try:
+        KRAKEN_EXCHANGE = exchange_class({"enableRateLimit": True})
+    except Exception as error:
+        log_warn(f"Could not create Kraken fallback exchange: {error}")
+        return None
+    return KRAKEN_EXCHANGE
+
+
+def kraken_ohlcv_symbol(symbol):
+    base = str(symbol or "").strip().upper().split("/", 1)[0]
+    if not base:
+        return ""
+    return f"{base}/USD"
+
+
+def fetch_kraken_ohlcv(symbol, timeframe="1h", limit=100):
+    exchange = kraken_exchange()
+    if exchange is None:
+        return None
+
+    kraken_symbol = kraken_ohlcv_symbol(symbol)
+    if not kraken_symbol:
+        log_warn("Could not fetch Kraken candles: missing symbol")
+        return None
+
+    try:
+        return exchange.fetch_ohlcv(kraken_symbol, timeframe=timeframe, limit=limit)
+    except Exception as error:
+        log_warn(f"{kraken_symbol}: Kraken candle fetch failed: {error}")
+        return None
 
 
 def validate_mike_alternate_symbol(exchange, symbol):

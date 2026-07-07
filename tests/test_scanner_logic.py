@@ -70,6 +70,7 @@ class ScannerLogicTests(unittest.TestCase):
         self.original_live_alert_test_chat_id = scanner.LIVE_ALERT_TEST_CHAT_ID
         self.original_last_research_chart_data = scanner.LAST_RESEARCH_CHART_DATA.copy()
         self.original_mike_alternate_exchange = scanner.MIKE_ALTERNATE_EXCHANGE
+        self.original_kraken_exchange = scanner.KRAKEN_EXCHANGE
         self.original_diagnostics_file = scanner.DIAGNOSTICS_FILE
         self.diagnostics_tmpdir = tempfile.TemporaryDirectory()
         scanner.TEST_MODE = False
@@ -80,6 +81,7 @@ class ScannerLogicTests(unittest.TestCase):
         scanner.LIVE_ALERT_TEST_CHAT_ID = ""
         scanner.LAST_RESEARCH_CHART_DATA.clear()
         scanner.MIKE_ALTERNATE_EXCHANGE = None
+        scanner.KRAKEN_EXCHANGE = None
         scanner.DIAGNOSTICS_FILE = Path(self.diagnostics_tmpdir.name) / "diagnostics" / "alert_diagnostics.jsonl"
 
     def tearDown(self):
@@ -91,6 +93,7 @@ class ScannerLogicTests(unittest.TestCase):
         scanner.LAST_RESEARCH_CHART_DATA.clear()
         scanner.LAST_RESEARCH_CHART_DATA.update(self.original_last_research_chart_data)
         scanner.MIKE_ALTERNATE_EXCHANGE = self.original_mike_alternate_exchange
+        scanner.KRAKEN_EXCHANGE = self.original_kraken_exchange
         scanner.DIAGNOSTICS_FILE = self.original_diagnostics_file
         self.diagnostics_tmpdir.cleanup()
 
@@ -191,6 +194,48 @@ class ScannerLogicTests(unittest.TestCase):
                 {"symbol": "JCT", "price": "0.42", "trend": "bullish", "rsi": "61.99", "available": True},
             ],
         )
+
+    def test_kraken_exchange_returns_cached_object_without_raising(self):
+        created = []
+
+        class FakeKraken:
+            def __init__(self, config):
+                self.config = config
+
+        class FakeCcxt:
+            def kraken(self, config):
+                exchange = FakeKraken(config)
+                created.append(exchange)
+                return exchange
+
+        with patch.object(scanner, "ccxt", FakeCcxt()):
+            first = scanner.kraken_exchange()
+            second = scanner.kraken_exchange()
+
+        self.assertIs(first, second)
+        self.assertEqual(len(created), 1)
+        self.assertEqual(first.config, {"enableRateLimit": True})
+
+    def test_fetch_kraken_ohlcv_returns_none_on_fetch_failure(self):
+        warnings = []
+
+        class FakeKraken:
+            def fetch_ohlcv(self, symbol, timeframe, limit):
+                self.last_call = (symbol, timeframe, limit)
+                raise RuntimeError("Kraken unavailable")
+
+        exchange = FakeKraken()
+        with patch.object(scanner, "kraken_exchange", return_value=exchange), patch.object(
+            scanner,
+            "log_warn",
+            side_effect=lambda message: warnings.append(message),
+        ):
+            result = scanner.fetch_kraken_ohlcv("XMR/USD", timeframe="1h", limit=100)
+
+        self.assertIsNone(result)
+        self.assertEqual(exchange.last_call, ("XMR/USD", "1h", 100))
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("Kraken candle fetch failed", warnings[0])
 
     def test_mike_card_renders_mike_knows_branding_and_watermark(self):
         centered_text = []
@@ -2367,7 +2412,7 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertFalse(hasattr(scanner, "LEVELS_SYMBOLS"))
         self.assertEqual(set(self.original_key_levels), set(scanner.WATCHLIST))
 
-    def test_expanded_watchlist_contains_147_enabled_unique_symbols_after_cleanup(self):
+    def test_expanded_watchlist_contains_144_enabled_unique_symbols_after_cleanup(self):
         watchlist_data = __import__("json").loads((PROJECT_DIR / "watchlist.json").read_text())
         enabled_symbols = [
             item["symbol"].upper()
@@ -2380,8 +2425,8 @@ class ScannerLogicTests(unittest.TestCase):
             if not item.get("enabled", True)
         ]
 
-        self.assertEqual(len(enabled_symbols), 147)
-        self.assertEqual(len(set(enabled_symbols)), 147)
+        self.assertEqual(len(enabled_symbols), 144)
+        self.assertEqual(len(set(enabled_symbols)), 144)
         self.assertTrue(all(symbol.endswith("/USD") for symbol in enabled_symbols))
         self.assertIn("BTC/USD", enabled_symbols)
         self.assertIn("BRETT/USD", enabled_symbols)
@@ -2392,6 +2437,9 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertNotIn("WBTC/USD", enabled_symbols)
         self.assertIn("USDC/USD", disabled_symbols)
         self.assertIn("WBTC/USD", disabled_symbols)
+        self.assertIn("EOS/USD", disabled_symbols)
+        self.assertIn("HOT/USD", disabled_symbols)
+        self.assertIn("NEXO/USD", disabled_symbols)
 
     def test_scan_cycle_benchmark_reports_cycle_time_and_safe_target(self):
         benchmark = scanner.scan_cycle_benchmark(
