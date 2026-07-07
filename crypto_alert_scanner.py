@@ -1,7 +1,9 @@
 import json
 import os
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -171,11 +173,14 @@ SCAN_TIER2_ALERT_COOLDOWN_SECONDS = 3600
 ROLLING_CONFLUENCE_WINDOW_SECONDS = 900
 SCAN_PERFORMANCE_TARGET_SYMBOLS = 150
 COINBASE_PUBLIC_REQUESTS_PER_SECOND = 10
+MAX_PARALLEL_SCAN_FETCH_WORKERS = 4
 ACCURACY_AUDIT_SYMBOLS = {"BTC/USD", "ETH/USD", "SOL/USD", "AAVE/USD", "PEPE/USD"}
 ALERT_DELIVERY_METRIC_LIMIT = 100
 LEVEL_ALERT_TYPES = {"support", "resistance", "all", "critical"}
 EASTERN_TIME = ZoneInfo("America/New_York")
 ERROR_LOG_STATE = {}
+COINBASE_FETCH_LOCK = threading.Lock()
+KRAKEN_FETCH_LOCK = threading.Lock()
 DEFAULT_BOT_CONFIG = {
     "developer_mode": False,
     "maintenance_mode": False,
@@ -1157,24 +1162,39 @@ def fetch_closed_ohlcv(exchange, symbol, timeframe, limit, fallback=None):
         raise handled_error from error
 
 
-def get_current_market_price(exchange, symbol, fallback_price):
+def scan_data_fetch_lock(symbol):
+    if resolve_data_source(symbol) == "kraken":
+        return KRAKEN_FETCH_LOCK
+    return COINBASE_FETCH_LOCK
+
+
+def ticker_fetch_failure_message(symbol):
     source = resolve_data_source(symbol)
     source_label = "Kraken" if source == "kraken" else "Coinbase"
+    return f"{symbol}: {source_label} ticker fetch failed. Using fallback price."
+
+
+def fetch_current_market_price(exchange, symbol, fallback_price):
+    source = resolve_data_source(symbol)
+    if source == "kraken":
+        ticker_exchange = kraken_exchange()
+        if ticker_exchange is None:
+            raise RuntimeError("Kraken exchange unavailable")
+        ticker = ticker_exchange.fetch_ticker(kraken_ohlcv_symbol(symbol))
+    else:
+        ticker = exchange.fetch_ticker(symbol)
+    price = ticker.get("last") or ticker.get("close") or fallback_price
+    return float(price)
+
+
+def get_current_market_price(exchange, symbol, fallback_price):
     try:
-        if source == "kraken":
-            ticker_exchange = kraken_exchange()
-            if ticker_exchange is None:
-                raise RuntimeError("Kraken exchange unavailable")
-            ticker = ticker_exchange.fetch_ticker(kraken_ohlcv_symbol(symbol))
-        else:
-            ticker = exchange.fetch_ticker(symbol)
-        price = ticker.get("last") or ticker.get("close") or fallback_price
-        return float(price)
+        return fetch_current_market_price(exchange, symbol, fallback_price)
     except Exception as error:
         throttled_log_warn(
             symbol,
             "ticker",
-            f"{symbol}: {source_label} ticker fetch failed. Using fallback price.",
+            ticker_fetch_failure_message(symbol),
         )
         return float(fallback_price)
 
@@ -5829,6 +5849,50 @@ def scan_symbol(exchange, symbol):
     )
 
 
+def fetch_symbol_scan_inputs(exchange, symbol):
+    try:
+        lock = scan_data_fetch_lock(symbol)
+        with lock:
+            scan_result = scan_symbol(exchange, symbol)
+
+        candle = scan_result[1]
+        ticker_warning_message = None
+        try:
+            with lock:
+                current_market_price = fetch_current_market_price(exchange, symbol, candle[4])
+        except Exception:
+            current_market_price = float(candle[4])
+            ticker_warning_message = ticker_fetch_failure_message(symbol)
+
+        return {
+            "scan_result": scan_result,
+            "current_market_price": current_market_price,
+            "ticker_warning_message": ticker_warning_message,
+        }
+    except Exception as error:
+        return {"error": error}
+
+
+def prefetch_scan_inputs(exchange, symbols):
+    if not symbols:
+        return {}
+
+    max_workers = max(1, min(MAX_PARALLEL_SCAN_FETCH_WORKERS, len(symbols)))
+    results = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures_by_symbol = {
+            symbol: executor.submit(fetch_symbol_scan_inputs, exchange, symbol)
+            for symbol in symbols
+        }
+        for symbol in symbols:
+            try:
+                results[symbol] = futures_by_symbol[symbol].result()
+            except Exception as error:
+                results[symbol] = {"error": error}
+
+    return results
+
+
 def run_once(exchange, telegram_token, telegram_chat_id, state):
     scan_start = time.perf_counter()
     scanned_symbols = 0
@@ -5836,14 +5900,26 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
     failed_symbols = 0
     compact_scan_lines = []
     main_chat_safe_mode = main_chat_safe_mode_enabled()
+    symbols_to_scan = []
     for symbol in WATCHLIST:
         if symbol in UNSUPPORTED_SYMBOLS_THIS_SESSION:
             skipped_symbols += 1
             continue
+        scanned_symbols += 1
+        symbols_to_scan.append(symbol)
+
+    prefetched_scan_inputs = prefetch_scan_inputs(exchange, symbols_to_scan)
+
+    for symbol in symbols_to_scan:
         try:
-            scanned_symbols += 1
             symbol_state = state.setdefault(symbol, {})
-            scan_result = scan_symbol(exchange, symbol)
+            scan_inputs = prefetched_scan_inputs.get(symbol)
+            if not scan_inputs:
+                raise RuntimeError("scan prefetch did not return a result")
+            if scan_inputs.get("error"):
+                raise scan_inputs["error"]
+
+            scan_result = scan_inputs["scan_result"]
             (
                 previous_candle,
                 candle,
@@ -5865,7 +5941,13 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
 
             pending_before_scan = bool(symbol_state.get("pending_setups"))
             tracking_is_active = symbol in state.setdefault("__active_trades", {})
-            current_market_price = get_current_market_price(exchange, symbol, candle[4])
+            current_market_price = scan_inputs["current_market_price"]
+            if scan_inputs.get("ticker_warning_message"):
+                throttled_log_warn(
+                    symbol,
+                    "ticker",
+                    scan_inputs["ticker_warning_message"],
+                )
             if main_chat_safe_mode:
                 if alerts and not LIVE_ALERT_TEST_CHAT_ID:
                     log_info(
@@ -6138,7 +6220,7 @@ def main():
     except Exception as error:
         log_warn(f"Could not create diagnostics directory: {error}")
 
-    exchange = ccxt.coinbase()
+    exchange = ccxt.coinbase({"enableRateLimit": True})
     supported_symbols, unsupported_symbols = validate_watchlist_against_exchange(exchange, WATCHLIST)
     UNSUPPORTED_SYMBOLS_THIS_SESSION.update(unsupported_symbols)
     state = load_state()
