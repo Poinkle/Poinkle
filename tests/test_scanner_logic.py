@@ -584,6 +584,28 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertNotEqual(alerts[0]["label"], "Breakout Confirmation")
         self.assertLess(alerts[0]["trade_plan"]["break_strength_score"], 70)
 
+    def test_level_break_send_filter_only_allows_confirmations(self):
+        self.assertFalse(
+            scanner.should_send_level_break_alert(
+                {"type": "live:breakout:100:early_warning", "label": "Breakout Attempt"}
+            )
+        )
+        self.assertFalse(
+            scanner.should_send_level_break_alert(
+                {"type": "live:breakdown:95:weak_break", "label": "Weak Break / Watch Only"}
+            )
+        )
+        self.assertTrue(
+            scanner.should_send_level_break_alert(
+                {"type": "live:breakout:100:confirmation", "label": "Breakout Confirmation"}
+            )
+        )
+        self.assertTrue(
+            scanner.should_send_level_break_alert(
+                {"type": "volume_spike", "label": "Bullish Volume Spike"}
+            )
+        )
+
     def test_tracking_rejects_fake_breakout(self):
         closes = [101 + index * 0.05 for index in range(80)]
         closes[60] = 99.4
@@ -1212,6 +1234,68 @@ class ScannerLogicTests(unittest.TestCase):
             scanner.WATCHLIST = original_watchlist
 
         self.assertEqual(sent_alert_groups, [])
+
+    def test_run_once_suppresses_level_attempts_without_suppressing_confluence(self):
+        original_watchlist = scanner.WATCHLIST[:]
+        scanner.WATCHLIST = ["BTC/USD"]
+        sent_alert_groups = []
+        volume_alert = {
+            "type": "volume_spike",
+            "label": "Bullish Volume Spike",
+            "emoji": "🟢",
+            "direction": "bullish",
+            "volume_multiple": 2.5,
+        }
+        ema_alert = {
+            "type": "ema_cross_above",
+            "label": "EMA 21 crossed above EMA 55",
+            "emoji": "🟢",
+        }
+        break_attempt = {
+            "type": "live:breakout:100:early_warning",
+            "label": "Breakout Attempt",
+            "emoji": "⚠️",
+            "level": 100,
+        }
+        scan_result = (
+            candle(0, 99, 101, 98, 100, 100),
+            candle(scanner.TIMEFRAME_MS, 100, 102, 99, 101, 250),
+            [volume_alert, ema_alert],
+            101,
+            99,
+            55,
+            1,
+            100,
+            90,
+            110,
+        )
+        state = {}
+
+        try:
+            with patch.object(scanner, "scan_symbol", return_value=scan_result), patch.object(
+                scanner, "get_current_market_price", return_value=101
+            ), patch.object(scanner, "build_level_alerts", return_value=[break_attempt]), patch.object(
+                scanner,
+                "send_alert_group_to_chat",
+                side_effect=lambda token, chat_id, symbol, candle_arg, alerts, *args, **kwargs: sent_alert_groups.append(
+                    [alert["type"] for alert in alerts]
+                ),
+            ), patch.object(scanner, "load_bot_config", return_value={"live_alerts_enabled": True}), patch.object(
+                scanner, "save_state"
+            ):
+                scanner.run_once(object(), "TOKEN", "MAIN_CHAT", state)
+        finally:
+            scanner.WATCHLIST = original_watchlist
+
+        self.assertEqual(sent_alert_groups, [["volume_spike", "ema_cross_above"]])
+        self.assertEqual(
+            state["BTC/USD"]["sent_alerts"]["live:breakout:100:early_warning"],
+            f"{scanner.TIMEFRAME_MS}:live:breakout:100:early_warning",
+        )
+        self.assertEqual(
+            state["__active_trades"]["BTC/USD"]["source_alert"],
+            "Breakout Attempt",
+        )
 
     def test_livealerts_command_toggles_main_chat_routing(self):
         original_watchlist = scanner.WATCHLIST[:]

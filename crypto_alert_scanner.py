@@ -2866,6 +2866,28 @@ def is_break_attempt_alert(alert):
     }
 
 
+LEVEL_BREAK_ALERT_SUFFIXES = (
+    ":early_warning",
+    ":confirmation",
+    ":weak_break",
+    ":failed_follow_through",
+    ":late_move",
+)
+
+
+def is_level_break_alert(alert):
+    alert_type = alert.get("type", "")
+    return ("breakout" in alert_type or "breakdown" in alert_type) and alert_type.endswith(
+        LEVEL_BREAK_ALERT_SUFFIXES
+    )
+
+
+def should_send_level_break_alert(alert):
+    if not is_level_break_alert(alert):
+        return True
+    return alert.get("type", "").endswith(":confirmation")
+
+
 def is_ema_cross_alert(alert):
     return alert.get("type") in {"ema_cross_above", "ema_cross_below"}
 
@@ -5914,6 +5936,15 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
             for alert in alerts:
                 event_key = f"{candle_id}:{alert['type']}"
                 if sent_alerts.get(alert["type"]) == event_key:
+                    continue
+                if not should_send_level_break_alert(alert):
+                    if alert["type"].endswith(":early_warning"):
+                        add_active_trade(state, symbol, alert, candle)
+                        tracking_is_active = True
+                    elif alert["type"].endswith(":late_move"):
+                        remove_active_trade(state, symbol)
+                    sent_alerts[alert["type"]] = event_key
+                    save_state(state)
                     continue
                 if not should_send_telegram_alert(alert, alerts, active_trade_status):
                     log_suppressed_volume_alert(
