@@ -2457,6 +2457,23 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(len(warnings), 1)
         self.assertIn("Could not write diagnostic record", warnings[0])
 
+    def test_run_once_logs_scan_failure_diagnostic_record(self):
+        with patch.object(scanner, "WATCHLIST", ["FAIL/USD"]), patch.object(
+            scanner,
+            "scan_symbol",
+            side_effect=RuntimeError("timeout fetching candles"),
+        ), patch.object(scanner, "log_info"), patch.object(scanner, "throttled_log_warn"):
+            scanner.run_once(None, "token", "chat", {})
+
+        lines = scanner.DIAGNOSTICS_FILE.read_text().splitlines()
+        self.assertEqual(len(lines), 1)
+        record = json.loads(lines[0])
+        self.assertEqual(record["record_type"], "scan_failure")
+        self.assertEqual(record["symbol"], "FAIL/USD")
+        self.assertEqual(record["error_type"], "RuntimeError")
+        self.assertEqual(record["error_message"], "timeout fetching candles")
+        self.assertEqual(record["error_class"], "network_or_rate_limit")
+
     def test_loop_phase_benchmark_formats_phase_breakdown(self):
         message = scanner.format_loop_phase_benchmark(
             command_seconds=1.25,

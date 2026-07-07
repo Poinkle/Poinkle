@@ -422,6 +422,15 @@ def candle_error_message(symbol, error):
     return f"{symbol}: Coinbase candle fetch failed. Will retry quietly."
 
 
+def classify_scan_failure_error(error):
+    text = str(error).lower()
+    if "timeout" in text or "rate" in text or "429" in text:
+        return "network_or_rate_limit"
+    if "no candles" in text or "malformed" in text or "missing" in text or "not enough" in text:
+        return "insufficient_or_missing_candles"
+    return "other"
+
+
 def validate_ohlcv_candles(candles, symbol, min_count=1):
     if not candles:
         raise MarketDataError("Coinbase returned no candles")
@@ -5971,6 +5980,15 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
                 symbol,
                 str(error),
                 candle_error_message(symbol, error),
+            )
+            append_diagnostic_record(
+                {
+                    "record_type": "scan_failure",
+                    "symbol": symbol,
+                    "error_type": type(error).__name__,
+                    "error_message": str(error),
+                    "error_class": classify_scan_failure_error(error),
+                }
             )
 
     benchmark = scan_cycle_benchmark(
