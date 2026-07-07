@@ -112,6 +112,19 @@ class ScannerLogicTests(unittest.TestCase):
             [[1_700_000_000_000, 100, 109, 97, 103, 100]],
         )
 
+    def test_resample_candles_combines_eight_one_hour_candles(self):
+        candles = [
+            candle(1_700_000_000_000 + index * 3_600_000, 100 + index, 102 + index, 99 + index, 101 + index, 10 + index)
+            for index in range(8)
+        ]
+
+        resampled = scanner.resample_candles(candles, 8)
+
+        self.assertEqual(
+            resampled,
+            [[1_700_000_000_000, 100, 109, 99, 108, 108]],
+        )
+
     def test_brett_is_enabled_in_main_watchlist(self):
         self.assertIn("BRETT/USD", scanner.WATCHLIST)
 
@@ -248,6 +261,68 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(exchange.last_call, ("XMR/USD", "1h", 100))
         self.assertEqual(len(warnings), 1)
         self.assertIn("Kraken candle fetch failed", warnings[0])
+
+    def test_secondary_timeframe_context_returns_four_hour_and_eight_hour_indicators(self):
+        closes = [100 + index * 0.5 for index in range(scanner.SECONDARY_TIMEFRAME_1H_LIMIT)]
+        one_hour_candles = make_ohlcv_series(closes, step=3_600_000, volume=100)
+
+        class RecordingCoinbase:
+            def __init__(self):
+                self.calls = []
+
+            def fetch_ohlcv(self, symbol, timeframe, limit):
+                self.calls.append((symbol, timeframe, limit))
+                return one_hour_candles[-limit:]
+
+        exchange = RecordingCoinbase()
+        context = scanner.get_secondary_timeframe_context(exchange, "BTC/USD")
+
+        self.assertEqual(
+            exchange.calls,
+            [("BTC/USD", scanner.SECONDARY_TIMEFRAME_BASE, scanner.SECONDARY_TIMEFRAME_1H_LIMIT)],
+        )
+        self.assertEqual(set(context), {"4h", "8h"})
+        self.assertEqual(context["4h"]["candle_count"], 119)
+        self.assertEqual(context["8h"]["candle_count"], 59)
+        self.assertEqual(context["4h"]["latest_close"], one_hour_candles[475][4])
+        self.assertEqual(context["8h"]["latest_close"], one_hour_candles[471][4])
+        self.assertAlmostEqual(context["4h"]["volume_multiple"], 1.0)
+        self.assertAlmostEqual(context["8h"]["volume_multiple"], 1.0)
+        self.assertIn("ema_21", context["4h"])
+        self.assertIn("ema_55", context["8h"])
+        self.assertIn("rsi_14", context["8h"])
+
+    def test_secondary_timeframe_context_uses_kraken_for_kraken_symbol(self):
+        one_hour_candles = make_ohlcv_series(
+            [100 + index * 0.5 for index in range(scanner.SECONDARY_TIMEFRAME_1H_LIMIT)],
+            step=3_600_000,
+            volume=100,
+        )
+
+        class FailingCoinbase:
+            def fetch_ohlcv(self, symbol, timeframe, limit):
+                raise AssertionError("Coinbase fetch should not be used")
+
+        with patch.object(scanner, "fetch_kraken_ohlcv", return_value=one_hour_candles) as kraken_fetch:
+            context = scanner.get_secondary_timeframe_context(FailingCoinbase(), "XMR/USD")
+
+        kraken_fetch.assert_called_once_with(
+            "XMR/USD",
+            timeframe=scanner.SECONDARY_TIMEFRAME_BASE,
+            limit=scanner.SECONDARY_TIMEFRAME_1H_LIMIT,
+        )
+        self.assertEqual(set(context), {"4h", "8h"})
+
+    def test_secondary_timeframe_context_returns_none_on_fetch_failure(self):
+        class FailingCoinbase:
+            def fetch_ohlcv(self, symbol, timeframe, limit):
+                raise RuntimeError("1h unavailable")
+
+        with patch.object(scanner, "throttled_log_warn") as warn:
+            context = scanner.get_secondary_timeframe_context(FailingCoinbase(), "BTC/USD")
+
+        self.assertIsNone(context)
+        warn.assert_called_once()
 
     def test_scan_symbol_uses_kraken_fetch_for_resolved_kraken_symbol(self):
         candles = make_ohlcv_series([100 + index for index in range(120)])

@@ -160,6 +160,8 @@ POLL_SECONDS = 15
 TRADE_TRACK_POLL_SECONDS = 60
 TRADE_TRACK_MAX_MINUTES = 60
 TRADE_TRACKING_TELEGRAM_ENABLED = False
+SECONDARY_TIMEFRAME_BASE = "1h"
+SECONDARY_TIMEFRAME_1H_LIMIT = 480
 STATE_FILE = Path("scanner_state.json")
 DIAGNOSTICS_FILE = PROJECT_DIR / "diagnostics" / "alert_diagnostics.jsonl"
 USER_ALERTS_FILE = PROJECT_DIR / "user_alerts.json"
@@ -532,6 +534,63 @@ def resample_candles(candles, group_size):
         volume = sum(candle[5] for candle in group)
         resampled.append([timestamp, open_price, high, low, close, volume])
     return resampled
+
+
+def timeframe_indicator_context(candles):
+    if len(candles) < 56:
+        raise MarketDataError("Not enough candles for secondary timeframe indicators")
+
+    latest_closed = candles[-1]
+    closes = [candle[4] for candle in candles]
+    previous_20_volumes = [candle[5] for candle in candles[-21:-1]]
+    volume_average = sum(previous_20_volumes) / len(previous_20_volumes)
+    current_volume = latest_closed[5]
+    volume_multiple = current_volume / volume_average if volume_average > 0 else 0
+
+    return {
+        "latest_close": latest_closed[4],
+        "ema_21": ema(closes, 21),
+        "ema_55": ema(closes, 55),
+        "rsi_14": rsi(closes, 14),
+        "volume_average": volume_average,
+        "current_volume": current_volume,
+        "volume_multiple": volume_multiple,
+        "candle_count": len(candles),
+        "latest_candle_time": latest_closed[0],
+    }
+
+
+def get_secondary_timeframe_context(exchange, symbol):
+    try:
+        if resolve_data_source(symbol) == "kraken":
+            one_hour_candles = fetch_kraken_ohlcv(
+                symbol,
+                timeframe=SECONDARY_TIMEFRAME_BASE,
+                limit=SECONDARY_TIMEFRAME_1H_LIMIT,
+            )
+        else:
+            one_hour_candles = exchange.fetch_ohlcv(
+                symbol,
+                timeframe=SECONDARY_TIMEFRAME_BASE,
+                limit=SECONDARY_TIMEFRAME_1H_LIMIT,
+            )
+        validate_ohlcv_candles(one_hour_candles, symbol, min_count=56 * 8 + 1)
+        closed_one_hour_candles = one_hour_candles[:-1]
+        four_hour_candles = resample_candles(closed_one_hour_candles, 4)
+        eight_hour_candles = resample_candles(closed_one_hour_candles, 8)
+        validate_ohlcv_candles(four_hour_candles, symbol, min_count=56)
+        validate_ohlcv_candles(eight_hour_candles, symbol, min_count=56)
+        return {
+            "4h": timeframe_indicator_context(four_hour_candles),
+            "8h": timeframe_indicator_context(eight_hour_candles),
+        }
+    except Exception as error:
+        throttled_log_warn(
+            symbol,
+            "secondary-timeframe-context",
+            f"{symbol}: secondary timeframe context unavailable: {error}",
+        )
+        return None
 
 
 def rsi(values, period=14):
