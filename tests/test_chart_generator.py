@@ -160,7 +160,7 @@ class ChartGeneratorTests(unittest.TestCase):
                 ],
                 title="BONK / USD CONFLUENCE ALERT",
                 output_prefix="bonk_confluence_test_",
-                signal_scope="15m signal - snapshot in time, not a trend call",
+                signal_scope="Daily signal - snapshot in time, not a trend call",
             )
 
         self.assertTrue(Path(path).exists())
@@ -299,11 +299,11 @@ class ChartGeneratorTests(unittest.TestCase):
                 105,
                 supports=[100],
                 resistances=[110],
-                signal_scope="15m signal - snapshot in time, not a trend call",
+                signal_scope="Daily signal - snapshot in time, not a trend call",
             )
 
         self.assertEqual(path, "/tmp/scope-chart.png")
-        self.assertEqual(captured["signal_scope"], "15m signal - snapshot in time, not a trend call")
+        self.assertEqual(captured["signal_scope"], "Daily signal - snapshot in time, not a trend call")
 
 
 if __name__ == "__main__":

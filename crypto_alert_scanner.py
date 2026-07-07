@@ -2615,7 +2615,7 @@ def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, 
             f"⚠️ <b>{symbol} Weak Break / Watch Only</b>\n\n"
             f"{test_mode_text}"
             f"<b>Symbol:</b> {symbol}\n"
-            f"<b>Timeframe:</b> 15m\n"
+            f"<b>Timeframe:</b> Daily\n"
             f"{time_text}"
             f"<b>Direction:</b> {trade_plan['direction']}\n"
             f"<b>Level:</b> {format_level(trade_plan['level'])}\n"
@@ -2639,7 +2639,7 @@ def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, 
             f"⚠️ <b>{symbol} Failed Follow-Through</b>\n\n"
             f"{test_mode_text}"
             f"<b>Symbol:</b> {symbol}\n"
-            f"<b>Timeframe:</b> 15m\n"
+            f"<b>Timeframe:</b> Daily\n"
             f"{time_text}"
             f"<b>Direction:</b> {trade_plan['direction']}\n"
             f"<b>Level:</b> {format_level(trade_plan['level'])}\n"
@@ -2662,7 +2662,7 @@ def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, 
             f"⚠️ <b>{symbol} Late Move / Exhaustion Risk</b>\n\n"
             f"{test_mode_text}"
             f"<b>Symbol:</b> {symbol}\n"
-            f"<b>Timeframe:</b> 15m\n"
+            f"<b>Timeframe:</b> Daily\n"
             f"{time_text}"
             f"<b>Direction blocked:</b> {alert['blocked_direction']}\n"
             f"<b>Level:</b> {format_level(alert['level'])}\n"
@@ -2694,7 +2694,7 @@ def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, 
             )
 
         return (
-            f"✅ <b>{symbol} 15m Break Confirmed</b>\n\n"
+            f"✅ <b>{symbol} Daily Break Confirmed</b>\n\n"
             f"{test_mode_text}"
             f"{time_text}"
             f"<b>Setup:</b> {trade_plan['classification']}\n"
@@ -2736,7 +2736,7 @@ def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, 
         return (
             f"{alert['emoji']} <b>{symbol} {alert['label']}</b>\n"
             f"{test_mode_text}"
-            f"<b>Timeframe:</b> 15m  |  {time_text.strip()}\n"
+            f"<b>Timeframe:</b> Daily  |  {time_text.strip()}\n"
             f"━━━━━━━━━━━━━━━━━━\n\n"
             f"<b>Price:</b> {format_level(close)}  "
             f"(<b>Body:</b> {body_percent:.2f}%)\n"
@@ -2788,7 +2788,7 @@ def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, 
         f"{detail_text}"
         f"{setup_text}"
         f"🏷️ <b>Symbol:</b> {symbol}\n"
-        f"⏱️ <b>Timeframe:</b> 15m\n"
+        f"⏱️ <b>Timeframe:</b> Daily\n"
         f"🕯️ {time_text}"
         f"{level_text}"
         f"{range_text}"
@@ -2877,7 +2877,7 @@ LIGHTWEIGHT_ALERT_TYPES = {
     "rsi_cross_above_70",
     "rsi_cross_below_30",
 }
-ALERT_SIGNAL_SCOPE = "15m signal - snapshot in time, not a trend call"
+ALERT_SIGNAL_SCOPE = "Daily signal - snapshot in time, not a trend call"
 
 
 def is_lightweight_alert(alert):
@@ -3024,7 +3024,7 @@ def alert_card_data(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_a
         "label": alert.get("label", "Market Alert"),
         "emoji": alert.get("emoji", ""),
         "direction": alert.get("direction", alert.get("type", "")),
-        "timeframe": "15M",
+        "timeframe": "Daily",
         "timestamp": eastern_time_from_timestamp(timestamp),
         "stats": stats[:4],
         "takeaway": volume_alert_takeaway(alert, skill_level=skill_level)
@@ -3496,7 +3496,7 @@ def build_levels_command_message(exchange, symbol, skill_level=None):
     else:
         analysis_candles = closed_candles
         analysis_closes = [candle[4] for candle in closed_candles]
-        ema_timeframe = "15m fallback"
+        ema_timeframe = "Daily fallback"
 
     ema_21 = ema(analysis_closes, 21)
     ema_55 = ema(analysis_closes, 55)
@@ -5735,7 +5735,7 @@ def scan_symbol(exchange, symbol):
         raise MarketDataError("Not enough candles for indicators")
 
     # Coinbase includes the currently forming candle as the last item.
-    # The second-to-last candle is the most recent fully closed 15m candle.
+    # The second-to-last candle is the most recent fully closed daily candle.
     previous_closed_candles = candles[:-2]
     closed_candles = candles[:-1]
     previous_closed = closed_candles[-2]

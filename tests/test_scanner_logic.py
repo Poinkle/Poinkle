@@ -631,7 +631,7 @@ class ScannerLogicTests(unittest.TestCase):
         )
 
         self.assertIn("🟢 <b>BTC/USD Bullish Volume Spike</b>", message)
-        self.assertIn("<b>Timeframe:</b> 15m  |  Candle Close Time:", message)
+        self.assertIn("<b>Timeframe:</b> Daily  |  Candle Close Time:", message)
         self.assertIn("<b>Price:</b> 104  (<b>Body:</b> 4.00%)", message)
         self.assertIn("<b>Volume:</b> 2.50x average", message)
         self.assertIn("<b>RSI:</b> 58.00 —", message)

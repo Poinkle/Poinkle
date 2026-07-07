@@ -29,7 +29,7 @@ CYAN = (56, 224, 241)
 GOLD = (219, 181, 76)
 GREEN = (83, 219, 125)
 RED = (231, 85, 82)
-ALERT_SIGNAL_SCOPE = "15m signal - snapshot in time, not a trend call"
+ALERT_SIGNAL_SCOPE = "Daily signal - snapshot in time, not a trend call"
 GHOST_WATERMARK_OPACITY = 0.05
 GHOST_WATERMARK_PATHS = (
     Path("assets") / "poinkle_ghost_watermark.png",
@@ -534,7 +534,7 @@ def render_alert_card(alert_data, logo_path=None, output_dir=None):
     symbol = sanitize_text(alert_data.get("symbol", "SYMBOL")).upper()[:18]
     label = sanitize_text(alert_data.get("label", "MARKET ALERT")).upper()[:32]
     takeaway = sanitize_text(alert_data.get("takeaway", "WATCH FOR CONFIRMATION."))[:62]
-    timeframe = sanitize_text(alert_data.get("timeframe", "15M")).upper()[:16]
+    timeframe = sanitize_text(alert_data.get("timeframe", "Daily"))[:16]
     timestamp = sanitize_text(alert_data.get("timestamp", ""))[:36]
     stats = list(alert_data.get("stats") or [])[:4]
     official_link = sanitize_text(alert_data.get("official_link", ""))[:54]
