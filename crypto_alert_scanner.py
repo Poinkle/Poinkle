@@ -213,6 +213,52 @@ MIKE_ALTERNATE_SYMBOLS = {
 MIKE_ALTERNATE_EXCHANGE = None
 KRAKEN_EXCHANGE_ID = "kraken"
 KRAKEN_EXCHANGE = None
+KRAKEN_FALLBACK_SYMBOLS = frozenset(
+    {
+        "XMR/USD",
+        "TRX/USD",
+        "KAS/USD",
+        "JUP/USD",
+        "RUNE/USD",
+        "GALA/USD",
+        "BTT/USD",
+        "XDC/USD",
+        "CFX/USD",
+        "AR/USD",
+        "NOT/USD",
+        "LUNC/USD",
+        "QTUM/USD",
+        "SC/USD",
+        "NEO/USD",
+        "GMX/USD",
+        "DYDX/USD",
+        "OP/USD",
+        "DAI/USD",
+        "FLOKI/USD",
+        "FLOW/USD",
+        "RAY/USD",
+        "KAVA/USD",
+        "CHZ/USD",
+        "STRK/USD",
+        "BEAM/USD",
+        "APE/USD",
+        "MOG/USD",
+        "GMT/USD",
+        "1INCH/USD",
+        "BLUR/USD",
+        "CELO/USD",
+        "MASK/USD",
+        "LPT/USD",
+        "OSMO/USD",
+        "CVX/USD",
+        "BAL/USD",
+        "BAND/USD",
+        "TRAC/USD",
+        "AUDIO/USD",
+        "COTI/USD",
+        "API3/USD",
+    }
+)
 
 
 class MarketDataError(RuntimeError):
@@ -4163,6 +4209,13 @@ def mike_alternate_exchange():
     if MIKE_ALTERNATE_EXCHANGE is None:
         MIKE_ALTERNATE_EXCHANGE = create_mike_alternate_exchange()
     return MIKE_ALTERNATE_EXCHANGE
+
+
+def resolve_data_source(symbol):
+    normalized_symbol = str(symbol or "").strip().upper()
+    if normalized_symbol in KRAKEN_FALLBACK_SYMBOLS:
+        return "kraken"
+    return "coinbase"
 
 
 def kraken_exchange():

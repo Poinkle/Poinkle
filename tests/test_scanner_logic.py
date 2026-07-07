@@ -216,6 +216,18 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(len(created), 1)
         self.assertEqual(first.config, {"enableRateLimit": True})
 
+    def test_resolve_data_source_returns_kraken_for_fallback_symbol(self):
+        self.assertEqual(scanner.resolve_data_source("XMR/USD"), "kraken")
+
+    def test_resolve_data_source_returns_coinbase_for_normal_symbol(self):
+        self.assertEqual(scanner.resolve_data_source("BTC/USD"), "coinbase")
+
+    def test_resolve_data_source_is_case_insensitive(self):
+        self.assertEqual(scanner.resolve_data_source("xmr/usd"), "kraken")
+
+    def test_resolve_data_source_leaves_kucoin_only_symbol_on_coinbase_for_now(self):
+        self.assertEqual(scanner.resolve_data_source("ROSE/USD"), "coinbase")
+
     def test_fetch_kraken_ohlcv_returns_none_on_fetch_failure(self):
         warnings = []
 
