@@ -152,9 +152,9 @@ def official_coin_link_text(symbol):
 # Alerts use candle closes only. Wicks are ignored.
 KEY_LEVELS = {symbol: {"support": [], "resistance": []} for symbol in WATCHLIST}
 
-TIMEFRAME = "15m"
+TIMEFRAME = "1d"
 TRADE_TRACK_TIMEFRAME = "1m"
-TIMEFRAME_MS = 15 * 60 * 1000
+TIMEFRAME_MS = 24 * 60 * 60 * 1000
 CANDLE_LIMIT = 120
 POLL_SECONDS = 15
 TRADE_TRACK_POLL_SECONDS = 60

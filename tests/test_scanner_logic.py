@@ -1305,13 +1305,13 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(alert_destinations, ["MAIN_CHAT", "TEST_CHAT"])
 
     def test_levels_command_falls_back_when_higher_timeframes_fail(self):
-        fifteen_minute_closes = [95 + (index % 20) * 0.5 for index in range(119)] + [100]
+        primary_closes = [95 + (index % 20) * 0.5 for index in range(119)] + [100]
         fake_exchange = FakeExchange(
             {
-                "15m": make_ohlcv_series(fifteen_minute_closes),
+                scanner.TIMEFRAME: make_ohlcv_series(primary_closes),
             },
             ticker_price=100,
-            failing_timeframes={"1h", "1d"},
+            failing_timeframes={"1h"},
         )
 
         message = scanner.build_levels_command_message(fake_exchange, "BTC/USD")
