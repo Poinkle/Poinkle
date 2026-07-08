@@ -1952,7 +1952,7 @@ class ScannerLogicTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             assets_dir = Path(tmpdir) / "assets"
             assets_dir.mkdir()
-            card_path = assets_dir / "concept_teaching_card_rsi.png"
+            card_path = assets_dir / "rsi.png"
             card_path.write_bytes(b"fake png")
             with patch.object(scanner, "ASSETS_DIR", assets_dir), patch.object(
                 scanner,
@@ -1984,7 +1984,7 @@ class ScannerLogicTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             assets_dir = Path(tmpdir) / "assets"
             assets_dir.mkdir()
-            card_path = assets_dir / "concept_teaching_card_rsi.png"
+            card_path = assets_dir / "rsi.png"
             card_path.write_bytes(b"fake png")
             long_message = "<b>RSI</b>\n\n" + ("Long explanation. " * 120)
             with patch.object(scanner, "ASSETS_DIR", assets_dir), patch.object(
@@ -2008,6 +2008,20 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertEqual(sent_photos, [("777", str(card_path), "")])
         self.assertEqual(sent_messages, [("777", long_message)])
+
+    def test_concept_teaching_card_path_uses_short_filename_mapping(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            assets_dir = Path(tmpdir) / "assets"
+            assets_dir.mkdir()
+            for filename in ["rsi.png", "resist.png", "con.png", "volume.png"]:
+                (assets_dir / filename).write_bytes(b"fake png")
+
+            with patch.object(scanner, "ASSETS_DIR", assets_dir):
+                self.assertEqual(scanner.concept_teaching_card_path("rsi"), assets_dir / "rsi.png")
+                self.assertEqual(scanner.concept_teaching_card_path("resistance"), assets_dir / "resist.png")
+                self.assertEqual(scanner.concept_teaching_card_path("confluence"), assets_dir / "con.png")
+                self.assertEqual(scanner.concept_teaching_card_path("volume"), assets_dir / "volume.png")
+                self.assertIsNone(scanner.concept_teaching_card_path("candle"))
 
     def test_explain_command_falls_back_to_text_when_no_concept_card_exists(self):
         sent_messages = []

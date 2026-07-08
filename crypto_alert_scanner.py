@@ -39,6 +39,17 @@ from explanations import available_concepts, concept_display_name, explain_conce
 ASSETS_DIR = PROJECT_DIR / "assets"
 WELCOME_BANNER_PATH = ASSETS_DIR / "welcome_banner.jpg"
 TELEGRAM_PHOTO_CAPTION_LIMIT = 1024
+CONCEPT_TEACHING_CARD_FILES = {
+    "rsi": "rsi.png",
+    "support": "support.png",
+    "resistance": "resist.png",
+    "breakout": "breakout.png",
+    "breakdown": "breakdown.png",
+    "confluence": "con.png",
+    "trend": "trend.png",
+    "ema": "ema.png",
+    "volume_spike": "volume.png",
+}
 
 try:
     from dotenv import load_dotenv
@@ -4764,7 +4775,11 @@ def concept_teaching_card_path(concept_key):
     if not resolved_key:
         return None
 
-    card_path = ASSETS_DIR / f"concept_teaching_card_{resolved_key}.png"
+    card_filename = CONCEPT_TEACHING_CARD_FILES.get(resolved_key)
+    if not card_filename:
+        return None
+
+    card_path = ASSETS_DIR / card_filename
     return card_path if card_path.exists() else None
 
 
