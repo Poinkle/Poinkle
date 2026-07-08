@@ -738,6 +738,32 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertNotIn("<b>20-candle average:</b>", message)
         self.assertNotIn("Strong buyer participation detected.", message)
 
+    def test_alert_text_includes_secondary_timeframe_context_when_attached(self):
+        message = scanner.build_alert(
+            "BTC/USD",
+            candle(0, 100, 105, 99, 104, 250),
+            {
+                "type": "volume_spike",
+                "label": "Bullish Volume Spike",
+                "emoji": "🟢",
+                "direction": "bullish",
+                "volume_multiple": 2.5,
+                "secondary_timeframe_context": {
+                    "4h": {"latest_close": 110, "ema_21": 105, "ema_55": 100, "rsi_14": 58},
+                    "8h": {"latest_close": 90, "ema_21": 95, "ema_55": 100, "rsi_14": 42},
+                },
+            },
+            ema_21=101,
+            ema_55=99,
+            current_rsi=58,
+            volume_avg=100,
+        )
+
+        self.assertIn(
+            "<b>4h/8h Context:</b> 4h bullish (RSI 58), 8h bearish (RSI 42)",
+            message,
+        )
+
     def test_telegram_sends_html_parse_mode_for_messages_and_photos(self):
         class FakeResponse:
             status_code = 200
@@ -2480,6 +2506,55 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(captured["signal_scope"], scanner.ALERT_SIGNAL_SCOPE)
         self.assertEqual(captured["supports"], [95])
         self.assertEqual(captured["resistances"], [110])
+
+    def test_confluence_alert_snapshot_footer_includes_secondary_timeframe_context(self):
+        captured = {}
+        candles = [
+            candle(0, 100, 105, 99, 104, 100),
+            candle(scanner.TIMEFRAME_MS, 104, 108, 103, 107, 250),
+        ]
+        secondary_context = {
+            "4h": {"latest_close": 110, "ema_21": 105, "ema_55": 100, "rsi_14": 58},
+            "8h": {"latest_close": 90, "ema_21": 95, "ema_55": 100, "rsi_14": 42},
+        }
+        volume_alert = {
+            "type": "volume_spike",
+            "label": "Bullish Volume Spike",
+            "emoji": "🟢",
+            "direction": "bullish",
+            "volume_multiple": 2.5,
+            "secondary_timeframe_context": secondary_context,
+        }
+        ema_alert = {
+            "type": "ema_cross_above",
+            "label": "EMA 21 crossed above EMA 55",
+            "emoji": "🟢",
+            "secondary_timeframe_context": secondary_context,
+        }
+
+        def fake_generate(symbol, chart_candles, current_price, supports, resistances, **kwargs):
+            captured.update(kwargs)
+            return "/tmp/volume-alert-snapshot.png"
+
+        with patch.object(scanner, "generate_levels_chart", side_effect=fake_generate):
+            path = scanner.render_alert_snapshot_chart(
+                "BTC/USD",
+                candles,
+                candles[-1],
+                [volume_alert, ema_alert],
+                ema_21=101,
+                ema_55=99,
+                current_rsi=58,
+                volume_avg=100,
+                supports=[95],
+                resistances=[110],
+            )
+
+        self.assertEqual(path, "/tmp/volume-alert-snapshot.png")
+        self.assertIn(
+            "3. 4h/8h context: 4h bullish (RSI 58), 8h bearish (RSI 42)",
+            captured["footer_items"],
+        )
 
     def test_single_volume_alert_sends_lightweight_card_when_renderer_succeeds(self):
         sent_photos = []

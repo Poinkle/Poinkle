@@ -2663,11 +2663,69 @@ def volume_alert_takeaway(alert, skill_level=None):
     )
 
 
+def secondary_timeframe_context_from_alerts(alerts):
+    for alert in alerts or []:
+        context = alert.get("secondary_timeframe_context")
+        if context:
+            return context
+    return None
+
+
+def secondary_timeframe_bias(context):
+    if not context:
+        return ""
+    close = context.get("latest_close")
+    ema_21 = context.get("ema_21")
+    ema_55 = context.get("ema_55")
+    rsi_14 = context.get("rsi_14")
+    if close is None or ema_21 is None or ema_55 is None or rsi_14 is None:
+        return ""
+    if close > ema_21 and ema_21 >= ema_55 and rsi_14 >= 50:
+        return "bullish"
+    if close < ema_21 and ema_21 <= ema_55 and rsi_14 <= 50:
+        return "bearish"
+    return "mixed"
+
+
+def secondary_timeframe_summary(context):
+    if not context:
+        return ""
+    parts = []
+    for timeframe in ("4h", "8h"):
+        timeframe_context = context.get(timeframe)
+        bias = secondary_timeframe_bias(timeframe_context)
+        if not bias:
+            continue
+        rsi_14 = timeframe_context.get("rsi_14")
+        if rsi_14 is None:
+            parts.append(f"{timeframe} {bias}")
+        else:
+            parts.append(f"{timeframe} {bias} (RSI {rsi_14:.0f})")
+    if not parts:
+        return ""
+    return ", ".join(parts)
+
+
+def secondary_timeframe_text(alert):
+    summary = secondary_timeframe_summary(alert.get("secondary_timeframe_context"))
+    if not summary:
+        return ""
+    return f"<b>4h/8h Context:</b> {summary}\n"
+
+
+def secondary_timeframe_footer_item(alerts):
+    summary = secondary_timeframe_summary(secondary_timeframe_context_from_alerts(alerts))
+    if not summary:
+        return ""
+    return f"3. 4h/8h context: {summary}"
+
+
 def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, skill_level=None):
     timestamp, open_price, high, low, close, volume = candle
     test_mode_text = "🧪 <b>TEST MODE</b>\n" if TEST_MODE else ""
     time_text = alert_time_text(timestamp)
     link_text = official_coin_link_text(symbol)
+    secondary_text = secondary_timeframe_text(alert)
     if alert.get("type", "").endswith(":weak_break"):
         trade_plan = alert["trade_plan"]
         location = alert.get("location_filter", {})
@@ -2686,6 +2744,7 @@ def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, 
             f"<b>Volume status:</b> {trade_plan['volume_status']}\n"
             f"<b>RSI status:</b> {trade_plan['rsi_trend']}\n"
             f"<b>EMA trend:</b> {trade_plan['ema_trend']}\n"
+            f"{secondary_text}"
             f"<b>Next key level:</b> {format_level(location.get('next_target', close))}\n\n"
             f"<b>Reason:</b> Break detected, but momentum/volume did not confirm.\n"
             f"<b>Action:</b> Watch only / No trade confirmation"
@@ -2710,6 +2769,7 @@ def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, 
             f"<b>Volume status:</b> {trade_plan['volume_status']}\n"
             f"<b>RSI status:</b> {trade_plan['rsi_trend']}\n"
             f"<b>EMA trend:</b> {trade_plan['ema_trend']}\n"
+            f"{secondary_text}"
             f"<b>Next key level:</b> {format_level(location.get('next_target', close))}\n\n"
             f"<b>Reason:</b> Price stalled around the broken level with weak volume.\n"
             f"<b>Action:</b> Watch only / No trade confirmation"
@@ -2733,6 +2793,7 @@ def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, 
             f"<b>Range low:</b> {format_level(location['range_low'])}\n"
             f"<b>Range high:</b> {format_level(location['range_high'])}\n"
             f"<b>Range Position:</b> {location['label']}\n\n"
+            f"{secondary_text}"
             f"Avoid chasing. Watch for reclaim, rejection, or reversal."
             f"{link_text}"
         )
@@ -2775,6 +2836,7 @@ def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, 
             f"<b>Volume:</b> {trade_plan['volume_multiple']:.2f}x - "
             f"{trade_plan['volume_status']}\n"
             f"<b>Retest quality:</b> {trade_plan['retest_quality']}\n\n"
+            f"{secondary_text}"
             f"{location_text}"
             f"<b>Suggested plan:</b>\n"
             f"<b>Entry:</b> {format_level(trade_plan['entry'])}\n"
@@ -2804,6 +2866,7 @@ def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, 
             f"<b>RSI:</b> {current_rsi:.2f} — {get_rsi_status(current_rsi)}\n"
             f"<b>EMA21:</b> {format_level(ema_21)}  "
             f"<b>EMA55:</b> {format_level(ema_55)}\n"
+            f"{secondary_text}"
             f"━━━━━━━━━━━━━━━━━━\n\n"
             f"{participation_text}"
             f"{link_text}"
@@ -2858,6 +2921,7 @@ def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, 
         f"📉 <b>EMA 55:</b> {ema_55:.6g}\n"
         f"📊 <b>RSI 14:</b> {current_rsi:.2f}\n"
         f"📊 <b>RSI Status:</b> {get_rsi_status(current_rsi)}\n"
+        f"{secondary_text}"
         f"🔊 <b>Volume:</b> {volume:.4f}\n"
         f"📦 <b>20-candle avg volume:</b> {volume_avg:.4f}"
         f"{link_text}"
@@ -3122,6 +3186,7 @@ def build_alert_snapshot_content(symbol, candle, alerts, ema_21, ema_55, current
     primary_alert = alerts[0]
     signal_lines = [alert_signal_summary(alert) for alert in alerts]
     title_label = "CONFLUENCE ALERT" if len(alerts) >= 2 else primary_alert.get("label", "MARKET ALERT").upper()
+    secondary_footer = secondary_timeframe_footer_item(alerts)
     volume_multiple = None
     for alert in alerts:
         if alert.get("type") == "volume_spike":
@@ -3142,7 +3207,7 @@ def build_alert_snapshot_content(symbol, candle, alerts, ema_21, ema_55, current
         "footer_items": [
             f"1. {' + '.join(signal_lines)}",
             f"2. Price {format_level(close)} \u2192 watch confirmation",
-            f"3. Volume {volume_multiple:.2f}x average \u2192 compare follow-through",
+            secondary_footer or f"3. Volume {volume_multiple:.2f}x average \u2192 compare follow-through",
         ],
     }
 
