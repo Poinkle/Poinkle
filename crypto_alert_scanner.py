@@ -1108,15 +1108,18 @@ def skill_onboarding_message():
     )
 
 
-def maybe_send_skill_onboarding(telegram_token, source_chat, from_user):
+def maybe_send_skill_onboarding(telegram_token, source_chat, from_user, allow_private=False):
     source_chat = source_chat or {}
     from_user = from_user or {}
-    if is_private_chat(source_chat):
+    source_is_private = is_private_chat(source_chat)
+    if source_is_private and not allow_private:
         return False
     if from_user.get("is_bot"):
         return False
 
     user_id = str(from_user.get("id") or "")
+    if not user_id and source_is_private and allow_private:
+        user_id = str(source_chat.get("id") or "")
     if not user_id:
         return False
     if user_skill_level(user_id) or skill_onboarding_prompted(user_id):
@@ -4364,6 +4367,15 @@ def handle_start_command(telegram_token, telegram_chat_id, from_user=None):
     welcome_message = build_welcome_message()
     # TODO: Later branded-image stage can send_telegram_photo(...) here before this text.
     send_telegram_message(telegram_token, destination_chat_id, welcome_message)
+    try:
+        maybe_send_skill_onboarding(
+            telegram_token,
+            {"id": destination_chat_id, "type": "private"},
+            {"id": destination_chat_id, **(from_user or {})},
+            allow_private=True,
+        )
+    except Exception as error:
+        log_warn(f"Could not send /start skill onboarding for {destination_chat_id}: {error}")
 
 
 def handle_help_command(telegram_token, telegram_chat_id):

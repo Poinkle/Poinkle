@@ -2390,6 +2390,8 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertEqual(sent_messages[0][0], "777")
         self.assertEqual(sent_messages[0][1], scanner.build_welcome_message())
+        self.assertEqual(sent_messages[1][0], "777")
+        self.assertEqual(sent_messages[1][1], scanner.skill_onboarding_message())
         self.assertIn("🐷 <b>Welcome to Poinkle.</b>", sent_messages[0][1])
         self.assertEqual(profiles["777"]["telegram_user_id"], "777")
         self.assertEqual(profiles["777"]["username"], "poinkle_user")
@@ -2398,6 +2400,7 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(profiles["777"]["first_seen"], "2026-07-08T12:00:00+00:00")
         self.assertEqual(profiles["777"]["last_start"], "2026-07-08T12:00:00+00:00")
         self.assertTrue(profiles["777"]["onboarded"])
+        self.assertTrue(profiles["777"]["skill_onboarding_prompted"])
 
     def test_start_command_preserves_existing_profile_first_seen(self):
         sent_messages = []
@@ -2425,7 +2428,7 @@ class ScannerLogicTests(unittest.TestCase):
                 scanner.handle_start_command("TOKEN", "999", from_user={"id": 777, "first_name": "Pat"})
                 profiles = scanner.load_user_profiles()
 
-        self.assertEqual(sent_messages[0][1], scanner.build_welcome_message())
+        self.assertEqual(sent_messages, [("777", scanner.build_welcome_message())])
         self.assertEqual(profiles["777"]["first_seen"], "2026-07-01T12:00:00+00:00")
         self.assertEqual(profiles["777"]["last_start"], "2026-07-08T12:00:00+00:00")
         self.assertEqual(profiles["777"]["skill_level"], "beginner")
@@ -2443,6 +2446,33 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertEqual(sent_messages[0][0], "777")
         self.assertEqual(sent_messages[0][1], scanner.build_welcome_message())
+
+    def test_start_command_does_not_repeat_skill_prompt_when_already_prompted(self):
+        sent_messages = []
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            profile_path = Path(tmpdir) / "user_profiles.json"
+            profile_path.write_text(
+                json.dumps(
+                    {
+                        "777": {
+                            "telegram_user_id": "777",
+                            "first_seen": "2026-07-01T12:00:00+00:00",
+                            "skill_onboarding_prompted": True,
+                        }
+                    }
+                )
+            )
+            with patch.object(scanner, "USER_PROFILES_FILE", profile_path), patch.object(
+                scanner, "iso_utc_now", return_value="2026-07-08T12:00:00+00:00"
+            ), patch.object(
+                scanner,
+                "send_telegram_message",
+                side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
+            ):
+                scanner.handle_start_command("TOKEN", "999", from_user={"id": 777})
+
+        self.assertEqual(sent_messages, [("777", scanner.build_welcome_message())])
 
     def test_card_renderers_use_shared_emblem_path(self):
         volume_alert = {
