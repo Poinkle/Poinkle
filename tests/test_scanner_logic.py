@@ -849,6 +849,8 @@ class ScannerLogicTests(unittest.TestCase):
                 "myalerts",
                 "mike",
                 "guide",
+                "explain",
+                "learn",
                 "help",
                 "start",
             ],
@@ -1812,6 +1814,95 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertEqual(profiles["777"]["skill_level"], "beginner")
         self.assertEqual(sent_messages, [("777", "Got it. I’ll keep the chart notes a little more plain-language.")])
+
+    def test_explain_concept_uses_skill_level_and_aliases(self):
+        beginner = scanner.explain_concept("relative strength", "beginner")
+        experienced = scanner.explain_concept("RSI", "experienced")
+
+        self.assertIn("speedometer", beginner)
+        self.assertIn("momentum oscillator", experienced)
+        self.assertEqual(scanner.normalize_concept_key("moving average"), "ema")
+        self.assertIsNone(scanner.explain_concept("not-a-real-concept", "beginner"))
+
+    def test_explain_command_sends_beginner_explanation_from_profile(self):
+        sent_messages = []
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            profile_path = Path(tmpdir) / "user_profiles.json"
+            profile_path.write_text(json.dumps({"777": {"skill_level": "beginner"}}))
+            with patch.object(scanner, "USER_PROFILES_FILE", profile_path), patch.object(
+                scanner,
+                "send_telegram_message",
+                side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
+            ):
+                scanner.handle_explain_command(
+                    "TOKEN",
+                    "-100",
+                    "/explain rsi",
+                    source_chat={"id": "-100", "type": "group"},
+                    from_user={"id": 777},
+                )
+
+        self.assertEqual(sent_messages[0][0], "-100")
+        self.assertIn("<b>RSI</b>", sent_messages[0][1])
+        self.assertIn("speedometer", sent_messages[0][1])
+
+    def test_explain_command_defaults_to_experienced_when_skill_missing(self):
+        sent_messages = []
+
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            scanner, "USER_PROFILES_FILE", Path(tmpdir) / "user_profiles.json"
+        ), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
+        ):
+            scanner.handle_explain_command(
+                "TOKEN",
+                "777",
+                "/learn moving average",
+                source_chat={"id": "777", "type": "private"},
+                from_user={"id": 777},
+            )
+
+        self.assertIn("<b>EMA</b>", sent_messages[0][1])
+        self.assertIn("exponentially weighted moving average", sent_messages[0][1])
+
+    def test_explain_command_lists_concepts_for_empty_or_unknown_term(self):
+        menu = scanner.build_explain_command_message("/explain")
+        unknown = scanner.build_explain_command_message("/learn mystery term")
+
+        self.assertIn("Poinkle can explain these market concepts", menu)
+        self.assertIn("Try: /explain rsi", menu)
+        self.assertIn("I don't have that one yet", unknown)
+        self.assertIn("breakout", unknown)
+
+    def test_process_telegram_commands_routes_learn_command(self):
+        state = {}
+        sent_messages = []
+        updates = [
+            {
+                "update_id": 126,
+                "message": {
+                    "chat": {"id": "999", "type": "private"},
+                    "from": {"id": 999},
+                    "text": "/learn breakout",
+                },
+            }
+        ]
+
+        def fake_handle(token, chat_id, text, source_chat=None, from_user=None):
+            sent_messages.append((chat_id, text, source_chat, from_user))
+
+        with patch.object(scanner, "get_telegram_updates", return_value=updates), patch.object(
+            scanner, "handle_explain_command", side_effect=fake_handle
+        ), patch.object(
+            scanner, "command_allowed_by_active_mode", return_value=True
+        ), patch.object(scanner, "save_state"):
+            scanner.process_telegram_commands(object(), "TOKEN", "999", state)
+
+        self.assertEqual(sent_messages[0][0:2], ("999", "/learn breakout"))
+        self.assertEqual(state["__telegram_commands"]["last_update_id"], 126)
 
     def test_snapshot_caption_skill_level_wording(self):
         accumulation = {"grade": "B", "label": "Good accumulation"}

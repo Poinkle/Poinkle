@@ -34,6 +34,7 @@ if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
 from scanner import format_scan_message, scan_top_100
+from explanations import available_concepts, concept_display_name, explain_concept, normalize_concept_key
 
 try:
     from dotenv import load_dotenv
@@ -193,6 +194,8 @@ PUBLIC_BOT_COMMANDS = [
     {"command": "myalerts", "description": "View your active alerts"},
     {"command": "mike", "description": "Mike's curated watchlist"},
     {"command": "guide", "description": "Command and coin reference card"},
+    {"command": "explain", "description": "Learn a market concept"},
+    {"command": "learn", "description": "Learn a market concept"},
     {"command": "help", "description": "Full help message"},
     {"command": "start", "description": "Welcome message"},
 ]
@@ -4214,6 +4217,7 @@ def send_research_cards(telegram_token, chat_id, prb_text, symbol=None, chart_da
 SNAPSHOT_COMMANDS = ("/snapshot", "/snap", "/levels")
 RESEARCH_COMMANDS = ("/research",)
 REFERENCE_COMMANDS = ("/guide", "/reference")
+EXPLAIN_COMMANDS = ("/explain", "/learn")
 
 
 def snapshot_command_name(message_text):
@@ -4230,6 +4234,10 @@ def is_research_command(message_text):
 
 def is_reference_command(message_text):
     return snapshot_command_name(message_text) in REFERENCE_COMMANDS
+
+
+def is_explain_command(message_text):
+    return snapshot_command_name(message_text) in EXPLAIN_COMMANDS
 
 
 def format_supported_coins_for_help(symbols, per_line=8):
@@ -4671,6 +4679,51 @@ def reference_text_fallback():
         f"Supported Coins:\n{coins}\n\n"
         "Every alert is a short-term signal on one specific timeframe - not a call on the overall trend.\n\n"
         "Educational market structure only. Not financial advice. Poinkle did the research. The decision is yours."
+    )
+
+
+def concept_menu_text():
+    concepts = ", ".join(available_concepts())
+    return (
+        "Poinkle can explain these market concepts right now:\n\n"
+        f"{concepts}\n\n"
+        "Try: /explain rsi\n"
+        "Or: /learn breakout"
+    )
+
+
+def unknown_concept_text():
+    return (
+        "I don't have that one yet — here's what I can explain right now:\n\n"
+        f"{', '.join(available_concepts())}"
+    )
+
+
+def build_explain_command_message(message_text, skill_level=None):
+    parts = message_text.strip().split(maxsplit=1)
+    if len(parts) < 2 or not parts[1].strip():
+        return concept_menu_text()
+
+    concept = parts[1].strip()
+    explanation = explain_concept(concept, skill_level)
+    if explanation is None:
+        return unknown_concept_text()
+
+    resolved_key = normalize_concept_key(concept) or concept.lower()
+    return f"<b>{concept_display_name(resolved_key)}</b>\n\n{explanation}"
+
+
+def handle_explain_command(telegram_token, telegram_chat_id, message_text, source_chat=None, from_user=None):
+    source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
+    from_user = from_user or {}
+    response_chat_id = str(source_chat.get("id", telegram_chat_id))
+    is_private = is_private_chat(source_chat)
+    user_id = str(from_user.get("id") or response_chat_id if is_private else from_user.get("id") or "")
+    skill_level = user_skill_level(user_id) if user_id else None
+    send_telegram_message(
+        telegram_token,
+        response_chat_id,
+        build_explain_command_message(message_text, skill_level=skill_level),
     )
 
 
@@ -5217,6 +5270,14 @@ def process_telegram_commands(exchange, telegram_token, telegram_chat_id, state)
                 telegram_token,
                 chat_id,
                 source_chat=chat,
+            )
+        elif is_explain_command(text):
+            handle_explain_command(
+                telegram_token,
+                chat_id,
+                text,
+                source_chat=chat,
+                from_user=from_user,
             )
         elif is_reference_command(text):
             handle_reference_command(
