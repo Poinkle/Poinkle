@@ -851,6 +851,7 @@ class ScannerLogicTests(unittest.TestCase):
                 "guide",
                 "explain",
                 "learn",
+                "coins",
                 "help",
                 "start",
             ],
@@ -1692,6 +1693,24 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("👀 LOOK ORDER", message)
         self.assertIn(scanner.poinkle_educational_footer(), message)
 
+    def test_help_command_is_short_and_points_to_learning_and_coins(self):
+        sent_messages = []
+
+        with patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
+        ):
+            scanner.handle_help_command("TOKEN", "999")
+
+        message = sent_messages[0][1]
+        self.assertIn("🐷 POINKLE HELP", message)
+        self.assertIn("/explain RSI", message)
+        self.assertIn("/learn works too", message)
+        self.assertIn("/coins", message)
+        self.assertNotIn("Current Supported Coins", message)
+        self.assertLess(len(message.splitlines()), 25)
+
     def test_process_telegram_commands_replies_on_first_poll(self):
         state = {}
         sent_messages = []
@@ -1913,6 +1932,33 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertEqual(sent_messages[0][0:2], ("999", "/learn breakout"))
         self.assertEqual(state["__telegram_commands"]["last_update_id"], 126)
+
+    def test_process_telegram_commands_routes_coins_command(self):
+        state = {}
+        sent_messages = []
+        updates = [
+            {
+                "update_id": 127,
+                "message": {
+                    "chat": {"id": "999", "type": "private"},
+                    "from": {"id": 999},
+                    "text": "/coins",
+                },
+            }
+        ]
+
+        def fake_handle(token, chat_id, source_chat=None):
+            sent_messages.append((chat_id, source_chat))
+
+        with patch.object(scanner, "get_telegram_updates", return_value=updates), patch.object(
+            scanner, "handle_coins_command", side_effect=fake_handle
+        ), patch.object(
+            scanner, "command_allowed_by_active_mode", return_value=True
+        ), patch.object(scanner, "save_state"):
+            scanner.process_telegram_commands(object(), "TOKEN", "999", state)
+
+        self.assertEqual(sent_messages[0][0], "999")
+        self.assertEqual(state["__telegram_commands"]["last_update_id"], 127)
 
     def test_snapshot_caption_skill_level_wording(self):
         accumulation = {"grade": "B", "label": "Good accumulation"}
@@ -2440,6 +2486,32 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(symbols, ["BTC/USD", "ETH/USD"])
         self.assertTrue(card_exists)
         self.assertEqual(png_header, b"\x89PNG\r\n\x1a\n")
+
+    def test_coins_command_lists_enabled_supported_watchlist_symbols(self):
+        original_watchlist = scanner.WATCHLIST[:]
+        scanner.WATCHLIST = ["BTC/USD", "ETH/USD", "XMR/USD"]
+        scanner.UNSUPPORTED_SYMBOLS_THIS_SESSION.add("XMR/USD")
+        sent_messages = []
+
+        try:
+            with patch.object(
+                scanner,
+                "send_telegram_message",
+                side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
+            ):
+                scanner.handle_coins_command(
+                    "TOKEN",
+                    "-100",
+                    source_chat={"id": "-100", "type": "group"},
+                )
+        finally:
+            scanner.WATCHLIST = original_watchlist
+            scanner.UNSUPPORTED_SYMBOLS_THIS_SESSION.discard("XMR/USD")
+
+        self.assertEqual(sent_messages[0][0], "-100")
+        self.assertIn("🪙 Coins Poinkle tracks: 2 coins", sent_messages[0][1])
+        self.assertIn("BTC, ETH", sent_messages[0][1])
+        self.assertNotIn("XMR", sent_messages[0][1])
 
     def test_welcome_card_renderer_produces_image_path(self):
         with tempfile.TemporaryDirectory() as tmpdir:

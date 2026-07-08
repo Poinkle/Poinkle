@@ -196,6 +196,7 @@ PUBLIC_BOT_COMMANDS = [
     {"command": "guide", "description": "Command and coin reference card"},
     {"command": "explain", "description": "Learn a market concept"},
     {"command": "learn", "description": "Learn a market concept"},
+    {"command": "coins", "description": "See every coin I track"},
     {"command": "help", "description": "Full help message"},
     {"command": "start", "description": "Welcome message"},
 ]
@@ -4279,30 +4280,21 @@ def poinkle_onboarding_text(kind):
     )
     if kind == "help":
         return (
-            "POINKLE HELP\n\n"
-            f"{intro}"
-            "Main Commands\n\n"
-            f"/snapshot {primary_example}\n"
-            f"/snap {secondary_example}\n"
-            f"/research {research_example}\n"
-            f"/levels {primary_example} (legacy)\n"
-            "/help\n\n"
-            "🪙 Current Supported Coins\n\n"
-            f"{supported_coins}\n\n"
-            "Current Features\n\n"
-            "• Snapshot\n"
-            "• Trend\n"
-            "• Key Levels\n"
-            "• Liquidity\n"
-            "• Confirmation\n"
-            "• Decision\n"
-            "• Market Score\n"
-            "• RSI\n"
-            "• Patience Grade\n"
-            "• What To Watch Next\n\n"
-            "Poinkle Alpha\n"
-            "Educational market structure only.\n"
-            "Not financial advice."
+            "🐷 POINKLE HELP\n\n"
+            "I help you learn what to look at in the market — patiently.\n\n"
+            "TRY THESE:\n"
+            f"📸 /snapshot {primary_example} — visual chart + breakdown\n"
+            f"📚 /research {research_example} — deeper dive on a coin\n"
+            "📖 /explain RSI — what any term means, in plain English\n"
+            "   /learn works too.\n\n"
+            "MORE:\n"
+            "/alerts — set a personal price alert\n"
+            "/myalerts — view your alerts\n"
+            "/mike — Mike's curated watchlist\n"
+            "/coins — every coin I track\n"
+            "/guide — full command reference\n\n"
+            "Not sure what a word means? Just type /explain and the word.\n\n"
+            "Educational only. Not financial advice. 🐷"
         )
 
     return (
@@ -4663,6 +4655,24 @@ def reference_card_symbols():
         for symbol in WATCHLIST
         if symbol not in UNSUPPORTED_SYMBOLS_THIS_SESSION
     ]
+
+
+def build_coins_command_message(symbols=None):
+    symbols = reference_card_symbols() if symbols is None else symbols
+    coins = [symbol.replace("/USD", "") for symbol in symbols]
+    if not coins:
+        return "🪙 Coins Poinkle tracks:\n\nNo tracked coins are available right now."
+
+    return (
+        f"🪙 Coins Poinkle tracks: {len(coins)} coins\n\n"
+        f"{format_supported_coins_for_help(symbols)}"
+    )
+
+
+def handle_coins_command(telegram_token, telegram_chat_id, source_chat=None):
+    source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
+    response_chat_id = str(source_chat.get("id", telegram_chat_id))
+    send_telegram_message(telegram_token, response_chat_id, build_coins_command_message())
 
 
 def reference_text_fallback():
@@ -5267,6 +5277,12 @@ def process_telegram_commands(exchange, telegram_token, telegram_chat_id, state)
         elif lower_text.startswith("/mike"):
             handle_mike_command(
                 exchange,
+                telegram_token,
+                chat_id,
+                source_chat=chat,
+            )
+        elif lower_text.startswith("/coins"):
+            handle_coins_command(
                 telegram_token,
                 chat_id,
                 source_chat=chat,
