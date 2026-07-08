@@ -2595,6 +2595,8 @@ class ScannerLogicTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir, patch.object(
             scanner, "USER_PROFILES_FILE", Path(tmpdir) / "user_profiles.json"
+        ), patch.object(
+            scanner, "WELCOME_BANNER_PATH", Path(tmpdir) / "missing-welcome-banner.jpg"
         ), patch.object(scanner, "iso_utc_now", return_value="2026-07-08T12:00:00+00:00"), patch.object(
             scanner,
             "send_telegram_message",
@@ -2621,6 +2623,48 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertTrue(profiles["777"]["onboarded"])
         self.assertTrue(profiles["777"]["skill_onboarding_prompted"])
 
+    def test_start_command_sends_welcome_banner_with_caption_before_skill_prompt(self):
+        sent_photos = []
+        sent_messages = []
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            profile_path = Path(tmpdir) / "user_profiles.json"
+            banner_path = Path(tmpdir) / "welcome_banner.jpg"
+            banner_path.write_bytes(b"fake jpg")
+            with patch.object(scanner, "USER_PROFILES_FILE", profile_path), patch.object(
+                scanner, "WELCOME_BANNER_PATH", banner_path
+            ), patch.object(scanner, "iso_utc_now", return_value="2026-07-08T12:00:00+00:00"), patch.object(
+                scanner,
+                "send_telegram_photo",
+                side_effect=lambda token, chat_id, path, caption="": sent_photos.append((str(chat_id), path, caption)) or True,
+            ), patch.object(
+                scanner,
+                "send_telegram_message",
+                side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
+            ):
+                scanner.handle_start_command("TOKEN", "999", from_user={"id": 777})
+
+        self.assertEqual(sent_photos, [("777", str(banner_path), scanner.build_welcome_message())])
+        self.assertEqual(sent_messages, [("777", scanner.skill_onboarding_message())])
+
+    def test_start_welcome_falls_back_to_text_when_banner_missing(self):
+        sent_messages = []
+        warnings = []
+
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            scanner, "WELCOME_BANNER_PATH", Path(tmpdir) / "missing-welcome-banner.jpg"
+        ), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
+        ), patch.object(scanner, "log_warn", side_effect=lambda text: warnings.append(text)), patch.object(
+            scanner, "send_telegram_photo", side_effect=AssertionError("missing banner should not send photo")
+        ):
+            scanner.send_start_welcome("TOKEN", "777", scanner.build_welcome_message())
+
+        self.assertEqual(sent_messages, [("777", scanner.build_welcome_message())])
+        self.assertIn("Welcome banner image missing", warnings[0])
+
     def test_start_command_preserves_existing_profile_first_seen(self):
         sent_messages = []
 
@@ -2640,6 +2684,8 @@ class ScannerLogicTests(unittest.TestCase):
             with patch.object(scanner, "USER_PROFILES_FILE", profile_path), patch.object(
                 scanner, "iso_utc_now", return_value="2026-07-08T12:00:00+00:00"
             ), patch.object(
+                scanner, "WELCOME_BANNER_PATH", Path(tmpdir) / "missing-welcome-banner.jpg"
+            ), patch.object(
                 scanner,
                 "send_telegram_message",
                 side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
@@ -2656,7 +2702,9 @@ class ScannerLogicTests(unittest.TestCase):
     def test_start_command_still_welcomes_when_profile_write_fails(self):
         sent_messages = []
 
-        with patch.object(scanner, "save_user_profiles", side_effect=OSError("disk full")), patch.object(
+        with patch.object(scanner, "WELCOME_BANNER_PATH", Path("/private/tmp/missing-welcome-banner.jpg")), patch.object(
+            scanner, "save_user_profiles", side_effect=OSError("disk full")
+        ), patch.object(
             scanner,
             "send_telegram_message",
             side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
@@ -2684,6 +2732,8 @@ class ScannerLogicTests(unittest.TestCase):
             )
             with patch.object(scanner, "USER_PROFILES_FILE", profile_path), patch.object(
                 scanner, "iso_utc_now", return_value="2026-07-08T12:00:00+00:00"
+            ), patch.object(
+                scanner, "WELCOME_BANNER_PATH", Path(tmpdir) / "missing-welcome-banner.jpg"
             ), patch.object(
                 scanner,
                 "send_telegram_message",

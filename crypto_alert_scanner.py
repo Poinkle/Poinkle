@@ -36,6 +36,9 @@ if str(PROJECT_DIR) not in sys.path:
 from scanner import format_scan_message, scan_top_100
 from explanations import available_concepts, concept_display_name, explain_concept, normalize_concept_key
 
+WELCOME_BANNER_PATH = PROJECT_DIR / "assets" / "welcome_banner.jpg"
+TELEGRAM_PHOTO_CAPTION_LIMIT = 1024
+
 try:
     from dotenv import load_dotenv
 except ModuleNotFoundError:
@@ -4324,6 +4327,28 @@ def build_welcome_message():
     )
 
 
+def send_start_welcome(telegram_token, destination_chat_id, welcome_message):
+    if not WELCOME_BANNER_PATH.exists():
+        log_warn(f"Welcome banner image missing: {WELCOME_BANNER_PATH}")
+        send_telegram_message(telegram_token, destination_chat_id, welcome_message)
+        return
+
+    if len(welcome_message) <= TELEGRAM_PHOTO_CAPTION_LIMIT:
+        if send_telegram_photo(
+            telegram_token,
+            destination_chat_id,
+            str(WELCOME_BANNER_PATH),
+            caption=welcome_message,
+        ):
+            return
+        send_telegram_message(telegram_token, destination_chat_id, welcome_message)
+        return
+
+    if not send_telegram_photo(telegram_token, destination_chat_id, str(WELCOME_BANNER_PATH)):
+        log_warn(f"Welcome banner send failed: {WELCOME_BANNER_PATH}")
+    send_telegram_message(telegram_token, destination_chat_id, welcome_message)
+
+
 def upsert_start_user_profile(user_id, from_user=None):
     user_id = str(user_id or "").strip()
     if not user_id:
@@ -4365,8 +4390,7 @@ def handle_start_command(telegram_token, telegram_chat_id, from_user=None):
         log_warn(f"Could not update /start profile for {telegram_chat_id}: {error}")
 
     welcome_message = build_welcome_message()
-    # TODO: Later branded-image stage can send_telegram_photo(...) here before this text.
-    send_telegram_message(telegram_token, destination_chat_id, welcome_message)
+    send_start_welcome(telegram_token, destination_chat_id, welcome_message)
     try:
         maybe_send_skill_onboarding(
             telegram_token,
