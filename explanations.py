@@ -1,11 +1,14 @@
 EXPLANATION_REGISTRY = {
     "rsi": {
         "beginner": (
-            "RSI is like a speedometer for how fast a coin's price has been moving. "
-            "It runs from 0 to 100. Above 70 means it might be moving too fast up "
-            "(overbought — could be due for a rest). Below 30 means it's been beaten "
-            "down hard (oversold — could be due for a bounce). It doesn't tell you "
-            "what WILL happen — just whether things are stretched."
+            "A strength meter for recent price moves, scored 0 to 100. It compares "
+            "how big the recent gains have been versus the recent losses. Above 70 "
+            "means buyers have been in control (overbought — the price may be "
+            "stretched and could slow down). Below 30 means sellers have been in "
+            "control (oversold — the price may be beaten down and could bounce). "
+            "Critical truth: RSI measures strength — it does NOT predict what happens "
+            "next. In a strong trend it can stay high or low for a long time — so it's "
+            "one clue, not a crystal ball."
         ),
         "experienced": (
             "RSI (14) — momentum oscillator, 0-100. >70 overbought, <30 oversold. "
@@ -14,11 +17,12 @@ EXPLANATION_REGISTRY = {
     },
     "ema": {
         "beginner": (
-            "An EMA is just an average price over time, but one that pays more "
-            "attention to recent days. Think of it as the trend's 'center of gravity.' "
-            "When price is above it, the trend's leaning up. When a shorter EMA "
-            "(like the 21) crosses above a longer one (the 55), it's often an early "
-            "sign momentum is turning upward."
+            "A line that tracks the average price over a recent period, but pays more "
+            "attention to recent prices — so it reacts faster than a plain average. "
+            "Poinkle uses the EMA 21 (shorter-term) and EMA 55 (medium-term). When "
+            "price is above them the trend's leaning up; below, it's leaning down. "
+            "Honest: it helps make the trend easier to see — it doesn't predict the "
+            "future."
         ),
         "experienced": (
             "EMA — exponentially weighted moving average (recent prices weighted "
@@ -28,10 +32,11 @@ EXPLANATION_REGISTRY = {
     },
     "volume_spike": {
         "beginner": (
-            "Volume is how many people are buying and selling. A volume spike means "
-            "way more activity than usual — like a quiet street suddenly getting "
-            "crowded. It tells you something got people's attention. Big moves backed "
-            "by big volume tend to mean more than quiet ones."
+            "How many people are buying and selling in a given period — the activity "
+            "behind a price move. Think a few people whispering vs. a packed stadium "
+            "cheering. Higher volume means more people and money are behind the move, "
+            "so it tends to matter more. A move with strong volume is usually more "
+            "believable than the same move with weak volume."
         ),
         "experienced": (
             "Volume spike — current volume well above its average (e.g. >=2x). "
@@ -40,9 +45,10 @@ EXPLANATION_REGISTRY = {
     },
     "support": {
         "beginner": (
-            "Support is a price floor — a level where buyers have stepped in before, "
-            "so the price tends to bounce up off it. Watching support tells you where "
-            "buyers might defend again."
+            "A price level where the asset tends to stop falling and bounce back up — "
+            "like a floor. It holds because enough people decide it's a good price to "
+            "buy. Honest limit: it's not a magic wall. Strong enough selling can push "
+            "right through it."
         ),
         "experienced": (
             "Support — price level where demand has previously absorbed selling. "
@@ -51,9 +57,10 @@ EXPLANATION_REGISTRY = {
     },
     "resistance": {
         "beginner": (
-            "Resistance is the ceiling — a level where sellers show up and the price "
-            "struggles to break above. Watching resistance tells you where the price "
-            "has to fight through to keep climbing."
+            "A price level where the asset tends to stop rising and get pushed back "
+            "down — like a ceiling. Many people decide it's a good price to sell. "
+            "Honest limit: not guaranteed. Enough buying pressure can break through "
+            "it."
         ),
         "experienced": (
             "Resistance — price level where supply has previously capped advances. "
@@ -62,10 +69,11 @@ EXPLANATION_REGISTRY = {
     },
     "breakout": {
         "beginner": (
-            "A breakout is when the price finally pushes through the ceiling "
-            "(resistance) — like breaking out of a box it's been stuck in. It can "
-            "signal a new move starting. But patience compounds — a breakout that "
-            "HOLDS matters more than one that just pokes through for a second."
+            "When price moves above a resistance level and stays there — often with "
+            "more people buying. Like finally breaking through the ceiling. It can "
+            "signal a stronger move up. Caution: sometimes it looks like a breakout, "
+            "then quickly falls back below the level. A breakout that stays above "
+            "means more than one that quickly falls back — patience compounds."
         ),
         "experienced": (
             "Breakout — price closes beyond a defined level. Quality depends on "
@@ -75,10 +83,9 @@ EXPLANATION_REGISTRY = {
     },
     "breakdown": {
         "beginner": (
-            "A breakdown is the opposite of a breakout — when the price falls through "
-            "the floor (support) instead of bouncing off it. It can signal weakness. "
-            "Same rule applies: a breakdown that holds below the level matters more "
-            "than a quick dip."
+            "When price falls below a support level and stays below it — like the "
+            "floor giving way. It can signal a stronger move down. Caution: same as "
+            "breakouts — wait to see if it stays below the level before trusting it."
         ),
         "experienced": (
             "Breakdown — price closes below a support level. Confirm with "
@@ -87,10 +94,12 @@ EXPLANATION_REGISTRY = {
     },
     "confluence": {
         "beginner": (
-            "Confluence just means 'more than one thing agreeing at the same time.' "
-            "When several signals line up together — say the trend, the volume, and "
-            "the RSI all pointing the same way — it's usually a stronger sign than "
-            "any single one alone. More agreement, more conviction."
+            "When several things line up and point the same way — like a few friends "
+            "all agreeing on the best route. Example: price sitting at support, plus "
+            "the EMA pointing the same direction, plus RSI pointing the same way. "
+            "More agreement gives you a better chance of being right — though still "
+            "never a guarantee. Confluence is what turns separate observations into a "
+            "clearer picture."
         ),
         "experienced": (
             "Confluence — multiple independent signals aligning (e.g. RSI + volume + "
@@ -99,10 +108,11 @@ EXPLANATION_REGISTRY = {
     },
     "trend": {
         "beginner": (
-            "The trend is just the overall direction the price has been heading — up, "
-            "down, or sideways. 'The trend is your friend' is an old saying because "
-            "going WITH the direction is usually safer than fighting it. Poinkle looks "
-            "at trend first, before anything else."
+            "The overall direction the price is moving — like the flow of a river. It "
+            "can go up (generally climbing), down (generally falling), or sideways "
+            "(drifting with no clear direction). It doesn't tell you what WILL happen "
+            "next — it just shows what the market is doing right now. Most decisions "
+            "start here: is the river flowing up, down, or nowhere?"
         ),
         "experienced": (
             "Trend — prevailing directional bias (via structure and EMAs). Trade with "

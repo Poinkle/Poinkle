@@ -1819,7 +1819,7 @@ class ScannerLogicTests(unittest.TestCase):
         beginner = scanner.explain_concept("relative strength", "beginner")
         experienced = scanner.explain_concept("RSI", "experienced")
 
-        self.assertIn("speedometer", beginner)
+        self.assertIn("strength meter", beginner)
         self.assertIn("momentum oscillator", experienced)
         self.assertEqual(scanner.normalize_concept_key("moving average"), "ema")
         self.assertIsNone(scanner.explain_concept("not-a-real-concept", "beginner"))
@@ -1845,7 +1845,7 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertEqual(sent_messages[0][0], "-100")
         self.assertIn("<b>RSI</b>", sent_messages[0][1])
-        self.assertIn("speedometer", sent_messages[0][1])
+        self.assertIn("strength meter", sent_messages[0][1])
 
     def test_explain_command_defaults_to_experienced_when_skill_missing(self):
         sent_messages = []
