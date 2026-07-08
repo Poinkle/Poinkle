@@ -675,12 +675,16 @@ def load_user_profiles():
         return {}
     try:
         return json.loads(USER_PROFILES_FILE.read_text())
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, OSError):
         return {}
 
 
 def save_user_profiles(profiles):
     USER_PROFILES_FILE.write_text(json.dumps(profiles, indent=2, sort_keys=True))
+
+
+def iso_utc_now():
+    return datetime.now(timezone.utc).isoformat()
 
 
 def user_profile(user_id):
@@ -4300,20 +4304,66 @@ def poinkle_onboarding_text(kind):
     )
 
 
-def handle_start_command(telegram_token, telegram_chat_id):
+def build_welcome_message():
+    return (
+        "🐷 <b>Welcome to Poinkle.</b>\n\n"
+        "I'm the Poinkle bot — think of me as your first classroom in the market.\n\n"
+        "Here's what I do: I watch the charts patiently and send you clean, simple snapshots "
+        "when something real is happening — not noise, not hype, just signal. Every card is "
+        "built to teach, not just alert. The more you see them, the more the market starts "
+        "to make sense.\n\n"
+        "A few things to know:\n"
+        "- This is always free. What you see here is an introduction to what Poinkle is building.\n"
+        "- I focus on patience. Good setups develop over time — \"patience compounds\" isn't a slogan, it's the whole idea.\n"
+        "- I'm always growing. New features, deeper tools, and more ways to learn are coming.\n\n"
+        "Poinkle's mission is simple: connect humanity through knowledge. This is where it starts.\n\n"
+        "Glad you're here. Let's learn together. 🐷"
+    )
+
+
+def upsert_start_user_profile(user_id, from_user=None):
+    user_id = str(user_id or "").strip()
+    if not user_id:
+        return {}
+
+    from_user = from_user or {}
+    profiles = load_user_profiles()
+    profile = profiles.setdefault(user_id, {})
+    now = iso_utc_now()
+
+    profile.setdefault("first_seen", now)
+    profile["last_start"] = now
+    profile["onboarded"] = True
+    profile["telegram_user_id"] = user_id
+
+    username = from_user.get("username")
+    if username:
+        profile["username"] = username
+    first_name = from_user.get("first_name")
+    if first_name:
+        profile["first_name"] = first_name
+    last_name = from_user.get("last_name")
+    if last_name:
+        profile["last_name"] = last_name
+
+    save_user_profiles(profiles)
+    return profile
+
+
+def handle_start_command(telegram_token, telegram_chat_id, from_user=None):
+    destination_chat_id = telegram_user_id(
+        {"id": telegram_chat_id, "type": "private"},
+        from_user,
+        telegram_chat_id,
+    )
     try:
-        if render_welcome_card is None:
-            raise RuntimeError("Welcome card renderer unavailable")
-        card_path = render_welcome_card(
-            reference_card_symbols(),
-            logo_path=POINKLE_RESEARCH_EMBLEM_PATH,
-        )
-        if send_telegram_photo(telegram_token, telegram_chat_id, card_path):
-            return
-        raise RuntimeError("Welcome card send failed")
+        upsert_start_user_profile(destination_chat_id, from_user=from_user)
     except Exception as error:
-        log_warn(f"Welcome card rendering failed: {error}")
-        send_telegram_message(telegram_token, telegram_chat_id, poinkle_onboarding_text("start"))
+        log_warn(f"Could not update /start profile for {telegram_chat_id}: {error}")
+
+    welcome_message = build_welcome_message()
+    # TODO: Later branded-image stage can send_telegram_photo(...) here before this text.
+    send_telegram_message(telegram_token, destination_chat_id, welcome_message)
 
 
 def handle_help_command(telegram_token, telegram_chat_id):
@@ -5089,7 +5139,7 @@ def process_telegram_commands(exchange, telegram_token, telegram_chat_id, state)
         elif handle_skill_level_reply(telegram_token, chat, text, from_user):
             pass
         elif lower_text.startswith("/start"):
-            handle_start_command(telegram_token, chat_id)
+            handle_start_command(telegram_token, chat_id, from_user=from_user)
         elif lower_text.startswith("/help"):
             handle_help_command(telegram_token, chat_id)
         elif not text.startswith("/"):

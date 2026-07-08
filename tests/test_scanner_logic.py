@@ -2371,39 +2371,78 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(render_card.call_args.kwargs["logo_path"], scanner.POINKLE_RESEARCH_EMBLEM_PATH)
         self.assertEqual(sent_photos, [("999", "/tmp/reference.png")])
 
-    def test_start_command_sends_welcome_card_when_renderer_succeeds(self):
-        sent_photos = []
-
-        with patch.object(scanner, "reference_card_symbols", return_value=["BTC/USD", "ETH/USD"]) as symbols, patch.object(
-            scanner, "render_welcome_card", return_value="/tmp/welcome.png"
-        ) as render_card, patch.object(
-            scanner,
-            "send_telegram_photo",
-            side_effect=lambda token, chat_id, path: sent_photos.append((str(chat_id), path)) or True,
-        ), patch.object(scanner, "send_telegram_message", side_effect=AssertionError("text fallback should not be sent")):
-            scanner.handle_start_command("TOKEN", "999")
-
-        symbols.assert_called_once()
-        render_card.assert_called_once_with(
-            ["BTC/USD", "ETH/USD"],
-            logo_path=scanner.POINKLE_RESEARCH_EMBLEM_PATH,
-        )
-        self.assertEqual(sent_photos, [("999", "/tmp/welcome.png")])
-
-    def test_start_command_falls_back_to_text_when_welcome_card_fails(self):
+    def test_start_command_sends_welcome_message_and_captures_new_profile(self):
         sent_messages = []
 
-        with patch.object(scanner, "render_welcome_card", side_effect=RuntimeError("render failed")), patch.object(
-            scanner, "send_telegram_photo", side_effect=AssertionError("photo should not be sent")
-        ), patch.object(
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            scanner, "USER_PROFILES_FILE", Path(tmpdir) / "user_profiles.json"
+        ), patch.object(scanner, "iso_utc_now", return_value="2026-07-08T12:00:00+00:00"), patch.object(
             scanner,
             "send_telegram_message",
             side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
         ):
-            scanner.handle_start_command("TOKEN", "999")
+            scanner.handle_start_command(
+                "TOKEN",
+                "999",
+                from_user={"id": 777, "username": "poinkle_user", "first_name": "Pat", "last_name": "Learner"},
+            )
+            profiles = scanner.load_user_profiles()
 
-        self.assertEqual(sent_messages[0][0], "999")
-        self.assertIn("POINKLE START", sent_messages[0][1])
+        self.assertEqual(sent_messages[0][0], "777")
+        self.assertEqual(sent_messages[0][1], scanner.build_welcome_message())
+        self.assertIn("🐷 <b>Welcome to Poinkle.</b>", sent_messages[0][1])
+        self.assertEqual(profiles["777"]["telegram_user_id"], "777")
+        self.assertEqual(profiles["777"]["username"], "poinkle_user")
+        self.assertEqual(profiles["777"]["first_name"], "Pat")
+        self.assertEqual(profiles["777"]["last_name"], "Learner")
+        self.assertEqual(profiles["777"]["first_seen"], "2026-07-08T12:00:00+00:00")
+        self.assertEqual(profiles["777"]["last_start"], "2026-07-08T12:00:00+00:00")
+        self.assertTrue(profiles["777"]["onboarded"])
+
+    def test_start_command_preserves_existing_profile_first_seen(self):
+        sent_messages = []
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            profile_path = Path(tmpdir) / "user_profiles.json"
+            profile_path.write_text(
+                json.dumps(
+                    {
+                        "777": {
+                            "telegram_user_id": "777",
+                            "first_seen": "2026-07-01T12:00:00+00:00",
+                            "skill_level": "beginner",
+                        }
+                    }
+                )
+            )
+            with patch.object(scanner, "USER_PROFILES_FILE", profile_path), patch.object(
+                scanner, "iso_utc_now", return_value="2026-07-08T12:00:00+00:00"
+            ), patch.object(
+                scanner,
+                "send_telegram_message",
+                side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
+            ):
+                scanner.handle_start_command("TOKEN", "999", from_user={"id": 777, "first_name": "Pat"})
+                profiles = scanner.load_user_profiles()
+
+        self.assertEqual(sent_messages[0][1], scanner.build_welcome_message())
+        self.assertEqual(profiles["777"]["first_seen"], "2026-07-01T12:00:00+00:00")
+        self.assertEqual(profiles["777"]["last_start"], "2026-07-08T12:00:00+00:00")
+        self.assertEqual(profiles["777"]["skill_level"], "beginner")
+        self.assertEqual(profiles["777"]["first_name"], "Pat")
+
+    def test_start_command_still_welcomes_when_profile_write_fails(self):
+        sent_messages = []
+
+        with patch.object(scanner, "save_user_profiles", side_effect=OSError("disk full")), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
+        ):
+            scanner.handle_start_command("TOKEN", "999", from_user={"id": 777})
+
+        self.assertEqual(sent_messages[0][0], "777")
+        self.assertEqual(sent_messages[0][1], scanner.build_welcome_message())
 
     def test_card_renderers_use_shared_emblem_path(self):
         volume_alert = {
@@ -2440,17 +2479,9 @@ class ScannerLogicTests(unittest.TestCase):
         ):
             scanner.handle_reference_command("TOKEN", "999")
 
-        with patch.object(scanner, "render_welcome_card", return_value="/tmp/welcome.png") as welcome_render, patch.object(
-            scanner,
-            "send_telegram_photo",
-            return_value=True,
-        ):
-            scanner.handle_start_command("TOKEN", "999")
-
         self.assertEqual(alert_render.call_args.kwargs["logo_path"], scanner.POINKLE_RESEARCH_EMBLEM_PATH)
         self.assertEqual(prb_render.call_args.kwargs["logo_path"], scanner.POINKLE_RESEARCH_EMBLEM_PATH)
         self.assertEqual(reference_render.call_args.kwargs["logo_path"], scanner.POINKLE_RESEARCH_EMBLEM_PATH)
-        self.assertEqual(welcome_render.call_args.kwargs["logo_path"], scanner.POINKLE_RESEARCH_EMBLEM_PATH)
 
     def test_confluence_alert_snapshot_passes_alert_cards_and_volume_candles(self):
         captured = {}
