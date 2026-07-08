@@ -5226,7 +5226,7 @@ def process_telegram_commands(exchange, telegram_token, telegram_chat_id, state)
 
     for update in updates:
         update_id = update["update_id"]
-        message = update.get("message") or update.get("edited_message") or {}
+        message = update.get("message") or {}
         chat = message.get("chat", {})
         chat_id = str(chat.get("id", ""))
         text = (message.get("text") or "").strip()

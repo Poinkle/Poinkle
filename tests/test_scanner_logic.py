@@ -1979,6 +1979,44 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(sent_messages[0][0:2], ("999", "/learn breakout"))
         self.assertEqual(state["__telegram_commands"]["last_update_id"], 126)
 
+    def test_process_telegram_commands_ignores_edited_command_updates(self):
+        state = {}
+        sent_messages = []
+        updates = [
+            {
+                "update_id": 126,
+                "message": {
+                    "message_id": 10,
+                    "chat": {"id": "999", "type": "group"},
+                    "from": {"id": 777},
+                    "text": "/explain support",
+                },
+            },
+            {
+                "update_id": 127,
+                "edited_message": {
+                    "message_id": 10,
+                    "chat": {"id": "999", "type": "group"},
+                    "from": {"id": 777},
+                    "text": "/explain support",
+                },
+            },
+        ]
+
+        def fake_handle(token, chat_id, text, source_chat=None, from_user=None):
+            sent_messages.append((chat_id, text, source_chat, from_user))
+
+        with patch.object(scanner, "get_telegram_updates", return_value=updates), patch.object(
+            scanner, "handle_explain_command", side_effect=fake_handle
+        ), patch.object(
+            scanner, "command_allowed_by_active_mode", return_value=True
+        ), patch.object(scanner, "save_state"):
+            scanner.process_telegram_commands(object(), "TOKEN", "999", state)
+
+        self.assertEqual(len(sent_messages), 1)
+        self.assertEqual(sent_messages[0][0:2], ("999", "/explain support"))
+        self.assertEqual(state["__telegram_commands"]["last_update_id"], 127)
+
     def test_process_telegram_commands_routes_coins_command(self):
         state = {}
         sent_messages = []
