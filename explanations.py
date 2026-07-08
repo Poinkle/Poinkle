@@ -166,7 +166,18 @@ def available_concepts():
 
 def normalize_concept_key(concept):
     clean = " ".join(str(concept or "").strip().lower().replace("-", " ").split())
-    return EXPLANATION_ALIASES.get(clean)
+    normalized_aliases = {
+        " ".join(str(alias).strip().lower().replace("-", " ").split()): key
+        for alias, key in EXPLANATION_ALIASES.items()
+    }
+    if clean in normalized_aliases:
+        return normalized_aliases[clean]
+
+    registry_key = clean.replace(" ", "_")
+    if registry_key in EXPLANATION_REGISTRY:
+        return registry_key
+
+    return None
 
 
 def explain_concept(concept_key, skill_level=None):

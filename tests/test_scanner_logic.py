@@ -1824,6 +1824,16 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(scanner.normalize_concept_key("moving average"), "ema")
         self.assertIsNone(scanner.explain_concept("not-a-real-concept", "beginner"))
 
+    def test_explain_concept_normalizes_case_whitespace_and_friendly_terms(self):
+        self.assertEqual(scanner.normalize_concept_key("RSI"), "rsi")
+        self.assertEqual(scanner.normalize_concept_key("Rsi"), "rsi")
+        self.assertEqual(scanner.normalize_concept_key("rsi"), "rsi")
+        self.assertEqual(scanner.normalize_concept_key(" ema "), "ema")
+        self.assertEqual(scanner.normalize_concept_key("Support"), "support")
+        self.assertEqual(scanner.normalize_concept_key("volume spike"), "volume_spike")
+        self.assertIn("strength meter", scanner.explain_concept(" RSI ", "beginner"))
+        self.assertIsNone(scanner.explain_concept("mystery term", "beginner"))
+
     def test_explain_command_sends_beginner_explanation_from_profile(self):
         sent_messages = []
 
