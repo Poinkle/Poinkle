@@ -119,6 +119,89 @@ EXPLANATION_REGISTRY = {
             "it unless there's a clear, confirmed reversal."
         ),
     },
+    "confirmation": {
+        "beginner": (
+            "When price doesn't just touch a level but actually finishes the time "
+            "period beyond it — showing the move is more likely to be real, not just a "
+            "quick poke. Think of a breakout: price might jump above resistance for a "
+            "second, then fall right back. Waiting for confirmation means waiting for "
+            "the full period to finish above the level before trusting it. Poinkle "
+            "only uses confirmed breaks for this reason — patience compounds. The "
+            "tradeoff: you get in at a slightly worse price, but with a better chance "
+            "the move is real."
+        ),
+        "experienced": (
+            "Confirmation — a candle CLOSE beyond a level (not an intraday wick). "
+            "Filters fakeouts by requiring the period to finish past the level. "
+            "Trades off entry price for higher reliability; optional retest adds "
+            "further validation."
+        ),
+    },
+    "candle": {
+        "beginner": (
+            "Each candle on the chart is one chunk of time — on Poinkle's daily "
+            "charts, one candle = one day. It shows four things: where price started, "
+            "where it finished, and the highest and lowest it reached during that "
+            "time. The thick middle part (called the body) shows the start-to-finish "
+            "range. The thin lines above and below it (called wicks) show the highest "
+            "and lowest points reached. Green usually means price finished higher "
+            "than it started; red means it finished lower. A candle is just a simple "
+            "picture of what happened in that time period."
+        ),
+        "experienced": (
+            "Candlestick — OHLC for one period. Body = open-to-close range; "
+            "wicks/shadows = the high and low extremes. Color shows close vs open "
+            "(green up, red down). Body size and wick length convey conviction and "
+            "rejection."
+        ),
+    },
+    "range": {
+        "beginner": (
+            "The zone between a recent high and a recent low — the \"box\" price has "
+            "been bouncing around in. When price is stuck between a floor (support) "
+            "and a ceiling (resistance) with no clear direction, it's moving sideways "
+            "in that box. Poinkle shows you where price sits in its box — near the "
+            "top, middle, or bottom. This helps you see if there's room to move, or "
+            "if price is bumping against an edge."
+        ),
+        "experienced": (
+            "Range — price bounded between horizontal support and resistance, no "
+            "directional trend. Range position (top/mid/bottom) frames risk/reward; "
+            "edges are where breaks or rejections tend to occur."
+        ),
+    },
+    "key_level": {
+        "beginner": (
+            "A price that matters — a spot where the market has reacted before, so "
+            "it's worth paying attention if price returns there. Support and "
+            "resistance are both key levels (a floor and a ceiling). Poinkle marks "
+            "these so you know the prices worth watching. Honest limit: key levels "
+            "are zones of interest, not magic lines. Price can and does break through "
+            "them — they show you where the important battles happen, not what the "
+            "outcome will be."
+        ),
+        "experienced": (
+            "Key level — a price with a history of reaction (support/resistance, "
+            "prior swing high/low, range edge). Zones, not exact lines. Watch for "
+            "holds, breaks, and retests rather than assuming a bounce."
+        ),
+    },
+    "liquidity": {
+        "beginner": (
+            "How easily an asset can be bought or sold without moving the price much. "
+            "High liquidity means lots of buyers and sellers, so trades happen "
+            "smoothly. Low liquidity means fewer buyers and sellers, so price can "
+            "jump around more on smaller trades. Think a busy marketplace (easy to "
+            "buy and sell at fair prices) versus a quiet one (harder to buy or sell "
+            "without changing the price). Coins with lower liquidity tend to have "
+            "bigger, faster price swings."
+        ),
+        "experienced": (
+            "Liquidity — depth of available buy/sell orders. High liquidity = tight "
+            "spreads, low slippage, smoother fills. Low liquidity = wider spreads, "
+            "more slippage, sharper moves on smaller size."
+        ),
+    },
 }
 
 
@@ -141,9 +224,32 @@ EXPLANATION_ALIASES = {
     "breakdown": "breakdown",
     "break down": "breakdown",
     "confluence": "confluence",
-    "confirmation": "confluence",
     "trend": "trend",
     "market trend": "trend",
+    "confirmation": "confirmation",
+    "confirmed": "confirmation",
+    "confirm": "confirmation",
+    "confirmed break": "confirmation",
+    "candle": "candle",
+    "candlestick": "candle",
+    "candles": "candle",
+    "body": "candle",
+    "wick": "candle",
+    "wicks": "candle",
+    "range": "range",
+    "range bound": "range",
+    "trading range": "range",
+    "box": "range",
+    "key_level": "key_level",
+    "key level": "key_level",
+    "key levels": "key_level",
+    "level": "key_level",
+    "levels": "key_level",
+    "zone": "key_level",
+    "zones": "key_level",
+    "liquidity": "liquidity",
+    "liquid": "liquidity",
+    "illiquid": "liquidity",
 }
 
 
@@ -157,6 +263,11 @@ CONCEPT_DISPLAY_NAMES = {
     "breakdown": "Breakdown",
     "confluence": "Confluence",
     "trend": "Trend",
+    "confirmation": "Confirmation",
+    "candle": "Candle",
+    "range": "Range",
+    "key_level": "Key Level",
+    "liquidity": "Liquidity",
 }
 
 

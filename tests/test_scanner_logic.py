@@ -1853,6 +1853,29 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("strength meter", scanner.explain_concept(" RSI ", "beginner"))
         self.assertIsNone(scanner.explain_concept("mystery term", "beginner"))
 
+    def test_new_explanation_concepts_resolve_for_beginner_and_experienced(self):
+        expected_phrases = {
+            "confirmation": ("finishes the time period beyond it", "candle CLOSE beyond a level"),
+            "candle": ("one chunk of time", "OHLC for one period"),
+            "range": ("box", "price bounded between horizontal support and resistance"),
+            "key_level": ("A price that matters", "price with a history of reaction"),
+            "liquidity": ("lots of buyers and sellers", "depth of available buy/sell orders"),
+        }
+
+        for concept, (beginner_phrase, experienced_phrase) in expected_phrases.items():
+            with self.subTest(concept=concept):
+                self.assertIn(beginner_phrase, scanner.explain_concept(concept, "beginner"))
+                self.assertIn(experienced_phrase, scanner.explain_concept(concept, "experienced"))
+
+    def test_new_explanation_aliases_resolve(self):
+        self.assertEqual(scanner.normalize_concept_key("confirmed break"), "confirmation")
+        self.assertEqual(scanner.normalize_concept_key("candlestick"), "candle")
+        self.assertEqual(scanner.normalize_concept_key("body"), "candle")
+        self.assertEqual(scanner.normalize_concept_key("range bound"), "range")
+        self.assertEqual(scanner.normalize_concept_key("key level"), "key_level")
+        self.assertEqual(scanner.normalize_concept_key("zone"), "key_level")
+        self.assertEqual(scanner.normalize_concept_key("illiquid"), "liquidity")
+
     def test_explain_command_sends_beginner_explanation_from_profile(self):
         sent_messages = []
 
