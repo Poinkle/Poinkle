@@ -36,7 +36,8 @@ if str(PROJECT_DIR) not in sys.path:
 from scanner import format_scan_message, scan_top_100
 from explanations import available_concepts, concept_display_name, explain_concept, normalize_concept_key
 
-WELCOME_BANNER_PATH = PROJECT_DIR / "assets" / "welcome_banner.jpg"
+ASSETS_DIR = PROJECT_DIR / "assets"
+WELCOME_BANNER_PATH = ASSETS_DIR / "welcome_banner.jpg"
 TELEGRAM_PHOTO_CAPTION_LIMIT = 1024
 
 try:
@@ -4747,6 +4748,45 @@ def build_explain_command_message(message_text, skill_level=None):
     return f"<b>{concept_display_name(resolved_key)}</b>\n\n{explanation}"
 
 
+def explain_command_concept_key(message_text):
+    parts = message_text.strip().split(maxsplit=1)
+    if len(parts) < 2 or not parts[1].strip():
+        return None
+
+    concept = parts[1].strip()
+    if explain_concept(concept) is None:
+        return None
+    return normalize_concept_key(concept)
+
+
+def concept_teaching_card_path(concept_key):
+    resolved_key = normalize_concept_key(concept_key)
+    if not resolved_key:
+        return None
+
+    card_path = ASSETS_DIR / f"concept_teaching_card_{resolved_key}.png"
+    return card_path if card_path.exists() else None
+
+
+def send_explain_command_response(telegram_token, response_chat_id, message, concept_key=None):
+    card_path = concept_teaching_card_path(concept_key)
+    if card_path is None:
+        send_telegram_message(telegram_token, response_chat_id, message)
+        return
+
+    if len(message) <= TELEGRAM_PHOTO_CAPTION_LIMIT:
+        if send_telegram_photo(telegram_token, response_chat_id, str(card_path), caption=message):
+            return
+        send_telegram_message(telegram_token, response_chat_id, message)
+        return
+
+    if send_telegram_photo(telegram_token, response_chat_id, str(card_path)):
+        send_telegram_message(telegram_token, response_chat_id, message)
+        return
+
+    send_telegram_message(telegram_token, response_chat_id, message)
+
+
 def handle_explain_command(telegram_token, telegram_chat_id, message_text, source_chat=None, from_user=None):
     source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
     from_user = from_user or {}
@@ -4754,10 +4794,11 @@ def handle_explain_command(telegram_token, telegram_chat_id, message_text, sourc
     is_private = is_private_chat(source_chat)
     user_id = str(from_user.get("id") or response_chat_id if is_private else from_user.get("id") or "")
     skill_level = user_skill_level(user_id) if user_id else None
-    send_telegram_message(
+    send_explain_command_response(
         telegram_token,
         response_chat_id,
         build_explain_command_message(message_text, skill_level=skill_level),
+        concept_key=explain_command_concept_key(message_text),
     )
 
 

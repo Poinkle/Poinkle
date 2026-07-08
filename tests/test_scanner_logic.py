@@ -1906,6 +1906,8 @@ class ScannerLogicTests(unittest.TestCase):
             profile_path = Path(tmpdir) / "user_profiles.json"
             profile_path.write_text(json.dumps({"777": {"skill_level": "beginner"}}))
             with patch.object(scanner, "USER_PROFILES_FILE", profile_path), patch.object(
+                scanner, "ASSETS_DIR", Path(tmpdir) / "assets"
+            ), patch.object(
                 scanner,
                 "send_telegram_message",
                 side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
@@ -1942,6 +1944,93 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertIn("<b>EMA</b>", sent_messages[0][1])
         self.assertIn("exponentially weighted moving average", sent_messages[0][1])
+
+    def test_explain_command_sends_concept_card_with_caption_when_available(self):
+        sent_photos = []
+        sent_messages = []
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            assets_dir = Path(tmpdir) / "assets"
+            assets_dir.mkdir()
+            card_path = assets_dir / "concept_teaching_card_rsi.png"
+            card_path.write_bytes(b"fake png")
+            with patch.object(scanner, "ASSETS_DIR", assets_dir), patch.object(
+                scanner,
+                "send_telegram_photo",
+                side_effect=lambda token, chat_id, path, caption="": sent_photos.append((str(chat_id), path, caption)) or True,
+            ), patch.object(
+                scanner,
+                "send_telegram_message",
+                side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
+            ):
+                scanner.handle_explain_command(
+                    "TOKEN",
+                    "-100",
+                    "/explain RSI",
+                    source_chat={"id": "-100", "type": "group"},
+                    from_user={"id": 777},
+                )
+
+        self.assertEqual(len(sent_photos), 1)
+        self.assertEqual(sent_photos[0][0:2], ("-100", str(card_path)))
+        self.assertIn("<b>RSI</b>", sent_photos[0][2])
+        self.assertIn("momentum oscillator", sent_photos[0][2])
+        self.assertEqual(sent_messages, [])
+
+    def test_explain_command_sends_image_then_text_when_caption_is_too_long(self):
+        sent_photos = []
+        sent_messages = []
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            assets_dir = Path(tmpdir) / "assets"
+            assets_dir.mkdir()
+            card_path = assets_dir / "concept_teaching_card_rsi.png"
+            card_path.write_bytes(b"fake png")
+            long_message = "<b>RSI</b>\n\n" + ("Long explanation. " * 120)
+            with patch.object(scanner, "ASSETS_DIR", assets_dir), patch.object(
+                scanner, "build_explain_command_message", return_value=long_message
+            ), patch.object(
+                scanner,
+                "send_telegram_photo",
+                side_effect=lambda token, chat_id, path, caption="": sent_photos.append((str(chat_id), path, caption)) or True,
+            ), patch.object(
+                scanner,
+                "send_telegram_message",
+                side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
+            ):
+                scanner.handle_explain_command(
+                    "TOKEN",
+                    "777",
+                    "/explain rsi",
+                    source_chat={"id": "777", "type": "private"},
+                    from_user={"id": 777},
+                )
+
+        self.assertEqual(sent_photos, [("777", str(card_path), "")])
+        self.assertEqual(sent_messages, [("777", long_message)])
+
+    def test_explain_command_falls_back_to_text_when_no_concept_card_exists(self):
+        sent_messages = []
+
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            scanner, "ASSETS_DIR", Path(tmpdir) / "assets"
+        ), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
+        ), patch.object(
+            scanner, "send_telegram_photo", side_effect=AssertionError("missing card should not send photo")
+        ):
+            scanner.handle_explain_command(
+                "TOKEN",
+                "777",
+                "/explain support",
+                source_chat={"id": "777", "type": "private"},
+                from_user={"id": 777},
+            )
+
+        self.assertEqual(sent_messages[0][0], "777")
+        self.assertIn("<b>Support</b>", sent_messages[0][1])
 
     def test_explain_command_lists_concepts_for_empty_or_unknown_term(self):
         menu = scanner.build_explain_command_message("/explain")
