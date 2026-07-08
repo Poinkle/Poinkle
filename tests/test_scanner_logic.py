@@ -1876,6 +1876,29 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(scanner.normalize_concept_key("zone"), "key_level")
         self.assertEqual(scanner.normalize_concept_key("illiquid"), "liquidity")
 
+    def test_stage_three_explanation_concepts_resolve_for_beginner_and_experienced(self):
+        expected_phrases = {
+            "market_structure": ("overall shape of how price rises and falls", "sequence of swing highs/lows"),
+            "accumulation": ("quietly stepping in over time", "building a position gradually"),
+            "retest": ("comes back to test that level again", "price returns to a broken level"),
+            "follow_through": ("What happens after a move or a break", "continuation after an initial move/break"),
+            "trade_plan": ("decided-in-advance answer", "predefined entry, target(s), and stop"),
+        }
+
+        for concept, (beginner_phrase, experienced_phrase) in expected_phrases.items():
+            with self.subTest(concept=concept):
+                self.assertIn(beginner_phrase, scanner.explain_concept(concept, "beginner"))
+                self.assertIn(experienced_phrase, scanner.explain_concept(concept, "experienced"))
+
+    def test_stage_three_explanation_aliases_resolve(self):
+        self.assertEqual(scanner.normalize_concept_key("market structure"), "market_structure")
+        self.assertEqual(scanner.normalize_concept_key("higher highs"), "market_structure")
+        self.assertEqual(scanner.normalize_concept_key("accumulation zone"), "accumulation")
+        self.assertEqual(scanner.normalize_concept_key("re-test"), "retest")
+        self.assertEqual(scanner.normalize_concept_key("follow through"), "follow_through")
+        self.assertEqual(scanner.normalize_concept_key("trade plan"), "trade_plan")
+        self.assertEqual(scanner.normalize_concept_key("stop loss"), "trade_plan")
+
     def test_explain_command_sends_beginner_explanation_from_profile(self):
         sent_messages = []
 

@@ -202,6 +202,87 @@ EXPLANATION_REGISTRY = {
             "more slippage, sharper moves on smaller size."
         ),
     },
+    "market_structure": {
+        "beginner": (
+            "The overall shape of how price rises and falls over time. When each high "
+            "is higher than the last and each dip is higher too (higher highs, higher "
+            "lows), the structure is trending up. The reverse (lower highs, lower "
+            "lows) is trending down. When it's neither, price is moving sideways. "
+            "It's the big picture underneath the day-to-day price changes. Honest "
+            "limit: structure describes what's happened, not what must happen next — "
+            "it can shift."
+        ),
+        "experienced": (
+            "Market structure — the sequence of swing highs/lows. Higher highs + "
+            "higher lows = uptrend; lower highs + lower lows = downtrend; otherwise "
+            "ranging. Structure breaks (a failed HH/HL sequence) flag potential "
+            "regime change."
+        ),
+    },
+    "accumulation": {
+        "beginner": (
+            "When buyers are quietly stepping in over time — often while price moves "
+            "sideways or dips — slowly building their investment instead of buying all "
+            "at once. Think of it as slowly filling a basket while prices are low, "
+            "rather than grabbing everything in one rush. It's the heart of "
+            "\"patience compounds\": small, steady buys at good levels. Honest limit: "
+            "accumulation is a strategy, not a guarantee — the price can still fall "
+            "further, which is why you never buy all at once."
+        ),
+        "experienced": (
+            "Accumulation — building a position gradually over time/levels rather "
+            "than a single entry. Often occurs during sideways/basing action. Scaling "
+            "in manages timing risk; size discipline matters since price can extend "
+            "lower."
+        ),
+    },
+    "retest": {
+        "beginner": (
+            "After price breaks through a level, it often comes back to test that "
+            "level again before continuing — like checking if the door you just "
+            "walked through still holds. If a price that used to act as a ceiling now "
+            "acts as a floor (price breaks above, dips back, and holds), that's a "
+            "healthy retest and a stronger sign the breakout is holding. Honest "
+            "limit: not every retest holds — sometimes price falls back through, "
+            "which tells you the break may have been weak."
+        ),
+        "experienced": (
+            "Retest — price returns to a broken level to test it as new "
+            "support/resistance (role reversal). A holding retest strengthens the "
+            "break and offers a cleaner entry with defined risk; a failed retest "
+            "signals a weak/false break."
+        ),
+    },
+    "follow_through": {
+        "beginner": (
+            "What happens after a move or a break — does price keep going in that "
+            "direction, or fade out? Strong follow-through (continued movement, often "
+            "with steady volume) suggests the move had more buying behind it. Weak "
+            "follow-through suggests it may have been a false start. Honest limit: "
+            "it's something you see after the move has already started — you're "
+            "reading whether a move stuck, not predicting that it will."
+        ),
+        "experienced": (
+            "Follow-through — continuation after an initial move/break, ideally with "
+            "sustained volume. Strong follow-through validates the move; weak/absent "
+            "follow-through warns of a failed or exhausted push."
+        ),
+    },
+    "trade_plan": {
+        "beginner": (
+            "Your decided-in-advance answer to three questions before you ever buy: "
+            "where you'll buy (your entry), where you'll sell if things go well (your "
+            "target), and where you'll get out if they don't (your stop). Having a "
+            "plan before you act keeps emotion out of the decision. Honest limit: a "
+            "plan doesn't make you right — it makes you disciplined. The point isn't "
+            "to win every time; it's to never be caught without a decision."
+        ),
+        "experienced": (
+            "Trade plan — predefined entry, target(s), and stop (invalidation), with "
+            "position size set by the risk between entry and stop. Removes "
+            "in-the-moment emotion; enforces consistent risk/reward and discipline."
+        ),
+    },
 }
 
 
@@ -250,6 +331,31 @@ EXPLANATION_ALIASES = {
     "liquidity": "liquidity",
     "liquid": "liquidity",
     "illiquid": "liquidity",
+    "market_structure": "market_structure",
+    "market structure": "market_structure",
+    "structure": "market_structure",
+    "higher highs": "market_structure",
+    "lower lows": "market_structure",
+    "accumulation": "accumulation",
+    "accumulate": "accumulation",
+    "accumulating": "accumulation",
+    "accumulation zone": "accumulation",
+    "retest": "retest",
+    "re-test": "retest",
+    "retesting": "retest",
+    "retested": "retest",
+    "follow_through": "follow_through",
+    "follow through": "follow_through",
+    "followthrough": "follow_through",
+    "follow-through": "follow_through",
+    "trade_plan": "trade_plan",
+    "trade plan": "trade_plan",
+    "plan": "trade_plan",
+    "entry": "trade_plan",
+    "target": "trade_plan",
+    "stop": "trade_plan",
+    "stop loss": "trade_plan",
+    "exit": "trade_plan",
 }
 
 
@@ -268,6 +374,11 @@ CONCEPT_DISPLAY_NAMES = {
     "range": "Range",
     "key_level": "Key Level",
     "liquidity": "Liquidity",
+    "market_structure": "Market Structure",
+    "accumulation": "Accumulation",
+    "retest": "Retest",
+    "follow_through": "Follow-Through",
+    "trade_plan": "Trade Plan",
 }
 
 
