@@ -2671,6 +2671,14 @@ def candle_body_percent(open_price, close):
     return abs(close - open_price) / open_price * 100
 
 
+def breakout_confirmation_quality_met(candle, location_filter):
+    _timestamp, open_price, _high, _low, close, _volume = candle
+    return (
+        location_filter.get("range_position") == "Upper Range"
+        and candle_body_percent(open_price, close) >= 1.5
+    )
+
+
 def volume_alert_takeaway(alert, skill_level=None):
     if skill_level == "beginner":
         if alert.get("direction") == "bullish":
@@ -3036,6 +3044,18 @@ def should_send_level_break_alert(alert):
     if not is_level_break_alert(alert):
         return True
     return alert.get("type", "").endswith(":confirmation")
+
+
+def is_bullish_scan_alert(alert):
+    alert_type = alert.get("type", "")
+    if alert_type in {"rsi_cross_above_70", "ema_cross_above"}:
+        return True
+    if alert_type == "volume_spike":
+        return alert.get("direction") == "bullish"
+    if alert_type.endswith(":confirmation"):
+        trade_plan = alert.get("trade_plan") or {}
+        return trade_plan.get("direction") == "LONG"
+    return False
 
 
 def is_ema_cross_alert(alert):
@@ -3415,7 +3435,26 @@ def has_volume_alert_context(alerts, active_trade_status=None):
     )
 
 
-def should_send_telegram_alert(alert, alerts, active_trade_status=None):
+def should_send_telegram_alert(
+    alert,
+    alerts,
+    active_trade_status=None,
+    ema_21=None,
+    ema_55=None,
+    range_location=None,
+):
+    if alert.get("type") == "rsi_cross_above_70":
+        return False
+
+    if (
+        is_bullish_scan_alert(alert)
+        and ema_21 is not None
+        and ema_55 is not None
+        and ema_21 < ema_55
+        and range_location != "Lower Range"
+    ):
+        return False
+
     return True
 
 
@@ -5908,6 +5947,24 @@ def build_level_alerts(
                 del pending_setups[setup_key]
                 continue
 
+            if direction == "breakout" and not breakout_confirmation_quality_met(
+                current_candle,
+                location_filter,
+            ):
+                alerts.append(
+                    {
+                        "type": f"{setup_key}:weak_break",
+                        "label": "Weak Break / Watch Only",
+                        "emoji": "⚠️",
+                        "level": level,
+                        "detail": "Break detected, but breakout quality floor was not met.",
+                        "location_filter": location_filter,
+                        "break_strength_score": setup.get("break_strength_score", 0),
+                    }
+                )
+                del pending_setups[setup_key]
+                continue
+
             trade_plan = build_trade_plan(
                 trade_direction,
                 level,
@@ -6277,6 +6334,7 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
                 .get(symbol, {})
                 .get("last_status")
             )
+            range_location, _ = get_range_location(candle[4], range_low, range_high)
             pending_alerts = []
             for alert in alerts:
                 event_key = f"{candle_id}:{alert['type']}"
@@ -6291,15 +6349,21 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
                     sent_alerts[alert["type"]] = event_key
                     save_state(state)
                     continue
-                if not should_send_telegram_alert(alert, alerts, active_trade_status):
+                if not should_send_telegram_alert(
+                    alert,
+                    alerts,
+                    active_trade_status,
+                    ema_21=ema_21,
+                    ema_55=ema_55,
+                    range_location=range_location,
+                ):
                     log_suppressed_volume_alert(
                         symbol,
                         candle,
                         alert,
                         volume_avg,
                         (
-                            "No breakout attempt, breakdown attempt, EMA cross, "
-                            "Retest Holding, or Retest Failed context."
+                            "Bullish swing-entry qualification filters were not met."
                         ),
                     )
                     sent_alerts[alert["type"]] = event_key
@@ -6367,10 +6431,21 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
 
             if pending_alerts:
                 secondary_timeframe_context = get_secondary_timeframe_context(exchange, symbol)
-                if secondary_timeframe_context:
+                if not secondary_timeframe_context:
+                    log_info(
+                        f"Suppressed scanner alert for {symbol}: "
+                        "secondary 4h/8h context unavailable."
+                    )
+                    for alert in pending_alerts:
+                        sent_alerts[alert["type"]] = f"{candle_id}:{alert['type']}"
+                    save_state(state)
+                    pending_alerts = []
+                    alert_group = []
+                else:
                     for alert in alert_group:
                         alert["secondary_timeframe_context"] = secondary_timeframe_context
 
+            if pending_alerts:
                 for alert in pending_alerts:
                     location_filter = alert.get("location_filter")
                     if location_filter:
