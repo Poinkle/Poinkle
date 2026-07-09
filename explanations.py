@@ -283,6 +283,63 @@ EXPLANATION_REGISTRY = {
             "in-the-moment emotion; enforces consistent risk/reward and discipline."
         ),
     },
+    "market_score": {
+        "beginner": (
+            "A single 0-100 rating of how strong a coin's overall setup looks "
+            "right now, shown as a score out of 10. Higher means more of the "
+            "signals are lining up favorably — a quick way to compare coins at a "
+            "glance. Honest limit: it describes the moment, not the future. A high "
+            "score is a starting point for a closer look, never a reason to buy on "
+            "its own."
+        ),
+        "experienced": (
+            "Market Score — 0-100 overall technical confidence from market "
+            "structure inputs, displayed as X.X/10. A ranking aid, not a trigger."
+        ),
+    },
+    "setup_quality": {
+        "beginner": (
+            "A simple letter grade — A+ down to F — for how clean a trade setup "
+            "looks. It's just the Break Strength Score written as a letter instead "
+            "of a number: an A means the signs are strong, an F means steer clear. "
+            "Honest limit: a high grade means a better-looking setup — nothing "
+            "more. The cleanest-looking setups still lose sometimes."
+        ),
+        "experienced": (
+            "Setup Quality — the A+-F letter grade mapped directly from the "
+            "(adjusted) Break Strength Score. Not a separate model."
+        ),
+    },
+    "break_strength_score": {
+        "beginner": (
+            "A 0-100 score for how convincing a breakout or breakdown really is. "
+            "It looks at things like volume, momentum, and how firmly price closed "
+            "past the level. Higher means more signs the move is real instead of a "
+            "quick fake-out. Honest limit: a high score tilts the odds in your "
+            "favor — it can't remove the risk. Convincing breaks fail all the time."
+        ),
+        "experienced": (
+            "Break Strength Score — 0-100 from volume, RSI/EMA alignment, close "
+            "strength beyond level, retest quality, and room to target; capped "
+            "down for poor location or weak momentum."
+        ),
+    },
+    "patience_grade": {
+        "beginner": (
+            "A letter grade — A to F — for how well a coin fits patiently "
+            "building up a position right now, a little at a time, instead of "
+            "buying all at once. It weighs things like how close price is to "
+            "support, the overall trend, and volume. An A means conditions favor "
+            "waiting and adding slowly; an F means sit on your hands. Honest "
+            "limit: it grades the conditions, not what happens next — and even an "
+            "A is never a reason to go all in. Only ever swing a portion."
+        ),
+        "experienced": (
+            "Patience Grade — A-F accumulation-fit grade (support proximity, trend "
+            "bias, RSI zone, volume, market structure). Distinct from the "
+            "patience_score proximity metric."
+        ),
+    },
 }
 
 
@@ -360,6 +417,18 @@ EXPLANATION_ALIASES = {
     "stop": "trade_plan",
     "stop loss": "trade_plan",
     "exit": "trade_plan",
+    "market score": "market_score",
+    "marketscore": "market_score",
+    "setup quality": "setup_quality",
+    "setupquality": "setup_quality",
+    "quality": "setup_quality",
+    "break strength": "break_strength_score",
+    "break strength score": "break_strength_score",
+    "breakstrength": "break_strength_score",
+    "break score": "break_strength_score",
+    "patience grade": "patience_grade",
+    "patiencegrade": "patience_grade",
+    "patience": "patience_grade",
 }
 
 
@@ -383,6 +452,10 @@ CONCEPT_DISPLAY_NAMES = {
     "retest": "Retest",
     "follow_through": "Follow-Through",
     "trade_plan": "Trade Plan",
+    "market_score": "Market Score",
+    "setup_quality": "Setup Quality",
+    "break_strength_score": "Break Strength Score",
+    "patience_grade": "Patience Grade",
 }
 
 
