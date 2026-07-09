@@ -10,5 +10,32 @@
       "last_triggered": {},
       "type": "all"
     }
+  },
+  "8167900554": {
+    "BTC": {
+      "enabled": true,
+      "last_triggered": {},
+      "type": "all"
+    },
+    "ETH": {
+      "enabled": true,
+      "last_triggered": {},
+      "type": "all"
+    },
+    "ICP": {
+      "enabled": true,
+      "last_triggered": {},
+      "type": "all"
+    },
+    "PENGU": {
+      "enabled": true,
+      "last_triggered": {},
+      "type": "all"
+    },
+    "SOL": {
+      "enabled": true,
+      "last_triggered": {},
+      "type": "all"
+    }
   }
 }
