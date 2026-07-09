@@ -49,6 +49,16 @@ CONCEPT_TEACHING_CARD_FILES = {
     "trend": "trend.png",
     "ema": "ema.png",
     "volume_spike": "volume.png",
+    "confirmation": "confirmation.png",
+    "candle": "candle.png",
+    "range": "range.png",
+    "key_level": "keylevel.png",
+    "liquidity": "liquidity.png",
+    "market_structure": "structure.png",
+    "accumulation": "accumulation.png",
+    "retest": "retest.png",
+    "follow_through": "followthrough.png",
+    "trade_plan": "tradeplan.png",
 }
 
 try:
