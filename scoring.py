@@ -43,7 +43,7 @@ def strongest_opportunity_score(snapshot):
         score += 5
     if snapshot["bias"] == "Bullish":
         score += 4
-    if snapshot["accumulation_grade"] in {"A", "B"}:
+    if snapshot["patience_grade"] in {"A", "B"}:
         score += 4
 
     return min(score, 100)

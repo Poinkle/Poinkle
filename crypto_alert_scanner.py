@@ -1789,7 +1789,7 @@ def build_market_summary(
     )
 
 
-def grade_accumulation(score):
+def grade_patience(score):
     if score >= 80:
         return "A", "Excellent accumulation"
     if score >= 65:
@@ -1801,7 +1801,7 @@ def grade_accumulation(score):
     return "F", "Avoid"
 
 
-def score_accumulation_setup(
+def score_patience_setup(
     current_price,
     trend_bias,
     current_rsi,
@@ -1879,7 +1879,7 @@ def score_accumulation_setup(
     else:
         negative_reasons.append("✗ Below EMA55")
 
-    grade, label = grade_accumulation(score)
+    grade, label = grade_patience(score)
     return {
         "score": min(score, 100),
         "grade": grade,
@@ -1953,10 +1953,10 @@ def calculate_overall_confidence(
     return min(confidence, 100)
 
 
-def get_best_use_cases(accumulation_grade, support_distance_label, range_position, trend_bias, market_structure):
+def get_best_use_cases(patience_grade, support_distance_label, range_position, trend_bias, market_structure):
     if range_position == "Near Resistance":
         return ["✓ Trim Position", "✓ Wait For Pullback"]
-    if accumulation_grade in {"A", "B"} and support_distance_label in {"At Support", "Near Support"}:
+    if patience_grade in {"A", "B"} and support_distance_label in {"At Support", "Near Support"}:
         return ["✓ DCA", "✓ Long-Term Hold", "✗ Breakout Trade"]
     if trend_bias == "Bullish" and market_structure == "Higher Highs / Higher Lows":
         return ["✓ Long-Term Hold", "✓ Wait For Pullback"]
@@ -3747,7 +3747,7 @@ def build_levels_command_message(exchange, symbol, skill_level=None):
     trend_reasons = build_trend_reasons(trend_bias, current_price, ema_21, ema_55, current_rsi)
     momentum_label = get_momentum_label(current_rsi, ema_21, ema_55)
     volume_confirmation = get_volume_confirmation_label(volume_multiple)
-    accumulation = score_accumulation_setup(
+    accumulation = score_patience_setup(
         current_price,
         trend_bias,
         current_rsi,
@@ -3867,7 +3867,7 @@ def build_levels_scan_snapshot(exchange, symbol):
     distance_to_resistance = calculate_distance_to_zone_pct(
         current_price, resistance_zones[0] if resistance_zones else None
     )
-    accumulation = score_accumulation_setup(
+    accumulation = score_patience_setup(
         current_price,
         trend_bias,
         current_rsi,
@@ -3916,8 +3916,8 @@ def build_levels_scan_snapshot(exchange, symbol):
         "resistance_zones": resistance_zones,
         "market_score": market_score,
         "bias": trend_bias,
-        "accumulation_grade": accumulation["grade"],
-        "accumulation_label": accumulation["label"],
+        "patience_grade": accumulation["grade"],
+        "patience_label": accumulation["label"],
         "strategy": strategy,
         "location": current_location,
         "support_distance_label": support_distance_label,
@@ -4091,8 +4091,8 @@ def render_prb(snapshot, news_data=None, fundamentals_data=None, updated=None, r
     current_price = snapshot.get("current_price", 0)
     support_zones = snapshot.get("support_zones", [])
     resistance_zones = snapshot.get("resistance_zones", [])
-    accumulation_grade = snapshot.get("accumulation_grade", "N/A")
-    accumulation_label = snapshot.get("accumulation_label", "Pending Evidence")
+    patience_grade = snapshot.get("patience_grade", "N/A")
+    patience_label = snapshot.get("patience_label", "Pending Evidence")
     bias = snapshot.get("bias", "Pending Evidence")
     location = snapshot.get("location", "Pending Evidence")
     market_structure_label = snapshot.get("market_structure_label", "Pending Evidence")
@@ -4155,7 +4155,7 @@ def render_prb(snapshot, news_data=None, fundamentals_data=None, updated=None, r
         f"Historical Pattern: Full Research Pending\n"
         f"Macro Environment: Full Research Pending\n"
         f"Institutional Adoption: Full Research Pending\n"
-        f"Risk: {accumulation_grade} — {accumulation_label}\n\n"
+        f"Risk: {patience_grade} — {patience_label}\n\n"
         f"{separator}\n\n"
         f"📌 RESEARCH CONCLUSION\n\n"
         f"This is a market-structure brief, not a complete investment thesis. "
