@@ -205,6 +205,7 @@ ACCURACY_AUDIT_SYMBOLS = {"BTC/USD", "ETH/USD", "SOL/USD", "AAVE/USD", "PEPE/USD
 ALERT_DELIVERY_METRIC_LIMIT = 100
 LEVEL_ALERT_TYPES = {"support", "resistance", "all", "critical"}
 MAX_USER_WATCHLIST = 10
+MAX_TOTAL_SCAN_SYMBOLS = 200
 EASTERN_TIME = ZoneInfo("America/New_York")
 ERROR_LOG_STATE = {}
 DEFAULT_BOT_CONFIG = {
@@ -221,6 +222,7 @@ PUBLIC_BOT_COMMANDS = [
     {"command": "myalerts", "description": "View your active alerts"},
     {"command": "watch", "description": "Add a coin to your watchlist"},
     {"command": "unwatch", "description": "Remove a coin from your watchlist"},
+    {"command": "clearwatch", "description": "Clear watched coins by number"},
     {"command": "mywatch", "description": "View your watched coins"},
     {"command": "watching", "description": "View your watched coins"},
     {"command": "mike", "description": "Mike's curated watchlist"},
@@ -1378,6 +1380,51 @@ def validate_tradeable_symbol(exchange, user_input):
     except Exception as error:
         log_warn(f"Could not validate watchlist symbol {symbol}: {error}")
         return None
+
+
+def build_scan_symbols():
+    symbols = []
+    seen = set()
+
+    def add_symbol(symbol):
+        normalized_symbol = normalize_trade_symbol_input(str(symbol or ""))
+        if (
+            not normalized_symbol
+            or normalized_symbol in seen
+            or normalized_symbol in UNSUPPORTED_SYMBOLS_THIS_SESSION
+        ):
+            return False
+        symbols.append(normalized_symbol)
+        seen.add(normalized_symbol)
+        return True
+
+    for symbol in WATCHLIST:
+        add_symbol(symbol)
+
+    skipped_user_symbols = 0
+    for user_symbols in load_user_watchlists().values():
+        if not isinstance(user_symbols, list):
+            continue
+        for symbol in user_symbols:
+            normalized_symbol = normalize_trade_symbol_input(str(symbol or ""))
+            if (
+                not normalized_symbol
+                or normalized_symbol in seen
+                or normalized_symbol in UNSUPPORTED_SYMBOLS_THIS_SESSION
+            ):
+                continue
+            if len(symbols) >= MAX_TOTAL_SCAN_SYMBOLS:
+                skipped_user_symbols += 1
+                continue
+            add_symbol(normalized_symbol)
+
+    if skipped_user_symbols:
+        log_warn(
+            f"Skipped {skipped_user_symbols} user watchlist symbol(s): "
+            f"scan symbol cap is {MAX_TOTAL_SCAN_SYMBOLS}."
+        )
+
+    return symbols
 
 
 def get_trend_bias(current_price, ema_21, ema_55, current_rsi):
@@ -5328,11 +5375,118 @@ def handle_mywatch_command(
         )
         return
 
-    coin_list = ", ".join(base_symbol(symbol) for symbol in sorted(user_symbols, key=base_symbol))
+    sorted_symbols = sorted(user_symbols, key=base_symbol)
+    lines = ["Your watchlist:"]
+    for index, symbol in enumerate(sorted_symbols, start=1):
+        lines.append(f"{index}. {base_symbol(symbol)}")
     send_telegram_message(
         telegram_token,
         response_chat_id,
-        f"Your Poinkle watchlist ({len(user_symbols)}/{MAX_USER_WATCHLIST}):\n{coin_list}",
+        "\n".join(lines),
+    )
+
+
+def handle_clearwatch_command(
+    telegram_token,
+    telegram_chat_id,
+    message_text,
+    source_chat=None,
+    from_user=None,
+):
+    parts = message_text.strip().split()
+    source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
+    from_user = from_user or {}
+    response_chat_id = str(source_chat.get("id", telegram_chat_id))
+    user_chat_id = alert_dm_chat_id(source_chat, from_user, telegram_chat_id)
+    watchlists = load_user_watchlists()
+    user_symbols = sorted(watchlists.get(user_chat_id, []), key=base_symbol)
+
+    if len(parts) < 2:
+        send_telegram_message(
+            telegram_token,
+            response_chat_id,
+            "Use: /clearwatch 2\nOr: /clearwatch 2 3 4\nOr: /clearwatch all",
+        )
+        return
+
+    if not user_symbols:
+        send_telegram_message(
+            telegram_token,
+            response_chat_id,
+            "You’re not watching any coins yet. Add one with /watch BTC.",
+        )
+        return
+
+    args = [part.lower() for part in parts[1:]]
+    if args[0] == "all":
+        if len(args) >= 2 and args[1] == "confirm":
+            watchlists.pop(user_chat_id, None)
+            save_user_watchlists(watchlists)
+            send_telegram_message(
+                telegram_token,
+                response_chat_id,
+                f"✅ Cleared all {len(user_symbols)} coins from your watchlist.",
+            )
+            return
+        send_telegram_message(
+            telegram_token,
+            response_chat_id,
+            f"This will remove all {len(user_symbols)} coins. Reply /clearwatch all confirm to proceed.",
+        )
+        return
+
+    requested_positions = []
+    invalid_args = []
+    for arg in args:
+        try:
+            position = int(arg)
+        except ValueError:
+            invalid_args.append(arg)
+            continue
+        if position < 1 or position > len(user_symbols):
+            invalid_args.append(arg)
+            continue
+        requested_positions.append(position)
+
+    if invalid_args:
+        send_telegram_message(
+            telegram_token,
+            response_chat_id,
+            f"You don’t have an item {', '.join(invalid_args)}.",
+        )
+        return
+
+    if not requested_positions:
+        send_telegram_message(
+            telegram_token,
+            response_chat_id,
+            "Use numbers from /mywatch, like /clearwatch 2.",
+        )
+        return
+
+    positions_to_remove = set(requested_positions)
+    removed_symbols = [
+        symbol
+        for index, symbol in enumerate(user_symbols, start=1)
+        if index in positions_to_remove
+    ]
+    remaining_symbols = [
+        symbol
+        for index, symbol in enumerate(user_symbols, start=1)
+        if index not in positions_to_remove
+    ]
+
+    if remaining_symbols:
+        watchlists[user_chat_id] = remaining_symbols
+    else:
+        watchlists.pop(user_chat_id, None)
+    save_user_watchlists(watchlists)
+
+    removed = ", ".join(base_symbol(symbol) for symbol in removed_symbols)
+    send_telegram_message(
+        telegram_token,
+        response_chat_id,
+        f"Removed: {removed}.",
     )
 
 
@@ -5633,6 +5787,14 @@ def process_telegram_commands(exchange, telegram_token, telegram_chat_id, state)
             )
         elif lower_text.startswith("/alerts"):
             handle_alerts_command(
+                telegram_token,
+                chat_id,
+                text,
+                source_chat=chat,
+                from_user=from_user,
+            )
+        elif lower_text.startswith("/clearwatch"):
+            handle_clearwatch_command(
                 telegram_token,
                 chat_id,
                 text,
@@ -6548,7 +6710,8 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
     failed_symbols = 0
     compact_scan_lines = []
     main_chat_safe_mode = main_chat_safe_mode_enabled()
-    for symbol in WATCHLIST:
+    scan_symbols = build_scan_symbols()
+    for symbol in scan_symbols:
         if symbol in UNSUPPORTED_SYMBOLS_THIS_SESSION:
             skipped_symbols += 1
             continue
@@ -6906,7 +7069,7 @@ def main():
     send_status_update(telegram_token, telegram_chat_id, state, indicator="🟢")
 
     log_info("Poinkle scanner started.")
-    log_info(f"Watching {len(WATCHLIST)} symbols.")
+    log_info(f"Watching {len(WATCHLIST)} global symbols.")
     log_info(f"Loaded {count_enabled_user_alerts(load_user_alerts())} user alerts.")
     if TEST_MODE and DEBUG:
         run_test_mode_location_filter_examples()
