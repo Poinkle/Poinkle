@@ -191,6 +191,7 @@ SECONDARY_TIMEFRAME_1H_LIMIT = 480
 STATE_FILE = PROJECT_DIR / "scanner_state.json"
 DIAGNOSTICS_FILE = PROJECT_DIR / "diagnostics" / "alert_diagnostics.jsonl"
 USER_ALERTS_FILE = PROJECT_DIR / "user_alerts.json"
+USER_WATCHLISTS_FILE = PROJECT_DIR / "user_watchlists.json"
 USER_PROFILES_FILE = PROJECT_DIR / "user_profiles.json"
 BOT_CONFIG_FILE = PROJECT_DIR / "bot_config.json"
 ERROR_COOLDOWN_SECONDS = 300
@@ -203,6 +204,7 @@ COINBASE_PUBLIC_REQUESTS_PER_SECOND = 10
 ACCURACY_AUDIT_SYMBOLS = {"BTC/USD", "ETH/USD", "SOL/USD", "AAVE/USD", "PEPE/USD"}
 ALERT_DELIVERY_METRIC_LIMIT = 100
 LEVEL_ALERT_TYPES = {"support", "resistance", "all", "critical"}
+MAX_USER_WATCHLIST = 10
 EASTERN_TIME = ZoneInfo("America/New_York")
 ERROR_LOG_STATE = {}
 DEFAULT_BOT_CONFIG = {
@@ -217,6 +219,10 @@ PUBLIC_BOT_COMMANDS = [
     {"command": "levels", "description": "Legacy text-only version"},
     {"command": "alerts", "description": "Set a personal price-zone alert"},
     {"command": "myalerts", "description": "View your active alerts"},
+    {"command": "watch", "description": "Add a coin to your watchlist"},
+    {"command": "unwatch", "description": "Remove a coin from your watchlist"},
+    {"command": "mywatch", "description": "View your watched coins"},
+    {"command": "watching", "description": "View your watched coins"},
     {"command": "mike", "description": "Mike's curated watchlist"},
     {"command": "guide", "description": "Command and coin reference card"},
     {"command": "explain", "description": "Learn a market concept"},
@@ -713,6 +719,21 @@ def load_user_alerts():
 
 def save_user_alerts(alerts):
     write_json_file_atomic(USER_ALERTS_FILE, alerts, "user alerts")
+
+
+def load_user_watchlists():
+    if not USER_WATCHLISTS_FILE.exists():
+        return {}
+
+    try:
+        return json.loads(USER_WATCHLISTS_FILE.read_text())
+    except (json.JSONDecodeError, OSError) as error:
+        log_warn(f"Could not load user watchlists from {USER_WATCHLISTS_FILE}: {error}")
+        return {}
+
+
+def save_user_watchlists(watchlists):
+    write_json_file_atomic(USER_WATCHLISTS_FILE, watchlists, "user watchlists")
 
 
 def load_user_profiles():
@@ -1305,12 +1326,12 @@ def format_level(level):
     return f"{level:.8g}"
 
 
-def normalize_symbol(command_symbol):
+def normalize_trade_symbol_input(command_symbol):
     clean_symbol = command_symbol.strip().upper().replace("@", " ").split()[0]
     if not clean_symbol:
         return None
 
-    if clean_symbol.startswith(("/LEVELS", "/RESEARCH")):
+    if clean_symbol.startswith(("/LEVELS", "/RESEARCH", "/WATCH", "/UNWATCH")):
         return None
 
     clean_symbol = clean_symbol.replace("-", "/")
@@ -1324,11 +1345,39 @@ def normalize_symbol(command_symbol):
     if "/" not in clean_symbol:
         clean_symbol = f"{clean_symbol}/USD"
 
+    return clean_symbol
+
+
+def normalize_symbol(command_symbol):
+    clean_symbol = normalize_trade_symbol_input(command_symbol)
+    if not clean_symbol:
+        return None
+
     for watch_symbol in WATCHLIST:
         if clean_symbol == watch_symbol or clean_symbol == watch_symbol.replace("/", ""):
             return watch_symbol
 
     return None
+
+
+def validate_tradeable_symbol(exchange, user_input):
+    symbol = normalize_trade_symbol_input(user_input)
+    if not symbol:
+        return None
+
+    try:
+        if resolve_data_source(symbol) == "kraken":
+            kraken = kraken_exchange()
+            if kraken is None:
+                return None
+            markets = kraken.load_markets()
+            return kraken_ohlcv_symbol(symbol) if kraken_ohlcv_symbol(symbol) in markets else None
+
+        markets = exchange.load_markets()
+        return symbol if symbol in markets else None
+    except Exception as error:
+        log_warn(f"Could not validate watchlist symbol {symbol}: {error}")
+        return None
 
 
 def get_trend_bias(current_price, ema_21, ema_55, current_rsi):
@@ -5152,6 +5201,141 @@ def handle_myalerts_command(
     send_telegram_message(telegram_token, response_chat_id, "\n".join(lines))
 
 
+def handle_watch_command(
+    exchange,
+    telegram_token,
+    telegram_chat_id,
+    message_text,
+    source_chat=None,
+    from_user=None,
+):
+    parts = message_text.strip().split()
+    source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
+    from_user = from_user or {}
+    response_chat_id = str(source_chat.get("id", telegram_chat_id))
+    user_chat_id = alert_dm_chat_id(source_chat, from_user, telegram_chat_id)
+
+    if len(parts) < 2:
+        send_telegram_message(
+            telegram_token,
+            response_chat_id,
+            "Use: /watch BTC\nI’ll add it to your personal Poinkle watchlist.",
+        )
+        return
+
+    symbol = validate_tradeable_symbol(exchange, parts[1])
+    if symbol is None:
+        send_telegram_message(
+            telegram_token,
+            response_chat_id,
+            "I couldn’t find that coin yet. Try the ticker, like /watch BTC.",
+        )
+        return
+
+    watchlists = load_user_watchlists()
+    user_symbols = watchlists.setdefault(user_chat_id, [])
+    if symbol in user_symbols:
+        send_telegram_message(
+            telegram_token,
+            response_chat_id,
+            f"✅ You’re already watching {base_symbol(symbol)}.",
+        )
+        return
+
+    if len(user_symbols) >= MAX_USER_WATCHLIST:
+        send_telegram_message(
+            telegram_token,
+            response_chat_id,
+            f"You’re at the {MAX_USER_WATCHLIST}-coin limit. Remove one first with /unwatch BTC.",
+        )
+        return
+
+    user_symbols.append(symbol)
+    watchlists[user_chat_id] = sorted(user_symbols, key=base_symbol)
+    save_user_watchlists(watchlists)
+    send_telegram_message(
+        telegram_token,
+        response_chat_id,
+        f"✅ Added {base_symbol(symbol)} to your Poinkle watchlist.",
+    )
+
+
+def handle_unwatch_command(
+    telegram_token,
+    telegram_chat_id,
+    message_text,
+    source_chat=None,
+    from_user=None,
+):
+    parts = message_text.strip().split()
+    source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
+    from_user = from_user or {}
+    response_chat_id = str(source_chat.get("id", telegram_chat_id))
+    user_chat_id = alert_dm_chat_id(source_chat, from_user, telegram_chat_id)
+
+    if len(parts) < 2:
+        send_telegram_message(
+            telegram_token,
+            response_chat_id,
+            "Use: /unwatch BTC\nI’ll remove it from your personal Poinkle watchlist.",
+        )
+        return
+
+    symbol = normalize_trade_symbol_input(parts[1])
+    if symbol is None:
+        send_telegram_message(telegram_token, response_chat_id, "Tell me which coin to remove, like /unwatch BTC.")
+        return
+
+    watchlists = load_user_watchlists()
+    user_symbols = watchlists.get(user_chat_id, [])
+    if symbol not in user_symbols:
+        send_telegram_message(
+            telegram_token,
+            response_chat_id,
+            f"You weren’t watching {base_symbol(symbol)} yet.",
+        )
+        return
+
+    user_symbols = [existing_symbol for existing_symbol in user_symbols if existing_symbol != symbol]
+    if user_symbols:
+        watchlists[user_chat_id] = user_symbols
+    else:
+        watchlists.pop(user_chat_id, None)
+    save_user_watchlists(watchlists)
+    send_telegram_message(
+        telegram_token,
+        response_chat_id,
+        f"✅ Removed {base_symbol(symbol)} from your Poinkle watchlist.",
+    )
+
+
+def handle_mywatch_command(
+    telegram_token,
+    telegram_chat_id,
+    source_chat=None,
+    from_user=None,
+):
+    source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
+    response_chat_id = str(source_chat.get("id", telegram_chat_id))
+    user_chat_id = alert_dm_chat_id(source_chat, from_user or {}, telegram_chat_id)
+    user_symbols = load_user_watchlists().get(user_chat_id, [])
+
+    if not user_symbols:
+        send_telegram_message(
+            telegram_token,
+            response_chat_id,
+            "You’re not watching any coins yet. Add one with /watch BTC.",
+        )
+        return
+
+    coin_list = ", ".join(base_symbol(symbol) for symbol in sorted(user_symbols, key=base_symbol))
+    send_telegram_message(
+        telegram_token,
+        response_chat_id,
+        f"Your Poinkle watchlist ({len(user_symbols)}/{MAX_USER_WATCHLIST}):\n{coin_list}",
+    )
+
+
 def handle_levels_command(
     exchange,
     telegram_token,
@@ -5440,8 +5624,32 @@ def process_telegram_commands(exchange, telegram_token, telegram_chat_id, state)
                 source_chat=chat,
                 from_user=from_user,
             )
+        elif lower_text.startswith("/mywatch") or lower_text.startswith("/watching"):
+            handle_mywatch_command(
+                telegram_token,
+                chat_id,
+                source_chat=chat,
+                from_user=from_user,
+            )
         elif lower_text.startswith("/alerts"):
             handle_alerts_command(
+                telegram_token,
+                chat_id,
+                text,
+                source_chat=chat,
+                from_user=from_user,
+            )
+        elif lower_text.startswith("/unwatch"):
+            handle_unwatch_command(
+                telegram_token,
+                chat_id,
+                text,
+                source_chat=chat,
+                from_user=from_user,
+            )
+        elif lower_text.startswith("/watch"):
+            handle_watch_command(
+                exchange,
                 telegram_token,
                 chat_id,
                 text,
