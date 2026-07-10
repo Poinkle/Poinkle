@@ -5863,6 +5863,9 @@ def evaluate_active_trade(trade, price, candles):
 
 
 def monitor_active_trades(exchange, telegram_token, telegram_chat_id, state):
+    if not TRADE_TRACKING_TELEGRAM_ENABLED:
+        return
+
     if main_chat_safe_mode_enabled():
         if state.setdefault("__active_trades", {}):
             log_info("MAIN_CHAT_SAFE_MODE active - trade tracking Telegram updates are disabled.")
