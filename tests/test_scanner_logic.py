@@ -208,6 +208,80 @@ class ScannerLogicTests(unittest.TestCase):
             ],
         )
 
+    def test_fetch_swing_ohlcv_allows_valid_native_coinbase_timeframe(self):
+        class FakeCoinbase:
+            timeframes = {"1d": "ONE_DAY", "6h": "SIX_HOUR", "2h": "TWO_HOUR"}
+
+            def __init__(self):
+                self.calls = []
+
+            def fetch_ohlcv(self, symbol, timeframe, limit):
+                self.calls.append((symbol, timeframe, limit))
+                return [["candle"]]
+
+        class FakeCcxt:
+            def __init__(self, exchange):
+                self.exchange = exchange
+
+            def coinbase(self, config):
+                self.config = config
+                return self.exchange
+
+        exchange = FakeCoinbase()
+        fake_ccxt = FakeCcxt(exchange)
+        with patch.object(scanner, "ccxt", fake_ccxt):
+            candles = scanner.fetch_swing_ohlcv("BTC/USD", scanner.MIDDLE_TIMEFRAME, 120)
+
+        self.assertEqual(candles, [["candle"]])
+        self.assertEqual(exchange.calls, [("BTC/USD", "6h", 120)])
+        self.assertEqual(fake_ccxt.config, {"enableRateLimit": True})
+
+    def test_fetch_swing_ohlcv_rejects_invalid_coinbase_timeframe(self):
+        class FakeCoinbase:
+            timeframes = {"1d": "ONE_DAY", "6h": "SIX_HOUR", "2h": "TWO_HOUR"}
+
+            def fetch_ohlcv(self, symbol, timeframe, limit):
+                raise AssertionError("fetch_ohlcv should not be called")
+
+        class FakeCcxt:
+            def coinbase(self, config):
+                return FakeCoinbase()
+
+        with patch.object(scanner, "ccxt", FakeCcxt()):
+            with self.assertRaisesRegex(ValueError, "coinbase does not support timeframe 4h"):
+                scanner.fetch_swing_ohlcv("BTC/USD", "4h", 120)
+
+    def test_fetch_swing_ohlcv_clamps_limit_to_three_hundred(self):
+        warnings = []
+
+        class FakeCoinbase:
+            timeframes = {"1d": "ONE_DAY", "6h": "SIX_HOUR", "2h": "TWO_HOUR"}
+
+            def __init__(self):
+                self.calls = []
+
+            def fetch_ohlcv(self, symbol, timeframe, limit):
+                self.calls.append((symbol, timeframe, limit))
+                return [["candle"]]
+
+        class FakeCcxt:
+            def __init__(self, exchange):
+                self.exchange = exchange
+
+            def coinbase(self, config):
+                return self.exchange
+
+        exchange = FakeCoinbase()
+        with patch.object(scanner, "ccxt", FakeCcxt(exchange)), patch.object(
+            scanner, "log_warn", side_effect=lambda message: warnings.append(message)
+        ):
+            candles = scanner.fetch_swing_ohlcv("BTC/USD", scanner.ENTRY_TIMEFRAME, 500)
+
+        self.assertEqual(candles, [["candle"]])
+        self.assertEqual(exchange.calls, [("BTC/USD", "2h", 300)])
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("clamping swing OHLCV limit to 300", warnings[0])
+
     def test_kraken_exchange_returns_cached_object_without_raising(self):
         created = []
 

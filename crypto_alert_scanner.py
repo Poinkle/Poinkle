@@ -180,6 +180,9 @@ KEY_LEVELS = {symbol: {"support": [], "resistance": []} for symbol in WATCHLIST}
 
 TIMEFRAME = "1d"
 TRADE_TRACK_TIMEFRAME = "1m"
+ANCHOR_TIMEFRAME = "1d"
+MIDDLE_TIMEFRAME = "6h"
+ENTRY_TIMEFRAME = "2h"
 TIMEFRAME_MS = 24 * 60 * 60 * 1000
 CANDLE_LIMIT = 120
 POLL_SECONDS = 15
@@ -4741,6 +4744,33 @@ def mike_alternate_exchange():
     if MIKE_ALTERNATE_EXCHANGE is None:
         MIKE_ALTERNATE_EXCHANGE = create_mike_alternate_exchange()
     return MIKE_ALTERNATE_EXCHANGE
+
+
+def fetch_swing_ohlcv(symbol, timeframe, limit):
+    normalized_symbol = normalize_trade_symbol_input(symbol)
+    if not normalized_symbol:
+        raise ValueError("Missing symbol for swing OHLCV fetch")
+
+    if limit > 300:
+        log_warn(f"{normalized_symbol}: requested {limit} candles; clamping swing OHLCV limit to 300.")
+        limit = 300
+
+    if normalized_symbol in MIKE_ALTERNATE_SYMBOLS:
+        exchange = mike_alternate_exchange()
+        fetch_symbol = MIKE_ALTERNATE_SYMBOLS[normalized_symbol]
+        exchange_label = MIKE_ALTERNATE_EXCHANGE_ID
+    else:
+        if ccxt is None:
+            raise RuntimeError("Missing ccxt for Coinbase swing exchange data")
+        exchange = ccxt.coinbase({"enableRateLimit": True})
+        fetch_symbol = normalized_symbol
+        exchange_label = "coinbase"
+
+    timeframes = getattr(exchange, "timeframes", {}) or {}
+    if timeframe not in timeframes:
+        raise ValueError(f"{exchange_label} does not support timeframe {timeframe}")
+
+    return exchange.fetch_ohlcv(fetch_symbol, timeframe=timeframe, limit=limit)
 
 
 def resolve_data_source(symbol):
