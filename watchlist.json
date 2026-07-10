@@ -2,7 +2,7 @@
   "symbols": [
     { "symbol": "BTC/USD", "enabled": true },
     { "symbol": "ETH/USD", "enabled": true },
-    { "symbol": "USDT/USD", "enabled": true },
+    { "symbol": "USDT/USD", "enabled": false },
     { "symbol": "XRP/USD", "enabled": true },
     { "symbol": "BNB/USD", "enabled": true },
     { "symbol": "SOL/USD", "enabled": true },
@@ -47,7 +47,7 @@
     { "symbol": "OP/USD", "enabled": true },
     { "symbol": "INJ/USD", "enabled": true },
     { "symbol": "XMR/USD", "enabled": true },
-    { "symbol": "DAI/USD", "enabled": true },
+    { "symbol": "DAI/USD", "enabled": false },
     { "symbol": "JUP/USD", "enabled": true },
     { "symbol": "BONK/USD", "enabled": true },
     { "symbol": "IMX/USD", "enabled": true },

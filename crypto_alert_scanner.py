@@ -3080,10 +3080,49 @@ LIGHTWEIGHT_ALERT_TYPES = {
     "rsi_cross_below_30",
 }
 ALERT_SIGNAL_SCOPE = "Daily signal - snapshot in time, not a trend call"
+STABLECOIN_BASE_SYMBOLS = {"DAI", "USDT", "USDC", "BUSD", "TUSD", "USDP", "GUSD", "FRAX"}
 
 
 def is_lightweight_alert(alert):
     return alert.get("type") in LIGHTWEIGHT_ALERT_TYPES
+
+
+def is_stablecoin_symbol(symbol):
+    return symbol_base(symbol) in STABLECOIN_BASE_SYMBOLS
+
+
+def lightweight_alert_direction(alert):
+    alert_type = alert.get("type")
+    if alert_type in {"rsi_cross_above_70", "ema_cross_above"}:
+        return "bullish"
+    if alert_type in {"rsi_cross_below_30", "ema_cross_below"}:
+        return "bearish"
+    if alert_type == "volume_spike":
+        direction = alert.get("direction")
+        if direction in {"bullish", "bearish"}:
+            return direction
+    return None
+
+
+def strongest_directional_lightweight_group(alerts):
+    by_direction = {}
+    for alert in alerts:
+        if not is_lightweight_alert(alert):
+            continue
+        direction = lightweight_alert_direction(alert)
+        if not direction:
+            continue
+        by_direction.setdefault(direction, {})[alert.get("type")] = alert
+
+    qualifying_groups = [
+        list(by_type.values())
+        for by_type in by_direction.values()
+        if len(by_type) >= 2
+    ]
+    if not qualifying_groups:
+        return []
+
+    return max(qualifying_groups, key=len)
 
 
 def use_full_alert_chart(alerts):
@@ -3180,13 +3219,14 @@ def rolling_confluence_alerts(state, symbol, pending_alerts, now=None):
     for alert in pending_alerts:
         by_type[alert.get("type")] = alert
 
-    if len(by_type) < 2:
+    directional_group = strongest_directional_lightweight_group(by_type.values())
+    if len(directional_group) < 2:
         return pending_alerts
-    return list(by_type.values())
+    return directional_group
 
 
 def has_lightweight_confluence(alerts):
-    return len({alert.get("type") for alert in alerts if is_lightweight_alert(alert)}) >= 2
+    return len(strongest_directional_lightweight_group(alerts)) >= 2
 
 
 def alert_signal_summary(alert):
@@ -6388,9 +6428,23 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
             alert_group = pending_alerts
             if pending_alerts:
                 now = int(time.time())
-                alert_group = rolling_confluence_alerts(state, symbol, pending_alerts, now)
-                record_scan_alert_history(state, symbol, pending_alerts, now)
-                if all(is_lightweight_alert(alert) for alert in alert_group) and not has_lightweight_confluence(alert_group):
+                all_lightweight_alerts = all(is_lightweight_alert(alert) for alert in pending_alerts)
+                if all_lightweight_alerts and is_stablecoin_symbol(symbol):
+                    log_suppressed_lightweight_alert(
+                        symbol,
+                        candle,
+                        pending_alerts,
+                        "Stablecoin symbols are excluded from confluence alerts.",
+                    )
+                    for alert in pending_alerts:
+                        sent_alerts[alert["type"]] = f"{candle_id}:{alert['type']}"
+                    save_state(state)
+                    pending_alerts = []
+                    alert_group = []
+                else:
+                    alert_group = rolling_confluence_alerts(state, symbol, pending_alerts, now)
+                    record_scan_alert_history(state, symbol, pending_alerts, now)
+                if pending_alerts and all(is_lightweight_alert(alert) for alert in alert_group) and not has_lightweight_confluence(alert_group):
                     log_suppressed_lightweight_alert(
                         symbol,
                         candle,
