@@ -602,27 +602,12 @@ def timeframe_indicator_context(candles):
 
 def get_secondary_timeframe_context(exchange, symbol):
     try:
-        if resolve_data_source(symbol) == "kraken":
-            one_hour_candles = fetch_kraken_ohlcv(
-                symbol,
-                timeframe=SECONDARY_TIMEFRAME_BASE,
-                limit=SECONDARY_TIMEFRAME_1H_LIMIT,
-            )
-        else:
-            one_hour_candles = exchange.fetch_ohlcv(
-                symbol,
-                timeframe=SECONDARY_TIMEFRAME_BASE,
-                limit=SECONDARY_TIMEFRAME_1H_LIMIT,
-            )
-        validate_ohlcv_candles(one_hour_candles, symbol, min_count=56 * 8 + 1)
-        closed_one_hour_candles = one_hour_candles[:-1]
-        four_hour_candles = resample_candles(closed_one_hour_candles, 4)
-        eight_hour_candles = resample_candles(closed_one_hour_candles, 8)
-        validate_ohlcv_candles(four_hour_candles, symbol, min_count=56)
-        validate_ohlcv_candles(eight_hour_candles, symbol, min_count=56)
+        six_hour_candles = fetch_swing_ohlcv(exchange, symbol, MIDDLE_TIMEFRAME, CANDLE_LIMIT)
+        validate_ohlcv_candles(six_hour_candles, symbol, min_count=56)
+        closed_six_hour_candles = six_hour_candles[:-1]
+        validate_ohlcv_candles(closed_six_hour_candles, symbol, min_count=56)
         return {
-            "4h": timeframe_indicator_context(four_hour_candles),
-            "8h": timeframe_indicator_context(eight_hour_candles),
+            MIDDLE_TIMEFRAME: timeframe_indicator_context(closed_six_hour_candles),
         }
     except Exception as error:
         throttled_log_warn(
@@ -2914,7 +2899,7 @@ def secondary_timeframe_summary(context):
     if not context:
         return ""
     parts = []
-    for timeframe in ("4h", "8h"):
+    for timeframe in (MIDDLE_TIMEFRAME,):
         timeframe_context = context.get(timeframe)
         bias = secondary_timeframe_bias(timeframe_context)
         if not bias:
@@ -2933,14 +2918,14 @@ def secondary_timeframe_text(alert):
     summary = secondary_timeframe_summary(alert.get("secondary_timeframe_context"))
     if not summary:
         return ""
-    return f"<b>4h/8h Context:</b> {summary}\n"
+    return f"<b>6h Context:</b> {summary}\n"
 
 
 def secondary_timeframe_footer_item(alerts):
     summary = secondary_timeframe_summary(secondary_timeframe_context_from_alerts(alerts))
     if not summary:
         return ""
-    return f"3. 4h/8h context: {summary}"
+    return f"3. 6h context: {summary}"
 
 
 def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, skill_level=None):
@@ -4746,7 +4731,7 @@ def mike_alternate_exchange():
     return MIKE_ALTERNATE_EXCHANGE
 
 
-def fetch_swing_ohlcv(symbol, timeframe, limit):
+def fetch_swing_ohlcv(exchange, symbol, timeframe, limit):
     normalized_symbol = normalize_trade_symbol_input(symbol)
     if not normalized_symbol:
         raise ValueError("Missing symbol for swing OHLCV fetch")
@@ -4755,22 +4740,26 @@ def fetch_swing_ohlcv(symbol, timeframe, limit):
         log_warn(f"{normalized_symbol}: requested {limit} candles; clamping swing OHLCV limit to 300.")
         limit = 300
 
-    if normalized_symbol in MIKE_ALTERNATE_SYMBOLS:
-        exchange = mike_alternate_exchange()
+    if resolve_data_source(normalized_symbol) == "kraken":
+        fetch_exchange = kraken_exchange()
+        if fetch_exchange is None:
+            raise RuntimeError("Kraken exchange unavailable")
+        fetch_symbol = kraken_ohlcv_symbol(normalized_symbol)
+        exchange_label = KRAKEN_EXCHANGE_ID
+    elif normalized_symbol in MIKE_ALTERNATE_SYMBOLS:
+        fetch_exchange = mike_alternate_exchange()
         fetch_symbol = MIKE_ALTERNATE_SYMBOLS[normalized_symbol]
         exchange_label = MIKE_ALTERNATE_EXCHANGE_ID
     else:
-        if ccxt is None:
-            raise RuntimeError("Missing ccxt for Coinbase swing exchange data")
-        exchange = ccxt.coinbase({"enableRateLimit": True})
+        fetch_exchange = exchange
         fetch_symbol = normalized_symbol
         exchange_label = "coinbase"
 
-    timeframes = getattr(exchange, "timeframes", {}) or {}
+    timeframes = getattr(fetch_exchange, "timeframes", {}) or {}
     if timeframe not in timeframes:
         raise ValueError(f"{exchange_label} does not support timeframe {timeframe}")
 
-    return exchange.fetch_ohlcv(fetch_symbol, timeframe=timeframe, limit=limit)
+    return fetch_exchange.fetch_ohlcv(fetch_symbol, timeframe=timeframe, limit=limit)
 
 
 def resolve_data_source(symbol):
@@ -6979,7 +6968,7 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
                 if not secondary_timeframe_context:
                     log_info(
                         f"Suppressed scanner alert for {symbol}: "
-                        "secondary 4h/8h context unavailable."
+                        "secondary 6h context unavailable."
                     )
                     for alert in pending_alerts:
                         sent_alerts[alert["type"]] = f"{candle_id}:{alert['type']}"
