@@ -639,7 +639,7 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(alerts[0]["setup_status"], "Weak Setup / Avoid Chasing")
         self.assertIn("Weak setup", alerts[0]["warning"])
 
-    def test_confirmation_sends_trade_plan_only_when_break_strength_is_strong(self):
+    def test_upper_range_confirmation_rejects_chasey_setup_even_with_large_body(self):
         current_timestamp = scanner.TIMEFRAME_MS * 2
         symbol_state = {
             "pending_setups": {
@@ -648,37 +648,39 @@ class ScannerLogicTests(unittest.TestCase):
                     "level": 100,
                     "first_candle": scanner.TIMEFRAME_MS,
                     "first_candle_open": 99,
-                    "first_candle_high": 103,
+                    "first_candle_high": 101,
                     "first_candle_low": 98,
-                    "first_candle_close": 102,
+                    "first_candle_close": 100.5,
                     "first_candle_volume": 180,
                     "expected_confirmation_candle": current_timestamp,
                 }
             }
         }
-        confirmation_candle = candle(current_timestamp, 101, 105, 100.8, 104, 300)
+        confirmation_candle = candle(current_timestamp, 99.5, 101.0, 99.4, 100.6, 300)
 
         alerts = scanner.build_level_alerts(
             "BTC/USD",
-            candle(scanner.TIMEFRAME_MS, 99, 103, 98, 102, 180),
+            candle(scanner.TIMEFRAME_MS, 99, 101, 98, 100.5, 180),
             confirmation_candle,
             symbol_state,
             atr_14=1.0,
-            current_market_price=104,
+            current_market_price=100.6,
             range_low=90,
-            range_high=110,
-            ema_21=102,
+            range_high=100.4,
+            ema_21=100,
             ema_55=99,
             current_rsi=60,
             volume_avg=100,
+            candle_series=[
+                candle(index * scanner.TIMEFRAME_MS, 100, 100.5, 99.5, 100, 100)
+                for index in range(15)
+            ],
         )
 
         self.assertEqual(len(alerts), 1)
-        self.assertEqual(alerts[0]["label"], "Breakout Confirmation")
-        self.assertGreaterEqual(alerts[0]["trade_plan"]["break_strength_score"], 70)
-        self.assertIn("setup_quality", alerts[0]["trade_plan"])
-        self.assertNotEqual(alerts[0]["trade_plan"]["setup_quality"], "D")
-        self.assertIn("entry", alerts[0]["trade_plan"])
+        self.assertEqual(alerts[0]["label"], "Weak Break / Watch Only")
+        self.assertLess(alerts[0]["trade_plan"]["break_strength_score"], 70)
+        self.assertEqual(alerts[0]["trade_plan"]["setup_quality"], "D")
         self.assertEqual(symbol_state["pending_setups"], {})
 
     def test_weak_confirmation_rejects_trade_plan(self):
@@ -713,12 +715,71 @@ class ScannerLogicTests(unittest.TestCase):
             ema_55=100,
             current_rsi=48,
             volume_avg=100,
+            candle_series=make_ohlcv_series([100 for _ in range(14)] + [100.6], step=scanner.TIMEFRAME_MS),
         )
 
         self.assertEqual(len(alerts), 1)
         self.assertIn(alerts[0]["label"], {"Weak Break / Watch Only", "Failed Follow-Through"})
         self.assertNotEqual(alerts[0]["label"], "Breakout Confirmation")
-        self.assertLess(alerts[0]["trade_plan"]["break_strength_score"], 70)
+        self.assertLess(alerts[0].get("trade_plan", alerts[0])["break_strength_score"], 70)
+
+    def test_breakout_confirmation_requires_body_at_least_one_atr(self):
+        location_filter = {"range_position": "Upper Range"}
+        atr_candles = [
+            candle(index * scanner.TIMEFRAME_MS, 100, 101, 99, 100, 100)
+            for index in range(15)
+        ]
+
+        weak_body = candle(15 * scanner.TIMEFRAME_MS, 100, 101, 99, 101.5, 100)
+        strong_body = candle(15 * scanner.TIMEFRAME_MS, 100, 102, 99, 102, 100)
+
+        self.assertFalse(
+            scanner.breakout_confirmation_quality_met(weak_body, location_filter, atr_candles)
+        )
+        self.assertTrue(
+            scanner.breakout_confirmation_quality_met(strong_body, location_filter, atr_candles)
+        )
+
+    def test_breakout_confirmation_returns_false_when_atr_candles_are_insufficient(self):
+        location_filter = {"range_position": "Upper Range"}
+        short_candle_series = [
+            candle(0, 100, 101, 99, 100, 100),
+            candle(scanner.TIMEFRAME_MS, 100, 102, 99, 102, 100),
+        ]
+
+        self.assertFalse(
+            scanner.breakout_confirmation_quality_met(
+                short_candle_series[-1],
+                location_filter,
+                short_candle_series,
+            )
+        )
+
+    def test_trend_gate_only_allows_bullish_downtrend_alerts_deep_in_support(self):
+        bullish_alert = {"type": "volume_spike", "direction": "bullish"}
+
+        self.assertFalse(
+            scanner.should_send_telegram_alert(
+                bullish_alert,
+                [bullish_alert],
+                ema_21=90,
+                ema_55=100,
+                current_price=110,
+                range_low=90,
+                range_high=120,
+            )
+        )
+        self.assertTrue(
+            scanner.should_send_telegram_alert(
+                bullish_alert,
+                [bullish_alert],
+                ema_21=90,
+                ema_55=100,
+                current_price=99,
+                range_low=90,
+                range_high=120,
+            )
+        )
 
     def test_level_break_send_filter_only_allows_confirmations(self):
         self.assertFalse(

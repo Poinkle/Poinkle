@@ -207,6 +207,10 @@ COINBASE_PUBLIC_REQUESTS_PER_SECOND = 10
 ACCURACY_AUDIT_SYMBOLS = {"BTC/USD", "ETH/USD", "SOL/USD", "AAVE/USD", "PEPE/USD"}
 ALERT_DELIVERY_METRIC_LIMIT = 100
 LEVEL_ALERT_TYPES = {"support", "resistance", "all", "critical"}
+BREAKOUT_BODY_ATR_MULT = 1.0
+TREND_GATE_FAST_EMA = 21
+TREND_GATE_SLOW_EMA = 55
+SUPPORT_ZONE_DEEP_FRACTION = 0.33
 MAX_USER_WATCHLIST = 10
 MAX_TOTAL_SCAN_SYMBOLS = 200
 EASTERN_TIME = ZoneInfo("America/New_York")
@@ -2845,11 +2849,14 @@ def candle_body_percent(open_price, close):
     return abs(close - open_price) / open_price * 100
 
 
-def breakout_confirmation_quality_met(candle, location_filter):
+def breakout_confirmation_quality_met(candle, location_filter, candles):
+    if len(candles) <= 14:
+        return False
     _timestamp, open_price, _high, _low, close, _volume = candle
+    body_size = abs(close - open_price)
     return (
         location_filter.get("range_position") == "Upper Range"
-        and candle_body_percent(open_price, close) >= 1.5
+        and body_size >= BREAKOUT_BODY_ATR_MULT * atr(candles, 14)
     )
 
 
@@ -3656,20 +3663,27 @@ def should_send_telegram_alert(
     ema_21=None,
     ema_55=None,
     range_location=None,
+    current_price=None,
+    range_low=None,
+    range_high=None,
 ):
     if alert.get("type") == "rsi_cross_above_70":
         return False
 
-    if (
-        is_bullish_scan_alert(alert)
-        and ema_21 is not None
-        and ema_55 is not None
-        and ema_21 < ema_55
-        and range_location != "Lower Range"
-    ):
-        return False
+    if is_bullish_scan_alert(alert) and ema_21 is not None and ema_55 is not None and ema_21 < ema_55:
+        if not is_deep_in_support_zone(current_price, range_low, range_high):
+            return False
 
     return True
+
+
+def is_deep_in_support_zone(current_price, range_low, range_high):
+    if current_price is None or range_low is None or range_high is None:
+        return False
+    range_size = range_high - range_low
+    if range_size <= 0:
+        return False
+    return current_price <= range_low + (range_size * SUPPORT_ZONE_DEEP_FRACTION)
 
 
 def log_suppressed_lightweight_alert(symbol, candle, alerts, reason):
@@ -6407,6 +6421,7 @@ def build_level_alerts(
     ema_55,
     current_rsi,
     volume_avg,
+    candle_series=None,
 ):
     levels = get_key_levels(symbol, current_market_price)
     supports = levels.get("support", [])
@@ -6469,6 +6484,7 @@ def build_level_alerts(
             if direction == "breakout" and not breakout_confirmation_quality_met(
                 current_candle,
                 location_filter,
+                candle_series or [previous_candle, current_candle],
             ):
                 alerts.append(
                     {
@@ -6688,10 +6704,10 @@ def scan_symbol(exchange, symbol):
     previous_closes = [candle[4] for candle in previous_closed_candles]
     closes = [candle[4] for candle in closed_candles]
 
-    previous_ema_21 = ema(previous_closes, 21)
-    previous_ema_55 = ema(previous_closes, 55)
-    current_ema_21 = ema(closes, 21)
-    current_ema_55 = ema(closes, 55)
+    previous_ema_21 = ema(previous_closes, TREND_GATE_FAST_EMA)
+    previous_ema_55 = ema(previous_closes, TREND_GATE_SLOW_EMA)
+    current_ema_21 = ema(closes, TREND_GATE_FAST_EMA)
+    current_ema_55 = ema(closes, TREND_GATE_SLOW_EMA)
     previous_rsi = rsi(previous_closes, 14)
     current_rsi = rsi(closes, 14)
     current_atr_14 = atr(closed_candles, 14)
@@ -6846,6 +6862,7 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
                         ema_55,
                         current_rsi,
                         volume_avg,
+                        candle_series=alert_candles,
                     )
                 )
 
@@ -6876,6 +6893,9 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
                     ema_21=ema_21,
                     ema_55=ema_55,
                     range_location=range_location,
+                    current_price=candle[4],
+                    range_low=range_low,
+                    range_high=range_high,
                 ):
                     log_suppressed_volume_alert(
                         symbol,
