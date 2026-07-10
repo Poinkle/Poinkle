@@ -751,6 +751,11 @@ def iso_utc_now():
     return datetime.now(timezone.utc).isoformat()
 
 
+def data_as_of_label(now=None):
+    now = now or datetime.now(tz=EASTERN_TIME)
+    return f"as of {now.strftime('%-I:%M %p ET')}"
+
+
 def user_profile(user_id):
     if not user_id:
         return {}
@@ -1288,7 +1293,11 @@ def fetch_closed_ohlcv(exchange, symbol, timeframe, limit, fallback=None):
         raise handled_error from error
 
 
-def get_current_market_price(exchange, symbol, fallback_price):
+PRICE_SOURCE_LIVE_TICKER = "live_ticker"
+PRICE_SOURCE_DAILY_CLOSE_FALLBACK = "daily_close_fallback"
+
+
+def get_current_market_price_info(exchange, symbol, fallback_price):
     source = resolve_data_source(symbol)
     source_label = "Kraken" if source == "kraken" else "Coinbase"
     try:
@@ -1299,15 +1308,30 @@ def get_current_market_price(exchange, symbol, fallback_price):
             ticker = ticker_exchange.fetch_ticker(kraken_ohlcv_symbol(symbol))
         else:
             ticker = exchange.fetch_ticker(symbol)
-        price = ticker.get("last") or ticker.get("close") or fallback_price
-        return float(price)
+        price = ticker.get("last") or ticker.get("close")
+        if price is None:
+            return {
+                "price": float(fallback_price),
+                "price_source": PRICE_SOURCE_DAILY_CLOSE_FALLBACK,
+            }
+        return {
+            "price": float(price),
+            "price_source": PRICE_SOURCE_LIVE_TICKER,
+        }
     except Exception as error:
         throttled_log_warn(
             symbol,
             "ticker",
             f"{symbol}: {source_label} ticker fetch failed. Using fallback price.",
         )
-        return float(fallback_price)
+        return {
+            "price": float(fallback_price),
+            "price_source": PRICE_SOURCE_DAILY_CLOSE_FALLBACK,
+        }
+
+
+def get_current_market_price(exchange, symbol, fallback_price):
+    return get_current_market_price_info(exchange, symbol, fallback_price)["price"]
 
 
 def get_key_levels(symbol, current_market_price):
@@ -1520,6 +1544,22 @@ def format_zone_price(price):
     if abs(price) >= 1:
         return f"{price:,.3f}"
     return f"{price:.5f}"
+
+
+def price_display_text(price, price_source=None):
+    price_text = format_zone_price(price)
+    if price_source == PRICE_SOURCE_DAILY_CLOSE_FALLBACK:
+        return f"{price_text} (daily close - live price unavailable)"
+    return price_text
+
+
+def chart_data_status_label(price_source=None, last_updated_label=None):
+    details = []
+    if last_updated_label:
+        details.append(last_updated_label)
+    if price_source == PRICE_SOURCE_DAILY_CLOSE_FALLBACK:
+        details.append("daily close - live price unavailable")
+    return " • ".join(details)
 
 
 def format_zone(zone):
@@ -3828,10 +3868,24 @@ def zone_midpoints(zones):
     return [zone_midpoint(zone) for zone in zones]
 
 
-def store_levels_chart_data(symbol, closed_candles, current_price, ema_21, ema_55, buy_zones, resistance_zones):
+def store_levels_chart_data(
+    symbol,
+    closed_candles,
+    current_price,
+    ema_21,
+    ema_55,
+    buy_zones,
+    resistance_zones,
+    price_source=None,
+    last_updated=None,
+    last_updated_label=None,
+):
     LAST_LEVELS_CHART_DATA[symbol] = {
         "candles": candle_dicts(closed_candles),
         "current_price": current_price,
+        "price_source": price_source,
+        "last_updated": last_updated,
+        "last_updated_label": last_updated_label,
         "supports": zone_midpoints(buy_zones),
         "resistances": zone_midpoints(resistance_zones),
         "ema21": [ema_21] * len(closed_candles),
@@ -3839,10 +3893,23 @@ def store_levels_chart_data(symbol, closed_candles, current_price, ema_21, ema_5
     }
 
 
-def build_chart_data(closed_candles, current_price, ema_21, ema_55, buy_zones, resistance_zones):
+def build_chart_data(
+    closed_candles,
+    current_price,
+    ema_21,
+    ema_55,
+    buy_zones,
+    resistance_zones,
+    price_source=None,
+    last_updated=None,
+    last_updated_label=None,
+):
     return {
         "candles": candle_dicts(closed_candles),
         "current_price": current_price,
+        "price_source": price_source,
+        "last_updated": last_updated,
+        "last_updated_label": last_updated_label,
         "supports": zone_midpoints(buy_zones),
         "resistances": zone_midpoints(resistance_zones),
         "ema21": [ema_21] * len(closed_candles),
@@ -3865,6 +3932,10 @@ def render_research_snapshot_chart(symbol, chart_data):
         ema55=chart_data["ema55"],
         title=f"{symbol.replace('/', ' / ')} RESEARCH SNAPSHOT",
         output_prefix=f"{symbol.replace('/', '_')}_prb_snapshot_",
+        signal_scope=chart_data_status_label(
+            chart_data.get("price_source"),
+            chart_data.get("last_updated_label"),
+        ),
     )
 
 
@@ -3885,6 +3956,10 @@ def send_levels_chart(telegram_token, chat_id, symbol, caption):
             chart_data["resistances"],
             ema21=chart_data["ema21"],
             ema55=chart_data["ema55"],
+            signal_scope=chart_data_status_label(
+                chart_data.get("price_source"),
+                chart_data.get("last_updated_label"),
+            ),
         )
         send_telegram_photo(telegram_token, chat_id, chart_path, caption=caption)
         return True
@@ -3915,10 +3990,13 @@ def build_levels_snapshot_caption(
     accumulation,
     current_rsi,
     skill_level=None,
+    price_source=None,
+    last_updated_label=None,
 ):
     display_symbol = symbol.replace("/", " / ")
     trend_text = trend_bias
     rsi_text = f"{current_rsi:.2f}"
+    freshness_text = f"\n{last_updated_label}" if last_updated_label else ""
     if skill_level == "beginner":
         if trend_bias == "Bullish":
             trend_text = f"{trend_bias} (price is leaning above key moving averages)"
@@ -3934,7 +4012,7 @@ def build_levels_snapshot_caption(
         f"📍 POINKLE SNAPSHOT — {display_symbol}\n"
         f"━━━━━━━━━━━━━━━━\n\n"
         f"💰 PRICE\n"
-        f"{format_zone_price(current_price)}\n\n"
+        f"{price_display_text(current_price, price_source)}{freshness_text}\n\n"
         f"📈 TREND\n"
         f"{trend_text}\n\n"
         f"🎯 FOCUS\n"
@@ -3983,7 +4061,11 @@ def build_levels_command_message(exchange, symbol, skill_level=None):
     )
     weekly_candles = resample_candles(daily_candles, 7)
     latest_closed = closed_candles[-1]
-    current_price = get_current_market_price(exchange, symbol, latest_closed[4])
+    price_info = get_current_market_price_info(exchange, symbol, latest_closed[4])
+    current_price = price_info["price"]
+    price_source = price_info["price_source"]
+    last_updated = iso_utc_now()
+    last_updated_label = data_as_of_label()
     daily_closes = [candle[4] for candle in daily_candles]
     if len(daily_closes) >= 55:
         analysis_candles = daily_candles
@@ -4076,6 +4158,9 @@ def build_levels_command_message(exchange, symbol, skill_level=None):
         ema_55,
         buy_zones,
         resistance_zones,
+        price_source=price_source,
+        last_updated=last_updated,
+        last_updated_label=last_updated_label,
     )
 
     return build_levels_snapshot_caption(
@@ -4087,6 +4172,8 @@ def build_levels_command_message(exchange, symbol, skill_level=None):
         accumulation,
         current_rsi,
         skill_level=skill_level,
+        price_source=price_source,
+        last_updated_label=last_updated_label,
     )
 
 
@@ -4112,7 +4199,11 @@ def build_levels_scan_snapshot(exchange, symbol):
     )
     weekly_candles = resample_candles(daily_candles, 7)
     latest_closed = closed_candles[-1]
-    current_price = get_current_market_price(exchange, symbol, latest_closed[4])
+    price_info = get_current_market_price_info(exchange, symbol, latest_closed[4])
+    current_price = price_info["price"]
+    price_source = price_info["price_source"]
+    last_updated = iso_utc_now()
+    last_updated_label = data_as_of_label()
     daily_closes = [candle[4] for candle in daily_candles]
     if len(daily_closes) >= 55:
         analysis_candles = daily_candles
@@ -4183,6 +4274,9 @@ def build_levels_scan_snapshot(exchange, symbol):
     return {
         "symbol": symbol,
         "current_price": current_price,
+        "price_source": price_source,
+        "last_updated": last_updated,
+        "last_updated_label": last_updated_label,
         "ema_21": ema_21,
         "ema_55": ema_55,
         "rsi": current_rsi,
@@ -4206,6 +4300,9 @@ def build_levels_scan_snapshot(exchange, symbol):
             ema_55,
             buy_zones,
             resistance_zones,
+            price_source=price_source,
+            last_updated=last_updated,
+            last_updated_label=last_updated_label,
         ),
     }
 
@@ -4363,6 +4460,8 @@ def render_prb(snapshot, news_data=None, fundamentals_data=None, updated=None, r
     symbol = snapshot["symbol"]
     ticker = symbol.split("/")[0]
     current_price = snapshot.get("current_price", 0)
+    price_source = snapshot.get("price_source")
+    last_updated_label = snapshot.get("last_updated_label")
     support_zones = snapshot.get("support_zones", [])
     resistance_zones = snapshot.get("resistance_zones", [])
     patience_grade = snapshot.get("patience_grade", "N/A")
@@ -4376,6 +4475,7 @@ def render_prb(snapshot, news_data=None, fundamentals_data=None, updated=None, r
     resistance_text = format_zone(resistance_zones[0]) if resistance_zones else "Pending Evidence"
     updated = updated or prb_created_date()
     separator = prb_separator()
+    data_freshness_line = f"• Data: {last_updated_label}\n" if last_updated_label else ""
 
     if reference_research:
         return render_reference_prb(snapshot, reference_research, separator)
@@ -4397,7 +4497,8 @@ def render_prb(snapshot, news_data=None, fundamentals_data=None, updated=None, r
         f"\n{separator}\n\n"
         f"✅ WHAT WE KNOW\n\n"
         f"• This is not a full fundamental research brief yet.\n"
-        f"• Current Price: {format_zone_price(current_price)}\n"
+        f"• Current Price: {price_display_text(current_price, price_source)}\n"
+        f"{data_freshness_line}"
         f"• Trend: {bias}\n"
         f"• RSI: {current_rsi_text(rsi_value)}\n"
         f"• Market Structure: {market_structure_label}\n"
@@ -4429,7 +4530,7 @@ def render_prb(snapshot, news_data=None, fundamentals_data=None, updated=None, r
         f"Historical Pattern: Full Research Pending\n"
         f"Macro Environment: Full Research Pending\n"
         f"Institutional Adoption: Full Research Pending\n"
-        f"Risk: {patience_grade} — {patience_label}\n\n"
+        f"SETUP GRADE: {patience_grade} — {patience_label}\n\n"
         f"{separator}\n\n"
         f"📌 RESEARCH CONCLUSION\n\n"
         f"This is a market-structure brief, not a complete investment thesis. "
