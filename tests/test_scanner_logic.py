@@ -755,6 +755,29 @@ class ScannerLogicTests(unittest.TestCase):
             )
         )
 
+    def test_dedupe_price_levels_drops_invalid_sorts_and_merges_nearby_levels(self):
+        self.assertEqual(
+            scanner.dedupe_price_levels([105.0, -1.0, 100.3, 0.0, 100.0], 100.0),
+            [100.0, 105.0],
+        )
+
+    def test_daily_support_resistance_levels_uses_daily_swing_levels(self):
+        candles = [
+            candle(index * scanner.TIMEFRAME_MS, 100, 102, 98, 100, 100)
+            for index in range(20)
+        ]
+        candles[4][3] = 90
+        candles[7][2] = 110
+        candles[12][3] = 95
+        candles[15][2] = 106
+
+        levels = scanner.daily_support_resistance_levels(candles, current_price=100)
+
+        self.assertEqual(levels["support"], [95, 90])
+        self.assertEqual(levels["resistance"], [106, 110])
+        self.assertLessEqual(len(levels["support"]), scanner.SR_MAX_LEVELS_PER_SIDE)
+        self.assertLessEqual(len(levels["resistance"]), scanner.SR_MAX_LEVELS_PER_SIDE)
+
     def test_trend_gate_only_allows_bullish_downtrend_alerts_deep_in_support(self):
         bullish_alert = {"type": "volume_spike", "direction": "bullish"}
 

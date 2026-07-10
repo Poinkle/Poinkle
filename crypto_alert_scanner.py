@@ -211,6 +211,9 @@ BREAKOUT_BODY_ATR_MULT = 1.0
 TREND_GATE_FAST_EMA = 21
 TREND_GATE_SLOW_EMA = 55
 SUPPORT_ZONE_DEEP_FRACTION = 0.33
+SR_SWING_LOOKBACK = 3
+SR_LEVEL_DEDUPE_PCT = 0.5
+SR_MAX_LEVELS_PER_SIDE = 6
 MAX_USER_WATCHLIST = 10
 MAX_TOTAL_SCAN_SYMBOLS = 200
 EASTERN_TIME = ZoneInfo("America/New_York")
@@ -1549,6 +1552,36 @@ def find_swing_levels(candles, side, lookback=2):
                 levels.append(low)
 
     return levels
+
+
+def dedupe_price_levels(levels, reference_price):
+    threshold = abs(reference_price) * (SR_LEVEL_DEDUPE_PCT / 100)
+    deduped = []
+    for level in sorted(level for level in levels if level > 0):
+        if all(abs(level - existing) > threshold for existing in deduped):
+            deduped.append(level)
+    return deduped
+
+
+def daily_support_resistance_levels(candles, current_price):
+    support = find_swing_levels(candles, "low", lookback=SR_SWING_LOOKBACK)
+    resistance = find_swing_levels(candles, "high", lookback=SR_SWING_LOOKBACK)
+    support = [
+        level
+        for level in dedupe_price_levels(support, current_price)
+        if level < current_price
+    ]
+    resistance = [
+        level
+        for level in dedupe_price_levels(resistance, current_price)
+        if level > current_price
+    ]
+    support = sorted(support, key=lambda level: current_price - level)[:SR_MAX_LEVELS_PER_SIDE]
+    resistance = sorted(resistance, key=lambda level: level - current_price)[:SR_MAX_LEVELS_PER_SIDE]
+    return {
+        "support": support,
+        "resistance": resistance,
+    }
 
 
 def unique_sorted_levels(levels, current_price):
@@ -6422,8 +6455,9 @@ def build_level_alerts(
     current_rsi,
     volume_avg,
     candle_series=None,
+    key_levels=None,
 ):
-    levels = get_key_levels(symbol, current_market_price)
+    levels = key_levels if key_levels is not None else get_key_levels(symbol, current_market_price)
     supports = levels.get("support", [])
     resistances = levels.get("resistance", [])
     mode_prefix = "test" if TEST_MODE else "live"
@@ -6700,6 +6734,7 @@ def scan_symbol(exchange, symbol):
     previous_closed = closed_candles[-2]
     latest_closed = closed_candles[-1]
     range_low, range_high = get_recent_range(closed_candles[:-1], 50)
+    key_levels = daily_support_resistance_levels(closed_candles, latest_closed[4])
 
     previous_closes = [candle[4] for candle in previous_closed_candles]
     closes = [candle[4] for candle in closed_candles]
@@ -6799,6 +6834,7 @@ def scan_symbol(exchange, symbol):
         range_low,
         range_high,
         closed_candles,
+        key_levels,
     )
 
 
@@ -6831,6 +6867,13 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
                 range_high,
             ) = scan_result[:10]
             alert_candles = scan_result[10] if len(scan_result) > 10 else [previous_candle, candle]
+            key_levels = (
+                scan_result[11]
+                if len(scan_result) > 11
+                else {"support": [range_low], "resistance": [range_high]}
+            )
+            support_levels = key_levels.get("support", [])
+            resistance_levels = key_levels.get("resistance", [])
             candle_id = str(candle[0])
             sent_alerts = symbol_state.setdefault("sent_alerts", {})
 
@@ -6863,6 +6906,7 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
                         current_rsi,
                         volume_avg,
                         candle_series=alert_candles,
+                        key_levels=key_levels,
                     )
                 )
 
@@ -7031,8 +7075,8 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
                     current_rsi,
                     volume_avg,
                     alert_candles=alert_candles,
-                    supports=[range_low],
-                    resistances=[range_high],
+                    supports=support_levels,
+                    resistances=resistance_levels,
                 )
                 sent_at = time.time()
                 metric = record_alert_delivery_metric(
@@ -7080,8 +7124,8 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
                         current_rsi,
                         volume_avg,
                         alert_candles=alert_candles,
-                        supports=[range_low],
-                        resistances=[range_high],
+                        supports=support_levels,
+                        resistances=resistance_levels,
                     )
 
             for alert in pending_alerts:
