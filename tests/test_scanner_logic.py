@@ -778,6 +778,34 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertLessEqual(len(levels["support"]), scanner.SR_MAX_LEVELS_PER_SIDE)
         self.assertLessEqual(len(levels["resistance"]), scanner.SR_MAX_LEVELS_PER_SIDE)
 
+    def test_alert_dedupe_key_buckets_nearby_level_alerts(self):
+        first = {"type": "live:breakout:100.0:confirmation"}
+        nearby = {"type": "live:breakout:100.2:confirmation"}
+        different = {"type": "live:breakout:105.0:confirmation"}
+
+        self.assertEqual(
+            scanner.alert_dedupe_key(first, 100),
+            scanner.alert_dedupe_key(nearby, 100),
+        )
+        self.assertNotEqual(
+            scanner.alert_dedupe_key(first, 100),
+            scanner.alert_dedupe_key(different, 100),
+        )
+
+    def test_alert_dedupe_key_leaves_non_level_alerts_unchanged(self):
+        self.assertEqual(
+            scanner.alert_dedupe_key({"type": "volume_spike"}, 100),
+            "volume_spike",
+        )
+
+    def test_alert_dedupe_key_handles_malformed_level_alerts(self):
+        malformed = "live:breakout:not-a-number:confirmation"
+
+        self.assertEqual(
+            scanner.alert_dedupe_key({"type": malformed}, 100),
+            malformed,
+        )
+
     def test_trend_gate_only_allows_bullish_downtrend_alerts_deep_in_support(self):
         bullish_alert = {"type": "volume_spike", "direction": "bullish"}
 

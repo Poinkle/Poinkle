@@ -214,6 +214,7 @@ SUPPORT_ZONE_DEEP_FRACTION = 0.33
 SR_SWING_LOOKBACK = 3
 SR_LEVEL_DEDUPE_PCT = 0.5
 SR_MAX_LEVELS_PER_SIDE = 6
+ALERT_DEDUPE_LEVEL_PCT = 0.5
 MAX_USER_WATCHLIST = 10
 MAX_TOTAL_SCAN_SYMBOLS = 200
 EASTERN_TIME = ZoneInfo("America/New_York")
@@ -3270,6 +3271,28 @@ def is_bullish_scan_alert(alert):
         trade_plan = alert.get("trade_plan") or {}
         return trade_plan.get("direction") == "LONG"
     return False
+
+
+def alert_dedupe_key(alert, reference_price):
+    alert_type = alert.get("type", "")
+    try:
+        parts = alert_type.split(":")
+        if len(parts) == 4 and parts[1] in {"breakout", "breakdown"}:
+            try:
+                level = float(parts[2])
+            except (ValueError, TypeError):
+                return alert_type
+
+            band = abs(float(reference_price)) * (ALERT_DEDUPE_LEVEL_PCT / 100)
+            if band <= 0:
+                return alert_type
+
+            bucket = round(level / band)
+            return ":".join([parts[0], parts[1], str(bucket), parts[3]])
+    except Exception:
+        return alert_type
+
+    return alert_type
 
 
 def is_ema_cross_alert(alert):
@@ -6918,8 +6941,9 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
             range_location, _ = get_range_location(candle[4], range_low, range_high)
             pending_alerts = []
             for alert in alerts:
-                event_key = f"{candle_id}:{alert['type']}"
-                if sent_alerts.get(alert["type"]) == event_key:
+                dedup_key = alert_dedupe_key(alert, candle[4])
+                event_key = f"{candle_id}:{dedup_key}"
+                if sent_alerts.get(dedup_key) == event_key:
                     continue
                 if not should_send_level_break_alert(alert):
                     if alert["type"].endswith(":early_warning"):
@@ -6927,7 +6951,7 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
                         tracking_is_active = True
                     elif alert["type"].endswith(":late_move"):
                         remove_active_trade(state, symbol)
-                    sent_alerts[alert["type"]] = event_key
+                    sent_alerts[dedup_key] = event_key
                     save_state(state)
                     continue
                 if not should_send_telegram_alert(
@@ -6950,7 +6974,7 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
                             "Bullish swing-entry qualification filters were not met."
                         ),
                     )
-                    sent_alerts[alert["type"]] = event_key
+                    sent_alerts[dedup_key] = event_key
                     save_state(state)
                     continue
                 pending_alerts.append(alert)
@@ -6978,7 +7002,8 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
                         "Stablecoin symbols are excluded from confluence alerts.",
                     )
                     for alert in pending_alerts:
-                        sent_alerts[alert["type"]] = f"{candle_id}:{alert['type']}"
+                        dedup_key = alert_dedupe_key(alert, candle[4])
+                        sent_alerts[dedup_key] = f"{candle_id}:{dedup_key}"
                     save_state(state)
                     pending_alerts = []
                     alert_group = []
@@ -6993,7 +7018,8 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
                         "Waiting for another distinct lightweight signal within 15 minutes.",
                     )
                     for alert in pending_alerts:
-                        sent_alerts[alert["type"]] = f"{candle_id}:{alert['type']}"
+                        dedup_key = alert_dedupe_key(alert, candle[4])
+                        sent_alerts[dedup_key] = f"{candle_id}:{dedup_key}"
                     save_state(state)
                     pending_alerts = []
                     alert_group = []
@@ -7010,7 +7036,8 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
                         f"cooldown active for {remaining_seconds}s."
                     )
                     for alert in pending_alerts:
-                        sent_alerts[alert["type"]] = f"{candle_id}:{alert['type']}"
+                        dedup_key = alert_dedupe_key(alert, candle[4])
+                        sent_alerts[dedup_key] = f"{candle_id}:{dedup_key}"
                     save_state(state)
                     pending_alerts = []
                     alert_group = []
@@ -7035,7 +7062,8 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
                         "secondary 6h context unavailable."
                     )
                     for alert in pending_alerts:
-                        sent_alerts[alert["type"]] = f"{candle_id}:{alert['type']}"
+                        dedup_key = alert_dedupe_key(alert, candle[4])
+                        sent_alerts[dedup_key] = f"{candle_id}:{dedup_key}"
                     save_state(state)
                     pending_alerts = []
                     alert_group = []
@@ -7129,8 +7157,9 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
                     )
 
             for alert in pending_alerts:
-                event_key = f"{candle_id}:{alert['type']}"
-                sent_alerts[alert["type"]] = event_key
+                dedup_key = alert_dedupe_key(alert, candle[4])
+                event_key = f"{candle_id}:{dedup_key}"
+                sent_alerts[dedup_key] = event_key
                 sent_alert_labels.append(alert["label"])
                 sent_alert_types.append(alert["type"])
                 if alert["type"].endswith(":early_warning"):
