@@ -677,12 +677,27 @@ def load_state():
 
     try:
         return json.loads(STATE_FILE.read_text())
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, OSError) as error:
+        log_warn(f"Could not load scanner state from {STATE_FILE}: {error}")
         return {}
 
 
+def write_json_file_atomic(path, payload, label):
+    tmp_path = path.with_name(f".{path.name}.tmp")
+    try:
+        tmp_path.write_text(json.dumps(payload, indent=2, sort_keys=True))
+        os.replace(tmp_path, path)
+    except Exception as error:
+        log_warn(f"Could not save {label} to {path}: {error}")
+        try:
+            if tmp_path.exists():
+                tmp_path.unlink()
+        except Exception:
+            pass
+
+
 def save_state(state):
-    STATE_FILE.write_text(json.dumps(state, indent=2, sort_keys=True))
+    write_json_file_atomic(STATE_FILE, state, "scanner state")
 
 
 def load_user_alerts():
@@ -691,12 +706,13 @@ def load_user_alerts():
 
     try:
         return json.loads(USER_ALERTS_FILE.read_text())
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, OSError) as error:
+        log_warn(f"Could not load user alerts from {USER_ALERTS_FILE}: {error}")
         return {}
 
 
 def save_user_alerts(alerts):
-    USER_ALERTS_FILE.write_text(json.dumps(alerts, indent=2, sort_keys=True))
+    write_json_file_atomic(USER_ALERTS_FILE, alerts, "user alerts")
 
 
 def load_user_profiles():
@@ -709,7 +725,7 @@ def load_user_profiles():
 
 
 def save_user_profiles(profiles):
-    USER_PROFILES_FILE.write_text(json.dumps(profiles, indent=2, sort_keys=True))
+    write_json_file_atomic(USER_PROFILES_FILE, profiles, "user profiles")
 
 
 def iso_utc_now():
@@ -5287,61 +5303,65 @@ def check_user_level_alerts(exchange, telegram_token):
     changed = False
 
     for user_chat_id, alerts_by_symbol in list(user_alerts.items()):
-        for ticker, alert_config in list(alerts_by_symbol.items()):
-            alert_type = alert_config.get("type", "critical")
-            if not alert_config.get("enabled") or alert_type not in LEVEL_ALERT_TYPES:
-                continue
-
-            symbol = normalize_symbol(ticker)
-            if symbol is None:
-                continue
-
-            try:
-                snapshot = build_levels_scan_snapshot(exchange, symbol)
-            except Exception as error:
-                throttled_log_warn(
-                    symbol,
-                    f"user-alert:{alert_type}",
-                    f"{symbol}: Could not check {alert_type} user alert. Will retry quietly.",
-                )
-                continue
-
-            price = snapshot["current_price"]
-            last_triggered = alert_config.setdefault("last_triggered", {})
-            active_zone_ids = set()
-
-            for zone_id, zone_name, zone, zone_side in level_alert_zones(snapshot, alert_type):
-                if not zone_contains_price(zone, price):
+        try:
+            for ticker, alert_config in list(alerts_by_symbol.items()):
+                alert_type = alert_config.get("type", "critical")
+                if not alert_config.get("enabled") or alert_type not in LEVEL_ALERT_TYPES:
                     continue
 
-                active_zone_ids.add(zone_id)
-                trigger_record = last_triggered.get(zone_id)
-                if not should_send_level_alert(trigger_record, now):
+                symbol = normalize_symbol(ticker)
+                if symbol is None:
                     continue
 
                 try:
-                    send_telegram_message(
-                        telegram_token,
-                        user_chat_id,
-                        build_level_alert_message(ticker, price, zone_name, zone_side, alert_type),
-                    )
-                    last_triggered[zone_id] = {
-                        "zone": zone_name,
-                        "type": alert_type,
-                        "timestamp": now,
-                        "price": price,
-                        "active": True,
-                    }
-                    changed = True
-                    log_info(f"Sent {alert_type} level alert for {ticker} to {user_chat_id}")
+                    snapshot = build_levels_scan_snapshot(exchange, symbol)
                 except Exception as error:
-                    log_warn(f"Could not send {alert_type} alert for {ticker} to {user_chat_id}: {error}")
-
-            for zone_id, trigger_record in list(last_triggered.items()):
-                if zone_id in active_zone_ids or not trigger_record.get("active"):
+                    throttled_log_warn(
+                        symbol,
+                        f"user-alert:{alert_type}",
+                        f"{symbol}: Could not check {alert_type} user alert. Will retry quietly.",
+                    )
                     continue
-                trigger_record["active"] = False
-                changed = True
+
+                price = snapshot["current_price"]
+                last_triggered = alert_config.setdefault("last_triggered", {})
+                active_zone_ids = set()
+
+                for zone_id, zone_name, zone, zone_side in level_alert_zones(snapshot, alert_type):
+                    if not zone_contains_price(zone, price):
+                        continue
+
+                    active_zone_ids.add(zone_id)
+                    trigger_record = last_triggered.get(zone_id)
+                    if not should_send_level_alert(trigger_record, now):
+                        continue
+
+                    try:
+                        send_telegram_message(
+                            telegram_token,
+                            user_chat_id,
+                            build_level_alert_message(ticker, price, zone_name, zone_side, alert_type),
+                        )
+                        last_triggered[zone_id] = {
+                            "zone": zone_name,
+                            "type": alert_type,
+                            "timestamp": now,
+                            "price": price,
+                            "active": True,
+                        }
+                        changed = True
+                        log_info(f"Sent {alert_type} level alert for {ticker} to {user_chat_id}")
+                    except Exception as error:
+                        log_warn(f"Could not send {alert_type} alert for {ticker} to {user_chat_id}: {error}")
+
+                for zone_id, trigger_record in list(last_triggered.items()):
+                    if zone_id in active_zone_ids or not trigger_record.get("active"):
+                        continue
+                    trigger_record["active"] = False
+                    changed = True
+        except Exception as error:
+            log_warn(f"Could not process user alerts for {user_chat_id}: {error}")
+            continue
 
     if changed:
         save_user_alerts(user_alerts)
