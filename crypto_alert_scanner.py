@@ -1427,6 +1427,70 @@ def build_scan_symbols():
     return symbols
 
 
+def users_watching_symbol(symbol):
+    normalized_symbol = normalize_trade_symbol_input(symbol)
+    if not normalized_symbol:
+        return []
+
+    watching_users = []
+    for user_id, user_symbols in load_user_watchlists().items():
+        if not isinstance(user_symbols, list):
+            continue
+        normalized_user_symbols = {
+            normalize_trade_symbol_input(user_symbol)
+            for user_symbol in user_symbols
+        }
+        if normalized_symbol in normalized_user_symbols:
+            watching_users.append(str(user_id))
+    return watching_users
+
+
+def personal_watchlist_delivery_key(user_id, symbol, candle_id, alerts):
+    alert_types = "+".join(sorted(alert.get("type", "") for alert in alerts if alert.get("type")))
+    return f"{user_id}|{symbol}|{candle_id}|{alert_types}"
+
+
+def deliver_personal_watchlist_alerts(
+    state,
+    telegram_token,
+    symbol,
+    candle,
+    alert_group,
+    ema_21,
+    ema_55,
+    current_rsi,
+    volume_avg,
+    alert_candles=None,
+    supports=None,
+    resistances=None,
+):
+    delivery_state = state.setdefault("__personal_watchlist_deliveries", {})
+    for user_id in users_watching_symbol(symbol):
+        delivery_key = personal_watchlist_delivery_key(user_id, symbol, str(candle[0]), alert_group)
+        if delivery_key in delivery_state:
+            continue
+        try:
+            send_alert_group_to_chat(
+                telegram_token,
+                user_id,
+                symbol,
+                candle,
+                alert_group,
+                ema_21,
+                ema_55,
+                current_rsi,
+                volume_avg,
+                alert_candles=alert_candles,
+                supports=supports,
+                resistances=resistances,
+            )
+            delivery_state[delivery_key] = iso_utc_now()
+            save_state(state)
+            log_info(f"Sent personal watchlist alert to {user_id}: {symbol}")
+        except Exception as error:
+            log_warn(f"Could not send personal watchlist alert to {user_id} for {symbol}: {error}")
+
+
 def get_trend_bias(current_price, ema_21, ema_55, current_rsi):
     if current_price > ema_21 > ema_55 and current_rsi > 50:
         return "Bullish"
@@ -6965,6 +7029,21 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
                         "to test chat instead of main chat."
                     )
                 mark_scan_alert_group_sent(state, symbol, alert_group)
+                if not main_chat_safe_mode:
+                    deliver_personal_watchlist_alerts(
+                        state,
+                        telegram_token,
+                        symbol,
+                        candle,
+                        alert_group,
+                        ema_21,
+                        ema_55,
+                        current_rsi,
+                        volume_avg,
+                        alert_candles=alert_candles,
+                        supports=[range_low],
+                        resistances=[range_high],
+                    )
 
             for alert in pending_alerts:
                 event_key = f"{candle_id}:{alert['type']}"
