@@ -18,6 +18,11 @@ PRB_LINE_HEIGHT = 38
 TITLE_SCALE = 5
 SMALL_SCALE = 2
 MAX_BODY_LINES = 28
+PRB_CHART_HEADER_SCALE = 2
+PRB_CHART_META_SCALE = 2
+PRB_CHART_TITLE_SCALE = 2
+PRB_CHART_CENTER_Y = 628
+PRB_CHART_MAX_HEIGHT = 840
 
 BG_TOP = (2, 12, 22)
 BG_BOTTOM = (5, 42, 55)
@@ -443,7 +448,7 @@ def draw_logo(pixels, logo_path=None):
     draw_logo_placeholder(pixels)
 
 
-def draw_chart_embed(pixels, chart_path):
+def draw_chart_embed(pixels, chart_path, center_y=318, max_height=560):
     if not chart_path or not Path(chart_path).exists():
         return 330
 
@@ -452,9 +457,9 @@ def draw_chart_embed(pixels, chart_path):
             pixels,
             chart_path,
             WIDTH // 2,
-            318,
-            WIDTH - (MARGIN * 2),
-            560,
+            center_y,
+            WIDTH - 96,
+            max_height,
         )
     except Exception:
         return 330
@@ -468,16 +473,49 @@ def draw_chart_embed(pixels, chart_path):
     return top + draw_height + 44
 
 
+def chart_card_lines(page_lines):
+    filtered = []
+    content_started = False
+    for line in page_lines:
+        clean = sanitize_text(line)
+        if not clean:
+            continue
+        if not content_started:
+            if clean == "WHAT WE KNOW":
+                content_started = True
+            else:
+                continue
+        if clean == "━━━━━━━━━━━━━━━━━━":
+            continue
+        filtered.append(line)
+    return filtered
+
+
 def draw_card(page_lines, page_number, page_count, prb_id, title, output_path, logo_path=None, chart_path=None):
     pixels = make_canvas()
     draw_logo(pixels, logo_path=logo_path)
-    draw_centered_text(pixels, WIDTH, HEIGHT, 145, "POINKLE RESEARCH BRIEF", color=CYAN, scale=TITLE_SCALE)
-    draw_centered_text(pixels, WIDTH, HEIGHT, 202, f"{prb_id} CARD {page_number}/{page_count}", color=GOLD, scale=BODY_SCALE)
-    draw_centered_text(pixels, WIDTH, HEIGHT, 244, title, color=TEXT, scale=BODY_SCALE)
-    draw_horizontal_line(pixels, WIDTH, HEIGHT, 292, color=CYAN)
+    has_chart = bool(chart_path and page_number == 1)
+    if has_chart:
+        draw_centered_text(pixels, WIDTH, HEIGHT, 132, "POINKLE RESEARCH BRIEF", color=CYAN, scale=PRB_CHART_HEADER_SCALE)
+        draw_centered_text(pixels, WIDTH, HEIGHT, 162, f"{prb_id}  •  CARD {page_number}/{page_count}", color=GOLD, scale=PRB_CHART_META_SCALE)
+        draw_centered_text(pixels, WIDTH, HEIGHT, 192, title, color=TEXT, scale=PRB_CHART_TITLE_SCALE)
+        draw_horizontal_line(pixels, WIDTH, HEIGHT, 228, color=CYAN)
+        y = draw_chart_embed(
+            pixels,
+            chart_path,
+            center_y=PRB_CHART_CENTER_Y,
+            max_height=PRB_CHART_MAX_HEIGHT,
+        )
+        lines_to_draw = chart_card_lines(page_lines)
+    else:
+        draw_centered_text(pixels, WIDTH, HEIGHT, 145, "POINKLE RESEARCH BRIEF", color=CYAN, scale=TITLE_SCALE)
+        draw_centered_text(pixels, WIDTH, HEIGHT, 202, f"{prb_id} CARD {page_number}/{page_count}", color=GOLD, scale=BODY_SCALE)
+        draw_centered_text(pixels, WIDTH, HEIGHT, 244, title, color=TEXT, scale=BODY_SCALE)
+        draw_horizontal_line(pixels, WIDTH, HEIGHT, 292, color=CYAN)
+        y = 330
+        lines_to_draw = page_lines
 
-    y = draw_chart_embed(pixels, chart_path) if page_number == 1 else 330
-    for line in page_lines:
+    for line in lines_to_draw:
         if y > HEIGHT - 130:
             break
         clean = sanitize_text(line)

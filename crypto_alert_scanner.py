@@ -255,6 +255,10 @@ TELEGRAM_POLL_EVERY_N_SYMBOLS = 15
 TELEGRAM_COMMAND_JOB_QUEUE_LIMIT = 50
 TELEGRAM_COMMAND_JOB_BATCH_LIMIT = 50
 TELEGRAM_JOB_BUDGET_SECONDS_PER_CHUNK = 8
+TELEGRAM_JOB_LIGHT = "light"
+TELEGRAM_JOB_HEAVY = "heavy"
+TELEGRAM_LIGHT_JOB_ESTIMATE_SECONDS = 1.0
+HEAVY_TELEGRAM_JOB_ACTIONS = {"snapshot", "research", "whynot"}
 TRADE_TRACK_POLL_SECONDS = 60
 TRADE_TRACK_MAX_MINUTES = 60
 TRADE_TRACKING_TELEGRAM_ENABLED = False
@@ -1325,6 +1329,49 @@ def should_enqueue_heavy_command(message_text):
     return bool(heavy_command_action_for_text(message_text)) and len(message_text.strip().split()) >= 2
 
 
+def telegram_command_job_weight(action):
+    return TELEGRAM_JOB_HEAVY if action in HEAVY_TELEGRAM_JOB_ACTIONS else TELEGRAM_JOB_LIGHT
+
+
+def telegram_command_job_estimate_seconds(job):
+    weight = job.get("weight") or telegram_command_job_weight(job.get("action"))
+    if weight == TELEGRAM_JOB_LIGHT:
+        return TELEGRAM_LIGHT_JOB_ESTIMATE_SECONDS
+    return TELEGRAM_JOB_BUDGET_SECONDS_PER_CHUNK + 1
+
+
+def telegram_command_job_ticker(message_text):
+    parts = str(message_text or "").strip().split()
+    if len(parts) < 2:
+        return ""
+    symbol = normalize_trade_symbol_input(parts[1])
+    return base_symbol(symbol) if symbol else str(parts[1]).strip().upper()
+
+
+def heavy_job_ack_message(action, message_text):
+    ticker = telegram_command_job_ticker(message_text)
+    if action == "research":
+        return f"Building your {ticker} research brief - one moment."
+    if action == "snapshot":
+        return f"Building your {ticker} snapshot - one moment."
+    if action == "whynot":
+        return f"Checking {ticker} now - one moment."
+    return "Building that for you - one moment."
+
+
+def send_heavy_job_acknowledgment(telegram_token, chat_id, action, message_text):
+    if telegram_command_job_weight(action) != TELEGRAM_JOB_HEAVY:
+        return
+    try:
+        send_telegram_message(
+            telegram_token,
+            chat_id,
+            heavy_job_ack_message(action, message_text),
+        )
+    except Exception as error:
+        log_warn(f"Could not send {action} job acknowledgment to {chat_id}: {error}")
+
+
 def enqueue_telegram_command_job(action, telegram_chat_id, message_text, source_chat=None, from_user=None):
     if len(TELEGRAM_COMMAND_JOB_QUEUE) >= TELEGRAM_COMMAND_JOB_QUEUE_LIMIT:
         log_warn(f"Telegram command job queue full; dropped {action} job for {message_text!r}.")
@@ -1336,6 +1383,7 @@ def enqueue_telegram_command_job(action, telegram_chat_id, message_text, source_
             "message_text": message_text,
             "source_chat": source_chat or {"id": telegram_chat_id, "type": "private"},
             "from_user": from_user or {},
+            "weight": telegram_command_job_weight(action),
         }
     )
     return True
@@ -1388,11 +1436,26 @@ def process_telegram_command_jobs(
     telegram_token,
     max_jobs=TELEGRAM_COMMAND_JOB_BATCH_LIMIT,
     time_budget_seconds=None,
+    allowed_weights=None,
 ):
     processed = 0
+    inspected = 0
+    initial_queue_size = len(TELEGRAM_COMMAND_JOB_QUEUE)
     started_at = time.perf_counter()
-    while TELEGRAM_COMMAND_JOB_QUEUE and processed < max_jobs:
+    allowed_weights = set(allowed_weights or [])
+    while TELEGRAM_COMMAND_JOB_QUEUE and processed < max_jobs and inspected < initial_queue_size:
         job = TELEGRAM_COMMAND_JOB_QUEUE.popleft()
+        inspected += 1
+        weight = job.get("weight") or telegram_command_job_weight(job.get("action"))
+        if allowed_weights and weight not in allowed_weights:
+            TELEGRAM_COMMAND_JOB_QUEUE.append(job)
+            continue
+        if time_budget_seconds is not None:
+            elapsed = time.perf_counter() - started_at
+            remaining = time_budget_seconds - elapsed
+            if remaining < telegram_command_job_estimate_seconds(job):
+                TELEGRAM_COMMAND_JOB_QUEUE.appendleft(job)
+                break
         try:
             run_telegram_command_job(exchange, telegram_token, job)
         except Exception as error:
@@ -5999,6 +6062,7 @@ def handle_watchlist_action_callback(telegram_token, callback_query, payload, ex
             from_user=user,
         )
         if queued:
+            send_heavy_job_acknowledgment(telegram_token, user_id, "snapshot", f"/snapshot {ticker}")
             clear_callback_message_keyboard(telegram_token, callback_query)
         return True
     if action == "research":
@@ -6010,6 +6074,7 @@ def handle_watchlist_action_callback(telegram_token, callback_query, payload, ex
             from_user=user,
         )
         if queued:
+            send_heavy_job_acknowledgment(telegram_token, user_id, "research", f"/research {ticker}")
             clear_callback_message_keyboard(telegram_token, callback_query)
         return True
     if action == "whynot":
@@ -6021,6 +6086,7 @@ def handle_watchlist_action_callback(telegram_token, callback_query, payload, ex
             from_user=user,
         )
         if queued:
+            send_heavy_job_acknowledgment(telegram_token, user_id, "whynot", f"/whynot {ticker}")
             clear_callback_message_keyboard(telegram_token, callback_query)
         return True
 
@@ -7032,7 +7098,13 @@ def process_telegram_commands(
             )
         elif is_whynot_command(text):
             if defer_heavy_commands and should_enqueue_heavy_command(text):
-                enqueue_telegram_command_job("whynot", chat_id, text, source_chat=chat, from_user=from_user)
+                if enqueue_telegram_command_job("whynot", chat_id, text, source_chat=chat, from_user=from_user):
+                    send_heavy_job_acknowledgment(
+                        telegram_token,
+                        alert_dm_chat_id(chat, from_user, chat_id),
+                        "whynot",
+                        text,
+                    )
             else:
                 handle_whynot_command(
                     exchange,
@@ -7044,7 +7116,13 @@ def process_telegram_commands(
                 )
         elif is_research_command(text):
             if defer_heavy_commands and should_enqueue_heavy_command(text):
-                enqueue_telegram_command_job("research", chat_id, text, source_chat=chat, from_user=from_user)
+                if enqueue_telegram_command_job("research", chat_id, text, source_chat=chat, from_user=from_user):
+                    send_heavy_job_acknowledgment(
+                        telegram_token,
+                        alert_dm_chat_id(chat, from_user, chat_id),
+                        "research",
+                        text,
+                    )
             else:
                 handle_research_command(
                     exchange,
@@ -7056,7 +7134,13 @@ def process_telegram_commands(
                 )
         elif is_snapshot_command(text):
             if defer_heavy_commands and should_enqueue_heavy_command(text):
-                enqueue_telegram_command_job("snapshot", chat_id, text, source_chat=chat, from_user=from_user)
+                if enqueue_telegram_command_job("snapshot", chat_id, text, source_chat=chat, from_user=from_user):
+                    send_heavy_job_acknowledgment(
+                        telegram_token,
+                        alert_dm_chat_id(chat, from_user, chat_id),
+                        "snapshot",
+                        text,
+                    )
             else:
                 handle_levels_command(
                     exchange,
@@ -8163,6 +8247,7 @@ def run_once(exchange, telegram_token, telegram_chat_id, state, poll_telegram_du
                 exchange,
                 telegram_token,
                 time_budget_seconds=TELEGRAM_JOB_BUDGET_SECONDS_PER_CHUNK,
+                allowed_weights={TELEGRAM_JOB_LIGHT},
             )
 
         if symbol in UNSUPPORTED_SYMBOLS_THIS_SESSION:
