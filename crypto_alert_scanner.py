@@ -281,6 +281,8 @@ COINBASE_PUBLIC_REQUESTS_PER_SECOND = 10
 ACCURACY_AUDIT_SYMBOLS = {"BTC/USD", "ETH/USD", "SOL/USD", "AAVE/USD", "PEPE/USD"}
 ALERT_DELIVERY_METRIC_LIMIT = 100
 TELEGRAM_CALLBACK_DEDUPE_LIMIT = 200
+SIGNAL_FOLLOWUP_TTL_SECONDS = 3 * 86400
+SIGNAL_FOLLOWUP_LIMIT = 200
 LEVEL_ALERT_TYPES = {"support", "resistance", "all", "critical"}
 BREAKOUT_BODY_ATR_MULT = 1.0
 TREND_GATE_FAST_EMA = 21
@@ -1944,6 +1946,7 @@ def deliver_personal_watchlist_alerts(
     resistances=None,
 ):
     delivery_state = state.setdefault("__personal_watchlist_deliveries", {})
+    delivered_user_ids = []
     for user_id in users_watching_symbol(symbol):
         delivery_key = personal_watchlist_delivery_key(user_id, symbol, str(candle[0]), alert_group)
         if delivery_key in delivery_state:
@@ -1965,9 +1968,11 @@ def deliver_personal_watchlist_alerts(
             )
             delivery_state[delivery_key] = iso_utc_now()
             save_state(state)
+            delivered_user_ids.append(user_id)
             log_info(f"Sent personal watchlist alert to {user_id}: {symbol}")
         except Exception as error:
             log_warn(f"Could not send personal watchlist alert to {user_id} for {symbol}: {error}")
+    return delivered_user_ids
 
 
 def get_trend_bias(current_price, ema_21, ema_55, current_rsi):
@@ -4150,6 +4155,193 @@ def record_scan_alert_history(state, symbol, alerts, now=None):
         )
     scan_alert_history(state)[symbol] = history
     return history
+
+
+def signal_followups(state):
+    followups = state.setdefault("__signal_followups", {})
+    if not isinstance(followups, dict):
+        followups = {}
+        state["__signal_followups"] = followups
+    return followups
+
+
+def trim_signal_followups(state, now=None):
+    now = int(time.time()) if now is None else int(now)
+    followups = signal_followups(state)
+    for followup_key, followup in list(followups.items()):
+        if followup.get("checked"):
+            followups.pop(followup_key, None)
+            continue
+        created_at = int(followup.get("timestamp", 0) or 0)
+        if created_at and now - created_at > SIGNAL_FOLLOWUP_TTL_SECONDS:
+            followups.pop(followup_key, None)
+
+    if len(followups) > SIGNAL_FOLLOWUP_LIMIT:
+        ordered_keys = sorted(
+            followups,
+            key=lambda key: int(followups[key].get("timestamp", 0) or 0),
+        )
+        for followup_key in ordered_keys[: len(followups) - SIGNAL_FOLLOWUP_LIMIT]:
+            followups.pop(followup_key, None)
+    return followups
+
+
+def signal_followup_key(symbol, candle_id, destination_chat_id, alert_types):
+    return "|".join(
+        [
+            str(destination_chat_id),
+            str(symbol),
+            str(candle_id),
+            "+".join(sorted(alert_types)),
+        ]
+    )
+
+
+def record_signal_followup(
+    state,
+    symbol,
+    candle,
+    alerts,
+    destination_chat_id,
+    signal_state,
+    now=None,
+):
+    lightweight_alerts = [alert for alert in alerts if is_lightweight_alert(alert)]
+    if not lightweight_alerts:
+        return None
+
+    now = int(time.time()) if now is None else int(now)
+    alert_types = sorted({alert.get("type") for alert in lightweight_alerts if alert.get("type")})
+    if not alert_types:
+        return None
+
+    followups = trim_signal_followups(state, now)
+    candle_id = str(candle[0])
+    followup_key = signal_followup_key(symbol, candle_id, destination_chat_id, alert_types)
+    followups[followup_key] = {
+        "symbol": symbol,
+        "alert_types": alert_types,
+        "baseline": {
+            "ema_21": signal_state.get("ema_21"),
+            "ema_55": signal_state.get("ema_55"),
+            "rsi": signal_state.get("rsi"),
+            "volume_multiple": signal_state.get("volume_multiple"),
+        },
+        "destination_chat_id": str(destination_chat_id),
+        "timestamp": now,
+        "created_at": iso_utc_now(),
+        "candle_id": candle_id,
+        "checked": False,
+    }
+    return followups[followup_key]
+
+
+def signal_followup_fade_note(symbol, alert_type, signal_state):
+    ticker = base_symbol(symbol)
+    volume_multiple = signal_state.get("volume_multiple", 0)
+    ema_21 = signal_state.get("ema_21", 0)
+    ema_55 = signal_state.get("ema_55", 0)
+    current_rsi = signal_state.get("rsi", 0)
+
+    if alert_type == "volume_spike":
+        if volume_multiple >= 2:
+            return None
+        return (
+            f"{ticker} — the volume spike didn't hold. Volume is back to "
+            f"{volume_multiple:.2f}x average. This is what a fading signal looks like: "
+            "the condition changed, so Poinkle stops treating that signal as active."
+        )
+    if alert_type == "ema_cross_above":
+        if ema_21 > ema_55:
+            return None
+        return (
+            f"{ticker} — the bullish EMA cross didn't hold. EMA21 is now "
+            f"{format_level(ema_21)} vs EMA55 {format_level(ema_55)}. "
+            "A cross is an event; the condition that matters afterward is whether the new side holds."
+        )
+    if alert_type == "ema_cross_below":
+        if ema_21 < ema_55:
+            return None
+        return (
+            f"{ticker} — the bearish EMA cross didn't hold. EMA21 is now "
+            f"{format_level(ema_21)} vs EMA55 {format_level(ema_55)}. "
+            "A cross is an event; the condition that matters afterward is whether the new side holds."
+        )
+    if alert_type == "rsi_cross_above_70":
+        if current_rsi > 70:
+            return None
+        return (
+            f"{ticker} — RSI is no longer above 70. It is now {current_rsi:.1f}. "
+            "RSI extremes can fade quickly; this shows the condition is no longer active."
+        )
+    if alert_type == "rsi_cross_below_30":
+        if current_rsi < 30:
+            return None
+        return (
+            f"{ticker} — RSI is no longer below 30. It is now {current_rsi:.1f}. "
+            "RSI extremes can fade quickly; this shows the condition is no longer active."
+        )
+    return None
+
+
+def build_signal_followup_message(symbol, faded_notes):
+    if not faded_notes:
+        return ""
+    lines = [
+        f"<b>{html.escape(base_symbol(symbol))} signal follow-up</b>",
+        "",
+    ]
+    lines.extend(html.escape(note) for note in faded_notes)
+    lines.extend(
+        [
+            "",
+            "Teaching note: this tracks whether the signal condition held. It does not judge price direction.",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def process_signal_followups_for_symbol(state, telegram_token, symbol, candle_id, signal_state):
+    followups = trim_signal_followups(state)
+    changed = False
+    for followup_key, followup in list(followups.items()):
+        if followup.get("symbol") != symbol:
+            continue
+        if followup.get("checked"):
+            followups.pop(followup_key, None)
+            changed = True
+            continue
+        if str(followup.get("candle_id")) == str(candle_id):
+            continue
+
+        faded_notes = [
+            note
+            for note in (
+                signal_followup_fade_note(symbol, alert_type, signal_state)
+                for alert_type in followup.get("alert_types", [])
+            )
+            if note
+        ]
+        if faded_notes:
+            destination_chat_id = followup.get("destination_chat_id")
+            if destination_chat_id:
+                try:
+                    send_telegram_message(
+                        telegram_token,
+                        destination_chat_id,
+                        build_signal_followup_message(symbol, faded_notes),
+                    )
+                    log_info(f"Sent signal follow-up for {symbol} to {destination_chat_id}")
+                except Exception as error:
+                    log_warn(f"Could not send signal follow-up for {symbol} to {destination_chat_id}: {error}")
+
+        followup["checked"] = True
+        followups.pop(followup_key, None)
+        changed = True
+
+    if changed:
+        save_state(state)
+    return changed
 
 
 def rolling_confluence_alerts(state, symbol, pending_alerts, now=None):
@@ -8670,6 +8862,7 @@ def scan_symbol(exchange, symbol):
         range_high,
         closed_candles,
         key_levels,
+        signal_state,
     )
 
 
@@ -8727,6 +8920,11 @@ def run_once(exchange, telegram_token, telegram_chat_id, state, poll_telegram_du
                 if len(scan_result) > 11
                 else {"support": [range_low], "resistance": [range_high]}
             )
+            signal_state = (
+                scan_result[12]
+                if len(scan_result) > 12
+                else evaluate_lightweight_signal_state(alert_candles[:-2], alert_candles)
+            )
             support_levels = key_levels.get("support", [])
             resistance_levels = key_levels.get("resistance", [])
             candle_id = str(candle[0])
@@ -8734,6 +8932,8 @@ def run_once(exchange, telegram_token, telegram_chat_id, state, poll_telegram_du
 
             if symbol_state.get("last_checked_candle") == candle_id:
                 continue
+
+            process_signal_followups_for_symbol(state, telegram_token, symbol, candle_id, signal_state)
 
             pending_before_scan = bool(symbol_state.get("pending_setups"))
             tracking_is_active = symbol in state.setdefault("__active_trades", {})
@@ -8972,21 +9172,36 @@ def run_once(exchange, telegram_token, telegram_chat_id, state, poll_telegram_du
                         "to test chat instead of main chat."
                     )
                 mark_scan_alert_group_sent(state, symbol, alert_group)
+                followup_destinations = [str(destination_chat_id)]
                 if not main_chat_safe_mode:
-                    deliver_personal_watchlist_alerts(
-                        state,
-                        telegram_token,
-                        symbol,
-                        candle,
-                        alert_group,
-                        ema_21,
-                        ema_55,
-                        current_rsi,
-                        volume_avg,
-                        alert_candles=alert_candles,
-                        supports=support_levels,
-                        resistances=resistance_levels,
+                    followup_destinations.extend(
+                        deliver_personal_watchlist_alerts(
+                            state,
+                            telegram_token,
+                            symbol,
+                            candle,
+                            alert_group,
+                            ema_21,
+                            ema_55,
+                            current_rsi,
+                            volume_avg,
+                            alert_candles=alert_candles,
+                            supports=support_levels,
+                            resistances=resistance_levels,
+                        )
                     )
+                if all(is_lightweight_alert(alert) for alert in alert_group):
+                    for followup_destination in followup_destinations:
+                        record_signal_followup(
+                            state,
+                            symbol,
+                            candle,
+                            alert_group,
+                            followup_destination,
+                            signal_state,
+                            now=int(sent_at),
+                        )
+                    save_state(state)
 
             for alert in pending_alerts:
                 dedup_key = alert_dedupe_key(alert, candle[4])
