@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import sys
 import time
@@ -1339,6 +1340,41 @@ def mark_telegram_callback_handled(command_state, callback_query_id):
     del handled_ids[:-TELEGRAM_CALLBACK_DEDUPE_LIMIT]
 
 
+def handled_telegram_message_keys(command_state):
+    handled_keys = command_state.setdefault("handled_message_keys", [])
+    if not isinstance(handled_keys, list):
+        handled_keys = []
+        command_state["handled_message_keys"] = handled_keys
+    return handled_keys
+
+
+def telegram_message_dedupe_key(message, text):
+    message = message or {}
+    chat = message.get("chat") or {}
+    chat_id = chat.get("id")
+    message_id = message.get("message_id")
+    if chat_id is None or message_id is None or not text:
+        return None
+    return f"{chat_id}:{message_id}:{text.strip()}"
+
+
+def telegram_message_already_handled(command_state, message_key):
+    if not message_key:
+        return False
+    return str(message_key) in set(handled_telegram_message_keys(command_state))
+
+
+def mark_telegram_message_handled(command_state, message_key):
+    if not message_key:
+        return
+    message_key = str(message_key)
+    handled_keys = handled_telegram_message_keys(command_state)
+    if message_key in handled_keys:
+        return
+    handled_keys.append(message_key)
+    del handled_keys[:-TELEGRAM_CALLBACK_DEDUPE_LIMIT]
+
+
 def heavy_command_action_for_text(message_text):
     if is_snapshot_command(message_text):
         return "snapshot"
@@ -1813,10 +1849,13 @@ def validate_tradeable_symbol(exchange, user_input):
             if kraken is None:
                 return None
             markets = kraken.load_markets()
-            return kraken_ohlcv_symbol(symbol) if kraken_ohlcv_symbol(symbol) in markets else None
+            kraken_symbol = kraken_ohlcv_symbol(symbol)
+            market_symbols = {str(market_symbol).upper() for market_symbol in markets}
+            return kraken_symbol if kraken_symbol.upper() in market_symbols else None
 
         markets = exchange.load_markets()
-        return symbol if symbol in markets else None
+        market_symbols = {str(market_symbol).upper() for market_symbol in markets}
+        return symbol if symbol.upper() in market_symbols else None
     except Exception as error:
         log_warn(f"Could not validate watchlist symbol {symbol}: {error}")
         return None
@@ -2613,6 +2652,233 @@ def calculate_overall_confidence(
         confidence += 3
 
     return min(confidence, 100)
+
+
+def validation_finding(message, severity="hard"):
+    return {"severity": severity, "message": message}
+
+
+def is_real_number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def is_valid_timestamp(value):
+    if not value:
+        return False
+    if isinstance(value, (int, float)):
+        return value > 0
+    text = str(value).strip()
+    if not text:
+        return False
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return parsed.timestamp() > 0
+
+
+def validate_required_fields(data, field_names):
+    findings = []
+    for field_name in field_names:
+        if data.get(field_name) is None:
+            findings.append(validation_finding(f"{field_name} is missing"))
+    return findings
+
+
+def validate_market_snapshot_data(data):
+    findings = validate_required_fields(
+        data,
+        (
+            "current_price",
+            "rsi",
+            "ema_21",
+            "ema_55",
+            "volume_average",
+            "volume_multiple",
+            "range_low",
+            "range_high",
+            "range_position",
+            "market_score",
+            "last_updated",
+            "accumulation",
+        ),
+    )
+
+    current_price = data.get("current_price")
+    if not is_real_number(current_price) or current_price <= 0:
+        findings.append(validation_finding("current_price must be greater than 0"))
+
+    current_rsi = data.get("rsi")
+    if not is_real_number(current_rsi) or not 0 <= current_rsi <= 100:
+        findings.append(validation_finding("rsi must be between 0 and 100"))
+
+    for field_name in ("ema_21", "ema_55"):
+        value = data.get(field_name)
+        if not is_real_number(value) or value <= 0:
+            findings.append(validation_finding(f"{field_name} must be greater than 0"))
+
+    volume_average = data.get("volume_average")
+    if not is_real_number(volume_average) or volume_average < 0:
+        findings.append(validation_finding("volume_average must be 0 or greater"))
+
+    volume_multiple = data.get("volume_multiple")
+    if not is_real_number(volume_multiple) or volume_multiple < 0:
+        findings.append(validation_finding("volume_multiple must be 0 or greater"))
+
+    range_low = data.get("range_low")
+    range_high = data.get("range_high")
+    if not is_real_number(range_low) or not is_real_number(range_high):
+        findings.append(validation_finding("range_low and range_high must be numeric"))
+    elif range_low > range_high:
+        findings.append(validation_finding("range_low must be less than or equal to range_high"))
+
+    range_position = data.get("range_position")
+    if not is_real_number(range_position) or not 0 <= range_position <= 1:
+        findings.append(validation_finding("range_position must be a 0-1 fraction"))
+
+    market_score = data.get("market_score")
+    if not is_real_number(market_score) or not 0 <= market_score <= 100:
+        findings.append(validation_finding("market_score must be between 0 and 100"))
+
+    if not is_valid_timestamp(data.get("last_updated")):
+        findings.append(validation_finding("last_updated must be a real timestamp"))
+
+    accumulation = data.get("accumulation") or {}
+    findings.extend(validate_patience_grade_data(accumulation))
+
+    supports = data.get("support_zones") or []
+    resistances = data.get("resistance_zones") or []
+    if is_real_number(current_price) and supports and resistances:
+        nearest_support = zone_midpoint(supports[0])
+        nearest_resistance = zone_midpoint(resistances[0])
+        if is_real_number(nearest_support) and is_real_number(nearest_resistance):
+            low = min(nearest_support, nearest_resistance)
+            high = max(nearest_support, nearest_resistance)
+            if not low < current_price < high:
+                findings.append(
+                    validation_finding(
+                        "current_price is outside nearest support/resistance midpoints",
+                        severity="warning",
+                    )
+                )
+
+    return findings
+
+
+def validate_patience_grade_data(accumulation):
+    findings = validate_required_fields(accumulation, ("score", "grade", "label"))
+    score = accumulation.get("score")
+    if not is_real_number(score) or not 0 <= score <= 100:
+        findings.append(validation_finding("patience score must be between 0 and 100"))
+        return findings
+
+    expected_grade, expected_label = grade_patience(score)
+    if accumulation.get("grade") != expected_grade or accumulation.get("label") != expected_label:
+        findings.append(
+            validation_finding(
+                f"patience grade mismatch: score {score} maps to {expected_grade}/{expected_label}, "
+                f"got {accumulation.get('grade')}/{accumulation.get('label')}"
+            )
+        )
+    return findings
+
+
+def validate_chart_data(data):
+    findings = validate_required_fields(
+        data,
+        ("candles", "current_price", "last_updated", "supports", "resistances", "ema21", "ema55"),
+    )
+    current_price = data.get("current_price")
+    if not is_real_number(current_price) or current_price <= 0:
+        findings.append(validation_finding("chart current_price must be greater than 0"))
+    if not is_valid_timestamp(data.get("last_updated")):
+        findings.append(validation_finding("chart last_updated must be a real timestamp"))
+    if not data.get("candles"):
+        findings.append(validation_finding("chart candles are missing"))
+    for field_name in ("ema21", "ema55"):
+        values = data.get(field_name) or []
+        if not values or any((not is_real_number(value) or value <= 0) for value in values):
+            findings.append(validation_finding(f"chart {field_name} must contain positive values"))
+    return findings
+
+
+def validate_whynot_scorecard_data(data):
+    findings = validate_required_fields(
+        data,
+        (
+            "symbol",
+            "candle",
+            "alerts",
+            "scorecard",
+            "aligned_count",
+            "ema_21",
+            "ema_55",
+            "rsi",
+            "atr_14",
+            "volume_average",
+            "volume_multiple",
+            "range_low",
+            "range_high",
+            "range_location",
+            "range_position",
+        ),
+    )
+    candle = data.get("candle") or []
+    current_price = candle[4] if len(candle) > 4 else None
+
+    if not is_real_number(current_price) or current_price <= 0:
+        findings.append(validation_finding("current price must be greater than 0"))
+
+    current_rsi = data.get("rsi")
+    if not is_real_number(current_rsi) or not 0 <= current_rsi <= 100:
+        findings.append(validation_finding("rsi must be between 0 and 100"))
+
+    for field_name in ("ema_21", "ema_55"):
+        value = data.get(field_name)
+        if not is_real_number(value) or value <= 0:
+            findings.append(validation_finding(f"{field_name} must be greater than 0"))
+
+    volume_average = data.get("volume_average")
+    if not is_real_number(volume_average) or volume_average < 0:
+        findings.append(validation_finding("volume_average must be 0 or greater"))
+
+    volume_multiple = data.get("volume_multiple")
+    if not is_real_number(volume_multiple) or volume_multiple < 0:
+        findings.append(validation_finding("volume_multiple must be 0 or greater"))
+
+    range_low = data.get("range_low")
+    range_high = data.get("range_high")
+    if not is_real_number(range_low) or not is_real_number(range_high):
+        findings.append(validation_finding("range_low and range_high must be numeric"))
+    elif range_low > range_high:
+        findings.append(validation_finding("range_low must be less than or equal to range_high"))
+
+    range_position = data.get("range_position")
+    if not is_real_number(range_position) or not 0 <= range_position <= 1:
+        findings.append(validation_finding("range_position must be a 0-1 fraction"))
+
+    expected_aligned = len(strongest_directional_lightweight_group(data.get("alerts") or []))
+    if data.get("aligned_count") != expected_aligned:
+        findings.append(
+            validation_finding(
+                f"aligned_count mismatch: expected {expected_aligned}, got {data.get('aligned_count')}"
+            )
+        )
+
+    for item in data.get("scorecard") or []:
+        for field_name in ("type", "state", "reason"):
+            if item.get(field_name) is None:
+                findings.append(validation_finding(f"whynot scorecard item missing {field_name}"))
+
+    return findings
+
+
+def enforce_validation(symbol, card_type, findings):
+    hard_failures = [finding for finding in findings if finding.get("severity") != "warning"]
+    for finding in findings:
+        log_warn(f"Validation {finding.get('severity', 'hard')} for {card_type} {symbol}: {finding.get('message')}")
+    if hard_failures:
+        raise RuntimeError(f"{card_type} validation failed")
 
 
 def get_best_use_cases(patience_grade, support_distance_label, range_position, trend_bias, market_structure):
@@ -4300,7 +4566,7 @@ def store_levels_chart_data(
     last_updated=None,
     last_updated_label=None,
 ):
-    LAST_LEVELS_CHART_DATA[symbol] = {
+    chart_data = {
         "candles": candle_dicts(closed_candles),
         "current_price": current_price,
         "price_source": price_source,
@@ -4311,6 +4577,8 @@ def store_levels_chart_data(
         "ema21": [ema_21] * len(closed_candles),
         "ema55": [ema_55] * len(closed_candles),
     }
+    enforce_validation(symbol, "snapshot chart", validate_chart_data(chart_data))
+    LAST_LEVELS_CHART_DATA[symbol] = chart_data
 
 
 def build_chart_data(
@@ -4649,6 +4917,29 @@ def build_levels_command_message(exchange, symbol, skill_level=None):
         ema_21,
         ema_55,
     )
+    _range_location, range_fraction = get_range_location(current_price, range_low, range_high)
+    enforce_validation(
+        symbol,
+        "snapshot",
+        validate_market_snapshot_data(
+            {
+                "current_price": current_price,
+                "rsi": current_rsi,
+                "ema_21": ema_21,
+                "ema_55": ema_55,
+                "volume_average": volume_average,
+                "volume_multiple": volume_multiple,
+                "range_low": range_low,
+                "range_high": range_high,
+                "range_position": range_fraction,
+                "market_score": overall_confidence,
+                "last_updated": last_updated,
+                "accumulation": accumulation,
+                "support_zones": buy_zones,
+                "resistance_zones": resistance_zones,
+            }
+        ),
+    )
     store_levels_chart_data(
         symbol,
         closed_candles,
@@ -4769,6 +5060,24 @@ def build_levels_scan_snapshot(exchange, symbol):
         trend_bias,
         market_structure,
     )
+    _range_location, range_fraction = get_range_location(current_price, range_low, range_high)
+    validation_data = {
+        "current_price": current_price,
+        "rsi": current_rsi,
+        "ema_21": ema_21,
+        "ema_55": ema_55,
+        "volume_average": volume_average,
+        "volume_multiple": volume_multiple,
+        "range_low": range_low,
+        "range_high": range_high,
+        "range_position": range_fraction,
+        "market_score": market_score,
+        "last_updated": last_updated,
+        "accumulation": accumulation,
+        "support_zones": buy_zones,
+        "resistance_zones": resistance_zones,
+    }
+    enforce_validation(symbol, "research snapshot", validate_market_snapshot_data(validation_data))
 
     return {
         "symbol": symbol,
@@ -5101,7 +5410,7 @@ def extract_coingecko_coin_metadata(payload):
         "coin_id": payload.get("id"),
         "name": payload.get("name"),
         "symbol": str(payload.get("symbol") or "").upper(),
-        "image_url": image.get("large") or image.get("small") or image.get("thumb"),
+        "image_url": image.get("small") or image.get("thumb") or image.get("large"),
         "homepage_url": first_non_empty_url(links.get("homepage")),
         "whitepaper_url": coingecko_whitepaper_url(links),
         "explorer_urls": first_non_empty_urls(links.get("blockchain_site"), limit=3),
@@ -6648,8 +6957,7 @@ def send_bare_command_watchlist_panel(
         send_telegram_message(
             telegram_token,
             user_chat_id,
-            f"{action_label} — pick a coin:\n\n"
-            f"Or type: {command} {example_ticker}",
+            f"{action_label} — pick a coin below, or type any ticker (e.g. {command} {example_ticker})",
             reply_markup=watchlist_direct_action_keyboard(sorted_symbols, action),
         )
         if not is_private:
@@ -7091,6 +7399,14 @@ def process_telegram_commands(
         text = (message.get("text") or "").strip()
         lower_text = text.lower()
         from_user = message.get("from", {})
+        if text.startswith("/"):
+            message_key = telegram_message_dedupe_key(message, text)
+            if telegram_message_already_handled(command_state, message_key):
+                command_state["last_update_id"] = update_id
+                save_state(state)
+                continue
+            mark_telegram_message_handled(command_state, message_key)
+            save_state(state)
 
         if maybe_send_alpha_onboarding(telegram_token, chat, text, from_user):
             pass
@@ -7568,7 +7884,7 @@ def evaluate_whynot_scorecard(exchange, symbol):
     directional_group = strongest_directional_lightweight_group(alerts)
     range_location, range_position = get_range_location(candle[4], range_low, range_high)
 
-    return {
+    scorecard = {
         "symbol": symbol,
         "candle": candle,
         "alerts": alerts,
@@ -7586,6 +7902,8 @@ def evaluate_whynot_scorecard(exchange, symbol):
         "range_location": range_location,
         "range_position": range_position,
     }
+    enforce_validation(symbol, "whynot", validate_whynot_scorecard_data(scorecard))
+    return scorecard
 
 
 def build_whynot_command_message(exchange, symbol):
