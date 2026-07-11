@@ -14,3 +14,5 @@ diagnostics/*.jsonl
 diagnostics/*.jsonl
 .env
 .DS_Store
+.env
+.DS_Store
