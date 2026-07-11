@@ -4153,7 +4153,7 @@ def build_levels_snapshot_caption(
         f"{current_location}\n\n"
         f"⭐ MARKET SCORE\n"
         f"{overall_confidence} / 100\n\n"
-        f"🧠 PATIENCE\n"
+        f"🧠 SETUP GRADE\n"
         f"{accumulation['grade']} — {accumulation['label']}\n\n"
         f"📊 RSI\n"
         f"{rsi_text}\n\n"
