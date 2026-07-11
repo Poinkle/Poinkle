@@ -1170,6 +1170,30 @@ def send_telegram_photo(token, chat_id, photo_path, caption="", reply_markup=Non
         return False
 
 
+def send_telegram_photo_url(token, chat_id, photo_url, caption=""):
+    if not photo_url:
+        return False
+    url = f"https://api.telegram.org/bot{token}/sendPhoto"
+    try:
+        response = telegram_http_session().post(
+            url,
+            json={
+                "chat_id": chat_id,
+                "photo": photo_url,
+                "caption": caption[:1024],
+                "parse_mode": "HTML",
+            },
+            timeout=20,
+        )
+        if response.status_code != 200:
+            log_warn(f"Telegram photo URL send failed: {response.status_code} {response.text}")
+            return False
+        return True
+    except Exception as error:
+        log_warn(f"Telegram photo URL send exception: {error}")
+        return False
+
+
 def send_telegram_media_group(token, chat_id, photo_paths):
     photo_paths = list(photo_paths or [])
     if not photo_paths:
@@ -1359,15 +1383,77 @@ def heavy_job_ack_message(action, message_text):
     return "Building that for you - one moment."
 
 
+def cached_coingecko_metadata_for_message(message_text):
+    parts = str(message_text or "").strip().split()
+    if len(parts) < 2:
+        return None
+    symbol = normalize_trade_symbol_input(parts[1])
+    coin_id = coingecko_coin_id_for_symbol(symbol)
+    if not coin_id:
+        return None
+    return cached_coingecko_coin_metadata(coin_id)
+
+
+def ack_link(label, url):
+    clean_url = str(url or "").strip()
+    if not clean_url:
+        return ""
+    return f'<a href="{html.escape(clean_url, quote=True)}">{html.escape(label)}</a>'
+
+
+def heavy_job_ack_links(metadata):
+    links = [
+        ack_link("Site", metadata.get("homepage_url")),
+        ack_link("Whitepaper", metadata.get("whitepaper_url")),
+    ]
+    explorer_urls = metadata.get("explorer_urls") or []
+    if explorer_urls:
+        links.append(ack_link("Explorer", explorer_urls[0]))
+    return " / ".join(link for link in links if link)
+
+
+def heavy_job_ack_caption(action, message_text, metadata):
+    ticker = telegram_command_job_ticker(message_text)
+    name = str(metadata.get("name") or ticker).strip()
+    symbol = str(metadata.get("symbol") or ticker).strip().upper()
+    links = heavy_job_ack_links(metadata)
+    lines = [
+        f"<b>{html.escape(name)} ({html.escape(symbol)})</b>",
+        heavy_job_ack_message(action, message_text),
+    ]
+    if links:
+        lines.append(f"Official sources: {links}")
+    lines.append("Always read the project's own docs - don't take anyone's word for it, including ours.")
+    return "\n".join(lines)
+
+
+def send_heavy_job_ack_card(telegram_token, chat_id, action, message_text):
+    if action not in {"research", "snapshot"}:
+        return False
+    metadata = cached_coingecko_metadata_for_message(message_text)
+    if not metadata:
+        return False
+    image_url = str(metadata.get("image_url") or "").strip()
+    if not image_url:
+        return False
+    return send_telegram_photo_url(
+        telegram_token,
+        chat_id,
+        image_url,
+        caption=heavy_job_ack_caption(action, message_text, metadata),
+    )
+
+
 def send_heavy_job_acknowledgment(telegram_token, chat_id, action, message_text):
     if telegram_command_job_weight(action) != TELEGRAM_JOB_HEAVY:
         return
     try:
-        send_telegram_message(
-            telegram_token,
-            chat_id,
-            heavy_job_ack_message(action, message_text),
-        )
+        if send_heavy_job_ack_card(telegram_token, chat_id, action, message_text):
+            return
+    except Exception as error:
+        log_warn(f"Could not send {action} job acknowledgment card to {chat_id}: {error}")
+    try:
+        send_telegram_message(telegram_token, chat_id, heavy_job_ack_message(action, message_text))
     except Exception as error:
         log_warn(f"Could not send {action} job acknowledgment to {chat_id}: {error}")
 
@@ -4856,6 +4942,34 @@ def coingecko_metadata_cache_key(coin_id):
     return f"coin:{coin_id}"
 
 
+def first_non_empty_url(values):
+    for value in values or []:
+        clean = str(value or "").strip()
+        if clean:
+            return clean
+    return ""
+
+
+def first_non_empty_urls(values, limit=3):
+    urls = []
+    for value in values or []:
+        clean = str(value or "").strip()
+        if clean and clean not in urls:
+            urls.append(clean)
+        if len(urls) >= limit:
+            break
+    return urls
+
+
+def coingecko_whitepaper_url(links):
+    whitepaper = (links or {}).get("whitepaper")
+    if isinstance(whitepaper, dict):
+        return first_non_empty_url([whitepaper.get("link"), whitepaper.get("url")])
+    if isinstance(whitepaper, list):
+        return first_non_empty_url(whitepaper)
+    return first_non_empty_url([whitepaper])
+
+
 def cached_coingecko_coin_metadata(coin_id):
     cache_key = coingecko_metadata_cache_key(coin_id)
     cached = COINGECKO_COIN_METADATA_CACHE.get(cache_key)
@@ -4979,12 +5093,18 @@ def coingecko_fundamentals_teaching_line(fundamentals_data):
 def extract_coingecko_coin_metadata(payload):
     market_data = payload.get("market_data") or {}
     description = payload.get("description") or {}
+    links = payload.get("links") or {}
+    image = payload.get("image") or {}
     return {
         "fundamentals": "CoinGecko metadata connected",
         "source": "CoinGecko",
         "coin_id": payload.get("id"),
         "name": payload.get("name"),
         "symbol": str(payload.get("symbol") or "").upper(),
+        "image_url": image.get("large") or image.get("small") or image.get("thumb"),
+        "homepage_url": first_non_empty_url(links.get("homepage")),
+        "whitepaper_url": coingecko_whitepaper_url(links),
+        "explorer_urls": first_non_empty_urls(links.get("blockchain_site"), limit=3),
         "circulating_supply": market_data.get("circulating_supply"),
         "total_supply": market_data.get("total_supply"),
         "max_supply": market_data.get("max_supply"),
