@@ -2,6 +2,7 @@ import json
 import os
 import sys
 import time
+import html
 from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -228,6 +229,8 @@ PUBLIC_BOT_COMMANDS = [
     {"command": "snapshot", "description": "Full visual chart and breakdown"},
     {"command": "snap", "description": "Quick version of snapshot"},
     {"command": "research", "description": "Deeper multi-card research brief"},
+    {"command": "whynot", "description": "See why a coin is waiting"},
+    {"command": "why", "description": "Alias for whynot"},
     {"command": "levels", "description": "Legacy text-only version"},
     {"command": "alerts", "description": "Set a personal price-zone alert"},
     {"command": "myalerts", "description": "View your active alerts"},
@@ -4704,6 +4707,7 @@ def send_research_cards(telegram_token, chat_id, prb_text, symbol=None, chart_da
 
 SNAPSHOT_COMMANDS = ("/snapshot", "/snap", "/levels")
 RESEARCH_COMMANDS = ("/research",)
+WHYNOT_COMMANDS = ("/whynot", "/why")
 REFERENCE_COMMANDS = ("/guide", "/reference")
 EXPLAIN_COMMANDS = ("/explain", "/learn")
 
@@ -4718,6 +4722,10 @@ def is_snapshot_command(message_text):
 
 def is_research_command(message_text):
     return snapshot_command_name(message_text) in RESEARCH_COMMANDS
+
+
+def is_whynot_command(message_text):
+    return snapshot_command_name(message_text) in WHYNOT_COMMANDS
 
 
 def is_reference_command(message_text):
@@ -5185,6 +5193,52 @@ def handle_research_command(
         chart_data=LAST_RESEARCH_CHART_DATA.get(symbol),
     ):
         send_telegram_message(telegram_token, response_chat_id, message)
+    log_info(f"Answered {command} command for {symbol}")
+
+
+def handle_whynot_command(
+    exchange,
+    telegram_token,
+    telegram_chat_id,
+    message_text,
+    source_chat=None,
+):
+    parts = message_text.strip().split()
+    command = snapshot_command_name(message_text) or "/whynot"
+    log_info(f"Received {message_text.strip()}")
+    source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
+    response_chat_id = str(source_chat.get("id", telegram_chat_id))
+
+    if len(parts) < 2:
+        send_telegram_message(
+            telegram_token,
+            response_chat_id,
+            f"Use: {command} BTC\nExample: /whynot SOL",
+        )
+        return
+
+    symbol = validate_tradeable_symbol(exchange, parts[1])
+    log_info(f"Mapped {command} symbol: {symbol or 'UNKNOWN'}")
+    if symbol is None:
+        send_telegram_message(
+            telegram_token,
+            response_chat_id,
+            "I couldn't find that coin yet. Try the ticker, like /whynot BTC.",
+        )
+        return
+
+    try:
+        message = build_whynot_command_message(exchange, symbol)
+    except Exception as error:
+        log_warn(f"{symbol}: {command} unavailable: {error}")
+        send_telegram_message(
+            telegram_token,
+            response_chat_id,
+            "I couldn't build that signal check right now. Try again in a bit.",
+        )
+        return
+
+    send_telegram_message(telegram_token, response_chat_id, message)
     log_info(f"Answered {command} command for {symbol}")
 
 
@@ -6209,6 +6263,14 @@ def process_telegram_commands(exchange, telegram_token, telegram_chat_id, state)
                 chat_id,
                 source_chat=chat,
             )
+        elif is_whynot_command(text):
+            handle_whynot_command(
+                exchange,
+                telegram_token,
+                chat_id,
+                text,
+                source_chat=chat,
+            )
         elif is_research_command(text):
             handle_research_command(
                 exchange,
@@ -6265,6 +6327,317 @@ def print_scan_debug(
     print(f"Range position: {range_position}")
     print(f"Decision: {decision}")
     print(f"Reason: {reason}")
+
+
+def evaluate_lightweight_signal_state(previous_closed_candles, closed_candles):
+    previous_closed = closed_candles[-2]
+    latest_closed = closed_candles[-1]
+    previous_closes = [candle[4] for candle in previous_closed_candles]
+    closes = [candle[4] for candle in closed_candles]
+
+    previous_ema_21 = ema(previous_closes, TREND_GATE_FAST_EMA)
+    previous_ema_55 = ema(previous_closes, TREND_GATE_SLOW_EMA)
+    current_ema_21 = ema(closes, TREND_GATE_FAST_EMA)
+    current_ema_55 = ema(closes, TREND_GATE_SLOW_EMA)
+    previous_rsi = rsi(previous_closes, 14)
+    current_rsi = rsi(closes, 14)
+
+    previous_20_volumes = [candle[5] for candle in closed_candles[-21:-1]]
+    volume_average = sum(previous_20_volumes) / len(previous_20_volumes)
+    current_volume = latest_closed[5]
+    volume_multiple = current_volume / volume_average if volume_average > 0 else 0
+
+    crossed_above = previous_ema_21 <= previous_ema_55 and current_ema_21 > current_ema_55
+    crossed_below = previous_ema_21 >= previous_ema_55 and current_ema_21 < current_ema_55
+    rsi_crossed_above_70 = previous_rsi <= 70 and current_rsi > 70
+    rsi_crossed_below_30 = previous_rsi >= 30 and current_rsi < 30
+
+    alerts = []
+    scorecard = [
+        {
+            "type": "ema_cross_above",
+            "label": "EMA 21 crossed above EMA 55",
+            "state": "pass" if crossed_above else "fail",
+            "direction": "bullish",
+            "reason": (
+                f"EMA21 {format_level(current_ema_21)} vs EMA55 {format_level(current_ema_55)}"
+                f"{'' if crossed_above else '; no fresh bullish cross'}"
+            ),
+        },
+        {
+            "type": "ema_cross_below",
+            "label": "EMA 21 crossed below EMA 55",
+            "state": "pass" if crossed_below else "fail",
+            "direction": "bearish",
+            "reason": (
+                f"EMA21 {format_level(current_ema_21)} vs EMA55 {format_level(current_ema_55)}"
+                f"{'' if crossed_below else '; no fresh bearish cross'}"
+            ),
+        },
+        {
+            "type": "rsi_cross_above_70",
+            "label": "RSI crossed above 70",
+            "state": "pass" if rsi_crossed_above_70 else "fail",
+            "direction": "bullish",
+            "reason": f"RSI {current_rsi:.1f}{'' if rsi_crossed_above_70 else '; no cross above 70'}",
+        },
+        {
+            "type": "rsi_cross_below_30",
+            "label": "RSI crossed below 30",
+            "state": "pass" if rsi_crossed_below_30 else "fail",
+            "direction": "bearish",
+            "reason": f"RSI {current_rsi:.1f}{'' if rsi_crossed_below_30 else '; no cross below 30'}",
+        },
+    ]
+
+    if crossed_above:
+        alerts.append(
+            {
+                "type": "ema_cross_above",
+                "label": "EMA 21 crossed above EMA 55",
+                "emoji": "🟢",
+            }
+        )
+
+    if crossed_below:
+        alerts.append(
+            {
+                "type": "ema_cross_below",
+                "label": "EMA 21 crossed below EMA 55",
+                "emoji": "🔴",
+            }
+        )
+
+    if rsi_crossed_above_70:
+        alerts.append(
+            {
+                "type": "rsi_cross_above_70",
+                "label": "RSI crossed above 70",
+                "emoji": "🔥",
+            }
+        )
+    elif rsi_crossed_below_30:
+        alerts.append(
+            {
+                "type": "rsi_cross_below_30",
+                "label": "RSI crossed below 30",
+                "emoji": "🧊",
+            }
+        )
+
+    volume_signal = {
+        "type": "volume_spike",
+        "label": "Volume spike",
+        "state": "fail",
+        "direction": "neutral",
+        "reason": f"{volume_multiple:.2f}x recent average; below 2.00x spike threshold",
+    }
+    if volume_average > 0 and current_volume >= volume_average * 2:
+        close = latest_closed[4]
+        bullish_confirmation = close > current_ema_21 and current_rsi > 50
+        bearish_confirmation = close < current_ema_21 and current_rsi < 50
+
+        if bullish_confirmation:
+            volume_label = "Bullish Volume Spike"
+            volume_emoji = "🟢"
+            volume_direction = "bullish"
+        elif bearish_confirmation:
+            volume_label = "Bearish Volume Spike"
+            volume_emoji = "🔴"
+            volume_direction = "bearish"
+        else:
+            volume_label = "High Volume Alert"
+            volume_emoji = "⚪"
+            volume_direction = "neutral"
+
+        alerts.append(
+            {
+                "type": "volume_spike",
+                "label": volume_label,
+                "emoji": volume_emoji,
+                "direction": volume_direction,
+                "volume_multiple": volume_multiple,
+            }
+        )
+        volume_signal.update(
+            {
+                "label": volume_label,
+                "state": "pass" if volume_direction in {"bullish", "bearish"} else "neutral",
+                "direction": volume_direction,
+                "reason": f"{volume_multiple:.2f}x recent average",
+            }
+        )
+    scorecard.insert(0, volume_signal)
+
+    return {
+        "previous_closed": previous_closed,
+        "latest_closed": latest_closed,
+        "alerts": alerts,
+        "scorecard": scorecard,
+        "previous_ema_21": previous_ema_21,
+        "previous_ema_55": previous_ema_55,
+        "ema_21": current_ema_21,
+        "ema_55": current_ema_55,
+        "previous_rsi": previous_rsi,
+        "rsi": current_rsi,
+        "volume_average": volume_average,
+        "current_volume": current_volume,
+        "volume_multiple": volume_multiple,
+    }
+
+
+def whynot_verdict(aligned_count):
+    if aligned_count >= 4:
+        return "Strong confluence"
+    if aligned_count == 3:
+        return "Building confluence"
+    if aligned_count == 2:
+        return "At alert threshold"
+    if aligned_count == 1:
+        return "Waiting for another same-direction signal"
+    return "Waiting"
+
+
+def whynot_marker(state):
+    if state == "pass":
+        return "✓"
+    if state == "fail":
+        return "✗"
+    return "•"
+
+
+def whynot_display_scorecard(scorecard):
+    by_type = {item.get("type"): item for item in scorecard}
+    volume = by_type.get("volume_spike", {})
+    ema_above = by_type.get("ema_cross_above", {})
+    ema_below = by_type.get("ema_cross_below", {})
+    rsi_above = by_type.get("rsi_cross_above_70", {})
+    rsi_below = by_type.get("rsi_cross_below_30", {})
+
+    if ema_above.get("state") == "pass":
+        ema_row = {
+            "label": "EMA cross",
+            "state": "pass",
+            "reason": f"bullish cross; {ema_above.get('reason', '')}",
+        }
+    elif ema_below.get("state") == "pass":
+        ema_row = {
+            "label": "EMA cross",
+            "state": "pass",
+            "reason": f"bearish cross; {ema_below.get('reason', '')}",
+        }
+    else:
+        ema_reason = ema_above.get("reason") or ema_below.get("reason") or "no fresh cross"
+        ema_row = {
+            "label": "EMA cross",
+            "state": "fail",
+            "reason": ema_reason.replace("; no fresh bullish cross", "; no fresh cross"),
+        }
+
+    if rsi_above.get("state") == "pass":
+        rsi_row = {
+            "label": "RSI extreme",
+            "state": "pass",
+            "reason": f"above 70; {rsi_above.get('reason', '')}",
+        }
+    elif rsi_below.get("state") == "pass":
+        rsi_row = {
+            "label": "RSI extreme",
+            "state": "pass",
+            "reason": f"below 30; {rsi_below.get('reason', '')}",
+        }
+    else:
+        rsi_reason = rsi_above.get("reason") or rsi_below.get("reason") or "neutral"
+        rsi_value = rsi_reason.split(";", 1)[0]
+        rsi_row = {
+            "label": "RSI extreme",
+            "state": "fail",
+            "reason": f"neutral ({rsi_value.replace('RSI ', '')})",
+        }
+
+    return [
+        {
+            "label": "Volume",
+            "state": volume.get("state", "fail"),
+            "reason": volume.get("reason", "no spike"),
+        },
+        ema_row,
+        rsi_row,
+    ]
+
+
+def evaluate_whynot_scorecard(exchange, symbol):
+    (
+        _previous_candle,
+        candle,
+        alerts,
+        ema_21,
+        ema_55,
+        current_rsi,
+        current_atr_14,
+        volume_avg,
+        range_low,
+        range_high,
+        closed_candles,
+        key_levels,
+    ) = scan_symbol(exchange, symbol)
+
+    signal_state = evaluate_lightweight_signal_state(closed_candles[:-2], closed_candles)
+    directional_group = strongest_directional_lightweight_group(alerts)
+    range_location, range_position = get_range_location(candle[4], range_low, range_high)
+
+    return {
+        "symbol": symbol,
+        "candle": candle,
+        "alerts": alerts,
+        "scorecard": signal_state["scorecard"],
+        "aligned_count": len(directional_group),
+        "aligned_alerts": directional_group,
+        "ema_21": ema_21,
+        "ema_55": ema_55,
+        "rsi": current_rsi,
+        "atr_14": current_atr_14,
+        "volume_average": volume_avg,
+        "volume_multiple": signal_state["volume_multiple"],
+        "range_low": range_low,
+        "range_high": range_high,
+        "range_location": range_location,
+        "range_position": range_position,
+    }
+
+
+def build_whynot_command_message(exchange, symbol):
+    scorecard = evaluate_whynot_scorecard(exchange, symbol)
+    display_rows = whynot_display_scorecard(scorecard["scorecard"])
+    lines = [
+        f"<b>{html.escape(symbol)} - Why not?</b>",
+        "",
+        "Current lightweight signal state:",
+    ]
+
+    for item in display_rows:
+        marker = whynot_marker(item.get("state"))
+        label = html.escape(item.get("label", "Signal"))
+        reason = html.escape(item.get("reason", "No current signal"))
+        lines.append(f"{marker} {label}: {reason}")
+
+    aligned_count = scorecard["aligned_count"]
+    present_count = sum(1 for item in display_rows if item.get("state") == "pass")
+    verdict = whynot_verdict(aligned_count)
+    lines.extend(
+        [
+            "",
+            f"<b>{present_count} of {len(display_rows)} signals present.</b>",
+            f"<b>{aligned_count} same-direction aligned - {verdict}.</b>",
+            (
+                f"Range: {scorecard['range_location']} "
+                f"({scorecard['range_position'] * 100:.0f}% through the current range)."
+            ),
+            "",
+            "Honest limit: this describes right now; conditions change.",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def current_time_ms():
@@ -6962,91 +7335,13 @@ def scan_symbol(exchange, symbol):
     range_low, range_high = get_recent_range(closed_candles[:-1], 50)
     key_levels = daily_support_resistance_levels(closed_candles, latest_closed[4])
 
-    previous_closes = [candle[4] for candle in previous_closed_candles]
-    closes = [candle[4] for candle in closed_candles]
-
-    previous_ema_21 = ema(previous_closes, TREND_GATE_FAST_EMA)
-    previous_ema_55 = ema(previous_closes, TREND_GATE_SLOW_EMA)
-    current_ema_21 = ema(closes, TREND_GATE_FAST_EMA)
-    current_ema_55 = ema(closes, TREND_GATE_SLOW_EMA)
-    previous_rsi = rsi(previous_closes, 14)
-    current_rsi = rsi(closes, 14)
+    signal_state = evaluate_lightweight_signal_state(previous_closed_candles, closed_candles)
+    current_ema_21 = signal_state["ema_21"]
+    current_ema_55 = signal_state["ema_55"]
+    current_rsi = signal_state["rsi"]
     current_atr_14 = atr(closed_candles, 14)
-
-    previous_20_volumes = [candle[5] for candle in closed_candles[-21:-1]]
-    volume_average = sum(previous_20_volumes) / len(previous_20_volumes)
-    current_volume = latest_closed[5]
-
-    alerts = []
-
-    crossed_above = previous_ema_21 <= previous_ema_55 and current_ema_21 > current_ema_55
-    crossed_below = previous_ema_21 >= previous_ema_55 and current_ema_21 < current_ema_55
-    rsi_crossed_above_70 = previous_rsi <= 70 and current_rsi > 70
-    rsi_crossed_below_30 = previous_rsi >= 30 and current_rsi < 30
-
-    if crossed_above:
-        alerts.append(
-            {
-                "type": "ema_cross_above",
-                "label": "EMA 21 crossed above EMA 55",
-                "emoji": "🟢",
-            }
-        )
-
-    if crossed_below:
-        alerts.append(
-            {
-                "type": "ema_cross_below",
-                "label": "EMA 21 crossed below EMA 55",
-                "emoji": "🔴",
-            }
-        )
-
-    if rsi_crossed_above_70:
-        alerts.append(
-            {
-                "type": "rsi_cross_above_70",
-                "label": "RSI crossed above 70",
-                "emoji": "🔥",
-            }
-        )
-    elif rsi_crossed_below_30:
-        alerts.append(
-            {
-                "type": "rsi_cross_below_30",
-                "label": "RSI crossed below 30",
-                "emoji": "🧊",
-            }
-        )
-
-    if volume_average > 0 and current_volume >= volume_average * 2:
-        close = latest_closed[4]
-        volume_multiple = current_volume / volume_average
-        bullish_confirmation = close > current_ema_21 and current_rsi > 50
-        bearish_confirmation = close < current_ema_21 and current_rsi < 50
-
-        if bullish_confirmation:
-            volume_label = "Bullish Volume Spike"
-            volume_emoji = "🟢"
-            volume_direction = "bullish"
-        elif bearish_confirmation:
-            volume_label = "Bearish Volume Spike"
-            volume_emoji = "🔴"
-            volume_direction = "bearish"
-        else:
-            volume_label = "High Volume Alert"
-            volume_emoji = "⚪"
-            volume_direction = "neutral"
-
-        alerts.append(
-            {
-                "type": "volume_spike",
-                "label": volume_label,
-                "emoji": volume_emoji,
-                "direction": volume_direction,
-                "volume_multiple": volume_multiple,
-            }
-        )
+    volume_average = signal_state["volume_average"]
+    alerts = signal_state["alerts"]
 
     return (
         previous_closed,
