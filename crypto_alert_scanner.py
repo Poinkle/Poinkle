@@ -5045,7 +5045,6 @@ def build_levels_snapshot_caption(
         f"{trend_text}\n\n"
         f"🎯 FOCUS\n"
         f"{current_location}\n\n"
-        f"{ZONE_HONEST_LIMIT_LINE}\n\n"
         f"⭐ MARKET SCORE\n"
         f"{overall_confidence} / 100\n\n"
         f"🧠 SETUP GRADE\n"
@@ -5064,6 +5063,7 @@ def build_levels_snapshot_caption(
         f"Did price provide confirmation?\n\n"
         f"⑤ Decision\n"
         f"What is the highest-quality plan?\n\n"
+        f"{ZONE_HONEST_LIMIT_LINE}\n\n"
         f"{poinkle_educational_footer()}"
     )
 
@@ -5853,7 +5853,6 @@ def render_prb(snapshot, news_data=None, fundamentals_data=None, updated=None, r
         f"• Market Structure: {market_structure_label}\n"
         f"• Nearest Support Zone: {support_text}\n"
         f"• Nearest Resistance Zone: {resistance_text}\n"
-        f"• Zone note: {ZONE_HONEST_LIMIT_LINE}\n"
         f"{fundamentals_detail_lines}"
         f"• Best Use Case: {strategy_text_for_research(strategy)}\n\n"
         f"📈 HISTORICAL PATTERN\n\n"
@@ -5886,6 +5885,7 @@ def render_prb(snapshot, news_data=None, fundamentals_data=None, updated=None, r
         f"📌 RESEARCH CONCLUSION\n\n"
         f"This is a market-structure brief, not a complete investment thesis. "
         f"The next upgrade should connect saved research, news, fundamentals, on-chain data, and macro context before making a stronger long-term call.\n\n"
+        f"{ZONE_HONEST_LIMIT_LINE}\n\n"
         f"{research_footer(separator)}"
     )
 
