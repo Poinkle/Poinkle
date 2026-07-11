@@ -304,6 +304,24 @@ def usable_ema_series(values, closes, period):
     return calc_ema_series(closes, period)
 
 
+def draw_ema_label(ax, x_values, values, label, color, x_offset=0.8):
+    if not values:
+        return
+    ax.text(
+        x_values[-1] + x_offset,
+        values[-1],
+        label,
+        color=color,
+        fontsize=6.2,
+        fontweight="bold",
+        ha="left",
+        va="center",
+        alpha=0.88,
+        zorder=11,
+        path_effects=[pe.withStroke(linewidth=2.0, foreground="#03101a", alpha=0.72)],
+    )
+
+
 def trend_lesson(closes):
     if len(closes) < 12 or closes[0] == 0:
         return "Changing", "Let structure form", YELLOW
@@ -788,10 +806,14 @@ def generate_matplotlib_levels_chart(symbol, candles, current_price, supports, r
     ema55_values = usable_ema_series(ema55, [c["close"] for c in candles], 55)
     if ema21_values:
         vals = ema21_values[-len(recent):]
-        chart_ax.plot(x[-len(vals):], vals, color=BLUE, linewidth=1.05, alpha=0.68, zorder=6)
+        vals_x = x[-len(vals):]
+        chart_ax.plot(vals_x, vals, color="#e5edf2", linewidth=0.85, alpha=0.66, zorder=7)
+        draw_ema_label(chart_ax, vals_x, vals, "EMA 21", "#edf6fa")
     if ema55_values:
         vals = ema55_values[-len(recent):]
-        chart_ax.plot(x[-len(vals):], vals, color="#d1d5db", linewidth=0.95, alpha=0.58, zorder=6)
+        vals_x = x[-len(vals):]
+        chart_ax.plot(vals_x, vals, color="#d1a94a", linewidth=1.10, alpha=0.58, zorder=6)
+        draw_ema_label(chart_ax, vals_x, vals, "EMA 55", "#e8c76a")
 
     arrow_starts = [0.120, 0.305, 0.490, 0.675, 0.860]
     arrow_ends = [(0.250, 0.520), (0.385, 0.560), (0.505, 0.630), (0.665, 0.640), (0.760, 0.570)]
@@ -1013,9 +1035,13 @@ def generate_poinkle_snapshot_spec_chart(symbol, candles, current_price, support
             Rectangle((i - 0.40, body_low), 0.80, body_h, facecolor=color, edgecolor=color, linewidth=0.30, alpha=1.0, zorder=9)
         )
     if ema21_values:
-        chart_ax.plot(x[-len(ema21_values):], ema21_values, color="#c7d6dc", linewidth=1.05, alpha=0.56, zorder=6)
+        ema21_x = x[-len(ema21_values):]
+        chart_ax.plot(ema21_x, ema21_values, color="#e5edf2", linewidth=0.85, alpha=0.66, zorder=7)
+        draw_ema_label(chart_ax, ema21_x, ema21_values, "EMA 21", "#edf6fa")
     if ema55_values:
-        chart_ax.plot(x[-len(ema55_values):], ema55_values, color="#b99738", linewidth=0.95, alpha=0.42, zorder=6)
+        ema55_x = x[-len(ema55_values):]
+        chart_ax.plot(ema55_x, ema55_values, color="#d1a94a", linewidth=1.10, alpha=0.58, zorder=6)
+        draw_ema_label(chart_ax, ema55_x, ema55_values, "EMA 55", "#e8c76a")
 
     # Creed on the right, outside the candle path.
     canvas.text(
@@ -1261,9 +1287,13 @@ def generate_poinkle_reference_snapshot_chart(symbol, candles, current_price, su
         chart_ax.add_patch(Rectangle((i - 0.30, body_low), 0.60, body_h, facecolor=color, edgecolor=color, linewidth=0.25, alpha=0.95, zorder=9))
 
     if ema21_values:
-        chart_ax.plot(x[-len(ema21_values):], ema21_values, color="#d4e5ea", linewidth=1.0, alpha=0.54, zorder=6)
+        ema21_x = x[-len(ema21_values):]
+        chart_ax.plot(ema21_x, ema21_values, color="#e5edf2", linewidth=0.85, alpha=0.66, zorder=7)
+        draw_ema_label(chart_ax, ema21_x, ema21_values, "EMA 21", "#edf6fa")
     if ema55_values:
-        chart_ax.plot(x[-len(ema55_values):], ema55_values, color="#b79b3f", linewidth=0.9, alpha=0.42, zorder=6)
+        ema55_x = x[-len(ema55_values):]
+        chart_ax.plot(ema55_x, ema55_values, color="#d1a94a", linewidth=1.10, alpha=0.58, zorder=6)
+        draw_ema_label(chart_ax, ema55_x, ema55_values, "EMA 55", "#e8c76a")
 
     creed = canvas.text(0.950, 0.330, "Prepare.\nLet price tell you.\nPatience compounds.", color="#d8e8ef", fontsize=28, fontfamily="serif", alpha=0.30, ha="right", va="center", linespacing=1.28, zorder=6)
     creed.set_path_effects([pe.withStroke(linewidth=2.0, foreground="#0b1c25", alpha=0.35)])
@@ -1319,6 +1349,7 @@ def generate_levels_chart(
     resistances,
     ema21=None,
     ema55=None,
+    ema200=None,
     card_specs=None,
     footer_items=None,
     title=None,
@@ -1335,6 +1366,7 @@ def generate_levels_chart(
         resistances,
         ema21=ema21,
         ema55=ema55,
+        ema200=ema200,
         card_specs=card_specs,
         footer_items=footer_items,
         title=title,

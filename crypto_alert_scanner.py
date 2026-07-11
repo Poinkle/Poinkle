@@ -251,6 +251,7 @@ MIDDLE_TIMEFRAME = "6h"
 ENTRY_TIMEFRAME = "2h"
 TIMEFRAME_MS = 24 * 60 * 60 * 1000
 CANDLE_LIMIT = 120
+COMMAND_DAILY_CANDLE_LIMIT = 220
 POLL_SECONDS = 15
 TELEGRAM_POLL_EVERY_N_SYMBOLS = 15
 TELEGRAM_COMMAND_JOB_QUEUE_LIMIT = 50
@@ -704,6 +705,30 @@ def ema(values, period):
         current_ema = (value - current_ema) * multiplier + current_ema
 
     return current_ema
+
+
+def optional_ema(values, period):
+    try:
+        return ema(values, period)
+    except ValueError:
+        return None
+
+
+def ema_200_trend_line(current_price, ema_200):
+    if ema_200 is None:
+        return "Not enough history for a 200 EMA yet."
+    if current_price >= ema_200:
+        return "Price is above the 200 EMA — the long-term trend is up."
+    return "Price is below the 200 EMA — the long-term trend is down."
+
+
+def ema_200_accumulation_line(ema_200):
+    if ema_200 is None:
+        return ""
+    return (
+        "Buying a support zone above the 200 is a pullback in an uptrend. "
+        "Below it, the long trend is against you."
+    )
 
 
 def resample_candles(candles, group_size):
@@ -4821,6 +4846,7 @@ def store_levels_chart_data(
     current_price,
     ema_21,
     ema_55,
+    ema_200,
     buy_zones,
     resistance_zones,
     price_source=None,
@@ -4837,6 +4863,7 @@ def store_levels_chart_data(
         "resistances": zone_midpoints(resistance_zones),
         "ema21": [ema_21] * len(closed_candles),
         "ema55": [ema_55] * len(closed_candles),
+        "ema200": [ema_200] * len(closed_candles) if ema_200 is not None else None,
     }
     enforce_validation(symbol, "snapshot chart", validate_chart_data(chart_data))
     LAST_LEVELS_CHART_DATA[symbol] = chart_data
@@ -4847,6 +4874,7 @@ def build_chart_data(
     current_price,
     ema_21,
     ema_55,
+    ema_200,
     buy_zones,
     resistance_zones,
     price_source=None,
@@ -4863,6 +4891,7 @@ def build_chart_data(
         "resistances": zone_midpoints(resistance_zones),
         "ema21": [ema_21] * len(closed_candles),
         "ema55": [ema_55] * len(closed_candles),
+        "ema200": [ema_200] * len(closed_candles) if ema_200 is not None else None,
     }
 
 
@@ -4879,6 +4908,7 @@ def render_research_snapshot_chart(symbol, chart_data):
         chart_data["resistances"],
         ema21=chart_data["ema21"],
         ema55=chart_data["ema55"],
+        ema200=chart_data.get("ema200"),
         title=f"{symbol.replace('/', ' / ')} RESEARCH SNAPSHOT",
         output_prefix=f"{symbol.replace('/', '_')}_prb_snapshot_",
         signal_scope=chart_data_status_label(
@@ -4978,6 +5008,7 @@ def send_levels_chart(telegram_token, chat_id, symbol, caption, reply_markup=Non
             chart_data["resistances"],
             ema21=chart_data["ema21"],
             ema55=chart_data["ema55"],
+            ema200=chart_data.get("ema200"),
             signal_scope=chart_data_status_label(
                 chart_data.get("price_source"),
                 chart_data.get("last_updated_label"),
@@ -5017,6 +5048,7 @@ def build_levels_snapshot_caption(
     overall_confidence,
     accumulation,
     current_rsi,
+    ema_200=None,
     skill_level=None,
     price_source=None,
     last_updated_label=None,
@@ -5025,6 +5057,13 @@ def build_levels_snapshot_caption(
     trend_text = trend_bias
     rsi_text = f"{current_rsi:.2f}"
     freshness_text = f"\n{last_updated_label}" if last_updated_label else ""
+    ema_200_text = ema_200_trend_line(current_price, ema_200)
+    accumulation_context = ema_200_accumulation_line(ema_200)
+    long_term_text = (
+        f"{ema_200_text}\n{accumulation_context}"
+        if accumulation_context
+        else ema_200_text
+    )
     if skill_level == "beginner":
         if trend_bias == "Bullish":
             trend_text = f"{trend_bias} (price is leaning above key moving averages)"
@@ -5043,6 +5082,8 @@ def build_levels_snapshot_caption(
         f"{price_display_text(current_price, price_source)}{freshness_text}\n\n"
         f"📈 TREND\n"
         f"{trend_text}\n\n"
+        f"🧭 LONG-TERM CONTEXT\n"
+        f"{long_term_text}\n\n"
         f"🎯 FOCUS\n"
         f"{current_location}\n\n"
         f"⭐ MARKET SCORE\n"
@@ -5085,7 +5126,7 @@ def build_levels_command_message(exchange, symbol, skill_level=None):
         exchange,
         symbol,
         "1d",
-        180,
+        COMMAND_DAILY_CANDLE_LIMIT,
         fallback=closed_candles[-100:],
     )
     weekly_candles = resample_candles(daily_candles, 7)
@@ -5107,6 +5148,7 @@ def build_levels_command_message(exchange, symbol, skill_level=None):
 
     ema_21 = ema(analysis_closes, 21)
     ema_55 = ema(analysis_closes, 55)
+    ema_200 = optional_ema(daily_closes, 200)
     current_rsi = rsi(analysis_closes, 14)
     previous_20_volumes = [candle[5] for candle in closed_candles[-21:-1]]
     volume_average = sum(previous_20_volumes) / len(previous_20_volumes)
@@ -5204,10 +5246,11 @@ def build_levels_command_message(exchange, symbol, skill_level=None):
     )
     store_levels_chart_data(
         symbol,
-        closed_candles,
+        daily_candles,
         current_price,
         ema_21,
         ema_55,
+        ema_200,
         buy_zones,
         resistance_zones,
         price_source=price_source,
@@ -5223,6 +5266,7 @@ def build_levels_command_message(exchange, symbol, skill_level=None):
         overall_confidence,
         accumulation,
         current_rsi,
+        ema_200=ema_200,
         skill_level=skill_level,
         price_source=price_source,
         last_updated_label=last_updated_label,
@@ -5246,7 +5290,7 @@ def build_levels_scan_snapshot(exchange, symbol):
         exchange,
         symbol,
         "1d",
-        180,
+        COMMAND_DAILY_CANDLE_LIMIT,
         fallback=closed_candles[-100:],
     )
     weekly_candles = resample_candles(daily_candles, 7)
@@ -5266,6 +5310,7 @@ def build_levels_scan_snapshot(exchange, symbol):
 
     ema_21 = ema(analysis_closes, 21)
     ema_55 = ema(analysis_closes, 55)
+    ema_200 = optional_ema(daily_closes, 200)
     current_rsi = rsi(analysis_closes, 14)
     previous_20_volumes = [candle[5] for candle in closed_candles[-21:-1]]
     volume_average = sum(previous_20_volumes) / len(previous_20_volumes)
@@ -5349,6 +5394,7 @@ def build_levels_scan_snapshot(exchange, symbol):
         "last_updated_label": last_updated_label,
         "ema_21": ema_21,
         "ema_55": ema_55,
+        "ema_200": ema_200,
         "rsi": current_rsi,
         "support_zones": buy_zones,
         "resistance_zones": resistance_zones,
@@ -5364,10 +5410,11 @@ def build_levels_scan_snapshot(exchange, symbol):
         "market_structure": market_structure,
         "market_structure_label": market_structure_label,
         "chart_data": build_chart_data(
-            closed_candles,
+            daily_candles,
             current_price,
             ema_21,
             ema_55,
+            ema_200,
             buy_zones,
             resistance_zones,
             price_source=price_source,
@@ -5781,6 +5828,7 @@ def render_prb(snapshot, news_data=None, fundamentals_data=None, updated=None, r
     last_updated_label = snapshot.get("last_updated_label")
     support_zones = snapshot.get("support_zones", [])
     resistance_zones = snapshot.get("resistance_zones", [])
+    ema_200 = snapshot.get("ema_200")
     patience_grade = snapshot.get("patience_grade", "N/A")
     patience_label = snapshot.get("patience_label", "Pending Evidence")
     bias = snapshot.get("bias", "Pending Evidence")
@@ -5834,6 +5882,13 @@ def render_prb(snapshot, news_data=None, fundamentals_data=None, updated=None, r
     overall_rating = research_confidence_text(snapshot)
     long_term_thesis = "Full long-term thesis pending. Current evidence is limited to Poinkle market structure, trend, RSI, support, and resistance context."
     short_term_thesis = f"Price is currently showing {bias.lower()} bias, {location.lower()}, and {market_structure_label.lower()} conditions."
+    ema_200_context = ema_200_trend_line(current_price, ema_200)
+    ema_200_accumulation = ema_200_accumulation_line(ema_200)
+    ema_200_research_line = (
+        f"• 200 EMA: {ema_200_context} {ema_200_accumulation}\n"
+        if ema_200_accumulation
+        else f"• 200 EMA: {ema_200_context}\n"
+    )
 
     return (
         f"{prb_brand_header()}\n\n"
@@ -5849,6 +5904,7 @@ def render_prb(snapshot, news_data=None, fundamentals_data=None, updated=None, r
         f"• Current Price: {price_display_text(current_price, price_source)}\n"
         f"{data_freshness_line}"
         f"• Trend: {bias}\n"
+        f"{ema_200_research_line}"
         f"• RSI: {current_rsi_text(rsi_value)}\n"
         f"• Market Structure: {market_structure_label}\n"
         f"• Nearest Support Zone: {support_text}\n"

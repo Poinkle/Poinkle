@@ -206,6 +206,24 @@ def draw_wrapped_card_body(ax, body):
         y -= 0.145
 
 
+def draw_ema_label(ax, x_values, values, label, color, x_offset=0.8):
+    if not values:
+        return
+    ax.text(
+        x_values[-1] + x_offset,
+        values[-1],
+        label,
+        color=color,
+        fontsize=6.2,
+        fontweight="bold",
+        ha="left",
+        va="center",
+        alpha=0.88,
+        zorder=11,
+        path_effects=[pe.withStroke(linewidth=2.0, foreground="#03101a", alpha=0.72)],
+    )
+
+
 def generate_reference_levels_chart(
     symbol,
     candles,
@@ -214,6 +232,7 @@ def generate_reference_levels_chart(
     resistances,
     ema21=None,
     ema55=None,
+    ema200=None,
     card_specs=None,
     footer_items=None,
     title=None,
@@ -228,6 +247,11 @@ def generate_reference_levels_chart(
     closes = [c["close"] for c in candles]
     ema21_values = usable_ema(ema21, closes, 21)[-len(recent):]
     ema55_values = usable_ema(ema55, closes, 55)[-len(recent):]
+    ema200_values = (
+        usable_ema(ema200, closes, 200)[-len(recent):]
+        if ema200 is not None and len(closes) >= 200
+        else []
+    )
 
     low = min(c["low"] for c in recent)
     high = max(c["high"] for c in recent)
@@ -331,10 +355,18 @@ def generate_reference_levels_chart(
         body_h = abs(close - open_) or span * 0.003
         chart_ax.add_patch(Rectangle((i - 0.27, body_low), 0.54, body_h, facecolor=color, edgecolor=color, linewidth=0.22, alpha=0.93, zorder=9))
 
-    if ema21_values:
-        chart_ax.plot(x[-len(ema21_values):], ema21_values, color="#d4e2e7", linewidth=1.0, alpha=0.52, zorder=6)
+    if ema200_values:
+        ema200_x = x[-len(ema200_values):]
+        chart_ax.plot(ema200_x, ema200_values, color="#60a5fa", linewidth=1.80, alpha=0.72, zorder=5)
+        draw_ema_label(chart_ax, ema200_x, ema200_values, "EMA 200", "#93c5fd")
     if ema55_values:
-        chart_ax.plot(x[-len(ema55_values):], ema55_values, color="#a98e38", linewidth=0.90, alpha=0.40, zorder=6)
+        ema55_x = x[-len(ema55_values):]
+        chart_ax.plot(ema55_x, ema55_values, color="#d1a94a", linewidth=1.10, alpha=0.58, zorder=6)
+        draw_ema_label(chart_ax, ema55_x, ema55_values, "EMA 55", "#e8c76a")
+    if ema21_values:
+        ema21_x = x[-len(ema21_values):]
+        chart_ax.plot(ema21_x, ema21_values, color="#e5edf2", linewidth=0.85, alpha=0.66, zorder=7)
+        draw_ema_label(chart_ax, ema21_x, ema21_values, "EMA 21", "#edf6fa")
 
     volume_ax = fig.add_axes([0.030, 0.250, 0.890, 0.075], sharex=chart_ax)
     volume_ax.set_facecolor((0, 0, 0, 0))
