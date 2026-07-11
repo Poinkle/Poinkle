@@ -585,6 +585,64 @@ def format_loop_phase_benchmark(command_seconds, scan_seconds, user_alert_second
     )
 
 
+def exchange_error_class_name(error):
+    return error.__class__.__name__.lower()
+
+
+def is_rate_limit_error(error):
+    text = str(error).lower()
+    class_name = exchange_error_class_name(error)
+    rate_limit_markers = (
+        "ratelimit",
+        "rate limit",
+        "rate-limit",
+        "too many requests",
+        "429",
+        "ddosprotection",
+        "ddos protection",
+    )
+    return any(marker in text or marker in class_name for marker in rate_limit_markers)
+
+
+def is_transient_exchange_error(error):
+    text = str(error).lower()
+    class_name = exchange_error_class_name(error)
+    transient_markers = (
+        "network",
+        "timeout",
+        "timed out",
+        "temporarily unavailable",
+        "service unavailable",
+        "bad gateway",
+        "gateway timeout",
+        "internal server error",
+        " 500",
+        " 502",
+        " 503",
+        " 504",
+        "networkerror",
+        "requesttimeout",
+        "exchangeerror",
+    )
+    return any(marker in text or marker in class_name for marker in transient_markers)
+
+
+def is_unsupported_market_error(error):
+    text = str(error).lower()
+    unsupported_markers = (
+        "unsupported symbol",
+        "symbol not found",
+        "market not found",
+        "market symbol not found",
+        "does not have market symbol",
+        "symbol is not supported",
+        "product not found",
+        "unknown symbol",
+        "invalid symbol",
+    )
+    return any(marker in text for marker in unsupported_markers)
+
+
 def candle_error_message(symbol, error):
     text = str(error).lower()
     if "no candles" in text:
@@ -593,19 +651,25 @@ def candle_error_message(symbol, error):
         return f"{symbol}: Coinbase returned malformed candles. Skipping."
     if "not enough" in text:
         return f"{symbol}: Not enough candles for indicators. Skipping."
-    if "unsupported" in text or "symbol" in text or "market" in text or "not found" in text:
+    if is_rate_limit_error(error):
+        return f"{symbol}: Coinbase rate limited candle fetch. Will retry quietly."
+    if is_transient_exchange_error(error):
+        return f"{symbol}: Temporary Coinbase candle fetch failure. Will retry quietly."
+    if is_unsupported_market_error(error):
         return f"{symbol}: Unsupported Coinbase pair. Skipping."
-    if "timeout" in text or "rate" in text or "429" in text:
-        return f"{symbol}: Coinbase candle fetch failed. Will retry quietly."
     return f"{symbol}: Coinbase candle fetch failed. Will retry quietly."
 
 
 def classify_scan_failure_error(error):
     text = str(error).lower()
-    if "timeout" in text or "rate" in text or "429" in text:
+    if is_rate_limit_error(error):
+        return "rate_limited"
+    if is_transient_exchange_error(error):
         return "network_or_rate_limit"
     if "no candles" in text or "malformed" in text or "missing" in text or "not enough" in text:
         return "insufficient_or_missing_candles"
+    if is_unsupported_market_error(error):
+        return "unsupported_market"
     return "other"
 
 
