@@ -2097,6 +2097,11 @@ def format_zone(zone):
     return f"{format_zone_price(low)} - {format_zone_price(high)}"
 
 
+ZONE_HONEST_LIMIT_LINE = (
+    "Zones, not exact numbers — wicks fake out. Price rarely respects a line to the dollar."
+)
+
+
 def zone_padding(current_price):
     return max(abs(current_price) * 0.0015, 0.000001)
 
@@ -3780,7 +3785,7 @@ def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, 
             f"<b>Timeframe:</b> Daily\n"
             f"{time_text}"
             f"<b>Direction:</b> {trade_plan['direction']}\n"
-            f"<b>Level:</b> {format_level(trade_plan['level'])}\n"
+            f"<b>Reference zone:</b> around {format_level(trade_plan['level'])}\n"
             f"<b>Close:</b> {format_level(close)}\n"
             f"<b>Setup Quality:</b> {trade_plan['setup_quality']}\n"
             f"<b>Setup Status:</b> {trade_plan['setup_status']}\n"
@@ -3789,7 +3794,7 @@ def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, 
             f"<b>RSI status:</b> {trade_plan['rsi_trend']}\n"
             f"<b>EMA trend:</b> {trade_plan['ema_trend']}\n"
             f"{secondary_text}"
-            f"<b>Next key level:</b> {format_level(location.get('next_target', close))}\n\n"
+            f"<b>Next watch zone:</b> around {format_level(location.get('next_target', close))}\n\n"
             f"<b>Reason:</b> Break detected, but momentum/volume did not confirm.\n"
             f"<b>Action:</b> Watch only / No trade confirmation"
             f"{link_text}"
@@ -3805,7 +3810,7 @@ def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, 
             f"<b>Timeframe:</b> Daily\n"
             f"{time_text}"
             f"<b>Direction:</b> {trade_plan['direction']}\n"
-            f"<b>Level:</b> {format_level(trade_plan['level'])}\n"
+            f"<b>Reference zone:</b> around {format_level(trade_plan['level'])}\n"
             f"<b>Close:</b> {format_level(close)}\n"
             f"<b>Setup Quality:</b> {trade_plan['setup_quality']}\n"
             f"<b>Setup Status:</b> {trade_plan['setup_status']}\n"
@@ -3814,8 +3819,8 @@ def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, 
             f"<b>RSI status:</b> {trade_plan['rsi_trend']}\n"
             f"<b>EMA trend:</b> {trade_plan['ema_trend']}\n"
             f"{secondary_text}"
-            f"<b>Next key level:</b> {format_level(location.get('next_target', close))}\n\n"
-            f"<b>Reason:</b> Price stalled around the broken level with weak volume.\n"
+            f"<b>Next watch zone:</b> around {format_level(location.get('next_target', close))}\n\n"
+            f"<b>Reason:</b> Price stalled around the broken zone with weak volume.\n"
             f"<b>Action:</b> Watch only / No trade confirmation"
             f"{link_text}"
         )
@@ -3829,7 +3834,7 @@ def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, 
             f"<b>Timeframe:</b> Daily\n"
             f"{time_text}"
             f"<b>Direction blocked:</b> {alert['blocked_direction']}\n"
-            f"<b>Level:</b> {format_level(alert['level'])}\n"
+            f"<b>Reference zone:</b> around {format_level(alert['level'])}\n"
             f"<b>Close:</b> {format_level(close)}\n"
             f"<b>Setup Quality:</b> {alert.get('setup_quality', 'D')}\n"
             f"<b>Setup Status:</b> {setup_quality_status(alert.get('setup_quality', 'D'))}\n"
@@ -3869,7 +3874,7 @@ def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, 
             f"<b>Trade quality:</b> {trade_plan['trade_quality']}\n"
             f"<b>Break Strength Score:</b> {trade_plan['break_strength_score']}/100\n"
             f"<b>Direction:</b> {trade_plan['direction']}\n"
-            f"<b>Level broken:</b> {format_level(trade_plan['level'])}\n"
+            f"<b>Zone entered:</b> around {format_level(trade_plan['level'])}\n"
             f"<b>First candle close:</b> {format_level(trade_plan['first_close'])}\n"
             f"<b>Confirmation close:</b> "
             f"{format_level(trade_plan['confirmation_close'])}\n\n"
@@ -3891,7 +3896,7 @@ def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, 
             f"<b>TP2:</b> {format_level(trade_plan['tp2'])}\n"
             f"<b>TP3:</b> {format_level(trade_plan['tp3'])}\n"
             f"<b>Risk note:</b>\n"
-            f"Educational alert only. Wait for your own confirmation and manage risk."
+            f"Educational heads-up only. Go look, then follow your own plan."
             f"{link_text}"
         )
 
@@ -3918,7 +3923,7 @@ def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, 
 
     level_text = ""
     if alert.get("level") is not None:
-        level_text = f"🎯 <b>Level:</b> {format_level(alert['level'])}\n"
+        level_text = f"🎯 <b>Reference zone:</b> around {format_level(alert['level'])}\n"
 
     range_text = ""
     range_context = alert.get("range_context")
@@ -3927,7 +3932,7 @@ def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, 
             f"📍 <b>Range High:</b> {format_level(range_context['range_high'])}\n"
             f"📍 <b>Range Low:</b> {format_level(range_context['range_low'])}\n"
             f"📌 <b>Range Position:</b> {range_context['range_position']}\n"
-            f"🎯 <b>Next Target Level:</b> "
+            f"🎯 <b>Next Watch Zone:</b> around "
             f"{format_level(range_context['next_target'])}\n"
             f"📏 <b>Distance To Next Target %:</b> "
             f"{range_context['distance_to_target_pct']:.2f}%\n"
@@ -5040,6 +5045,7 @@ def build_levels_snapshot_caption(
         f"{trend_text}\n\n"
         f"🎯 FOCUS\n"
         f"{current_location}\n\n"
+        f"{ZONE_HONEST_LIMIT_LINE}\n\n"
         f"⭐ MARKET SCORE\n"
         f"{overall_confidence} / 100\n\n"
         f"🧠 SETUP GRADE\n"
@@ -5845,26 +5851,27 @@ def render_prb(snapshot, news_data=None, fundamentals_data=None, updated=None, r
         f"• Trend: {bias}\n"
         f"• RSI: {current_rsi_text(rsi_value)}\n"
         f"• Market Structure: {market_structure_label}\n"
-        f"• Nearest Support: {support_text}\n"
-        f"• Nearest Resistance: {resistance_text}\n"
+        f"• Nearest Support Zone: {support_text}\n"
+        f"• Nearest Resistance Zone: {resistance_text}\n"
+        f"• Zone note: {ZONE_HONEST_LIMIT_LINE}\n"
         f"{fundamentals_detail_lines}"
         f"• Best Use Case: {strategy_text_for_research(strategy)}\n\n"
         f"📈 HISTORICAL PATTERN\n\n"
         f"Full historical research pending. Use this brief as a market-structure read until saved or live research is connected.\n\n"
         f"{separator}\n\n"
         f"🐂 BULL CASE\n\n"
-        f"{ticker} improves if trend strengthens, accumulation holds, resistance is reclaimed, liquidity expands, and fundamental evidence confirms the thesis.\n\n"
+        f"{ticker} improves if trend strengthens, accumulation zones hold, resistance zones are reclaimed, liquidity expands, and fundamental evidence confirms the thesis.\n\n"
         f"🐻 BEAR CASE\n\n"
-        f"{ticker} weakens if support fails, market structure deteriorates, liquidity contracts, or fundamental evidence contradicts the thesis.\n\n"
+        f"{ticker} weakens if support zones fail, market structure deteriorates, liquidity contracts, or fundamental evidence contradicts the thesis.\n\n"
         f"❓ BIGGEST UNKNOWNS\n\n"
         f"Protocol fundamentals, adoption, token supply dynamics, sector leadership, regulation, macro liquidity, and future catalyst quality.\n\n"
         f"{separator}\n\n"
         f"🔍 WHAT WOULD STRENGTHEN THIS THESIS?\n\n"
-        f"• Reclaim resistance with improving trend and volume.\n"
-        f"• Hold support during broader market weakness.\n"
+        f"• Reclaim a resistance zone with improving trend and volume.\n"
+        f"• Hold a support zone during broader market weakness.\n"
         f"• Add saved research evidence or future live fundamentals confirming adoption.\n\n"
         f"⚠️ WHAT WOULD WEAKEN THIS THESIS?\n\n"
-        f"• Lose nearby support.\n"
+        f"• Lose a nearby support zone.\n"
         f"• RSI and trend continue weakening.\n"
         f"• Future research finds weak fundamentals or poor catalyst quality.\n\n"
         f"{separator}\n\n"
@@ -7502,9 +7509,10 @@ def level_alert_zones(snapshot, alert_type):
 def build_level_alert_message(ticker, price, zone_name, zone_side, alert_type):
     if alert_type == "critical":
         return (
-            f"🔔 {ticker} reached a critical Poinkle level.\n\n"
+            f"🔔 {ticker} entered a critical Poinkle zone.\n\n"
             f"Price: ${format_zone_price(price)}\n"
             f"Zone: {zone_name}\n\n"
+            f"{ZONE_HONEST_LIMIT_LINE}\n\n"
             f"Before acting, slow down:\n"
             f"• Is this part of your plan?\n"
             f"• Are you adding, waiting, or doing nothing?\n"
@@ -7515,9 +7523,10 @@ def build_level_alert_message(ticker, price, zone_name, zone_side, alert_type):
 
     if zone_side == "support":
         return (
-            f"🔔 {ticker} reached a Poinkle support review zone.\n\n"
+            f"🔔 {ticker} entered a Poinkle support review zone.\n\n"
             f"Price: ${format_zone_price(price)}\n"
             f"Zone: {zone_name}\n\n"
+            f"{ZONE_HONEST_LIMIT_LINE}\n\n"
             f"Before acting, slow down:\n"
             f"• Is this part of your DCA plan?\n"
             f"• Are you following your strategy or reacting emotionally?\n"
@@ -7527,9 +7536,10 @@ def build_level_alert_message(ticker, price, zone_name, zone_side, alert_type):
         )
 
     return (
-        f"🔔 {ticker} reached a Poinkle resistance review zone.\n\n"
+        f"🔔 {ticker} entered a Poinkle resistance review zone.\n\n"
         f"Price: ${format_zone_price(price)}\n"
         f"Zone: {zone_name}\n\n"
+        f"{ZONE_HONEST_LIMIT_LINE}\n\n"
         f"Before acting, slow down:\n"
         f"• Does your plan include trimming here?\n"
         f"• Are you protecting gains or reacting to fear?\n"
@@ -8194,14 +8204,15 @@ def build_whynot_command_message(exchange, symbol):
     aligned_count = scorecard["aligned_count"]
     present_count = sum(1 for item in display_rows if item.get("state") == "pass")
     verdict = whynot_verdict(aligned_count)
+    zone_location = str(scorecard["range_location"]).replace("Range", "Zone")
     lines.extend(
         [
             "",
             f"<b>{present_count} of {len(display_rows)} signals present.</b>",
             f"<b>{aligned_count} same-direction aligned - {verdict}.</b>",
             (
-                f"Range: {scorecard['range_location']} "
-                f"({scorecard['range_position'] * 100:.0f}% through the current range)."
+                f"Zone context: {zone_location} "
+                f"({scorecard['range_position'] * 100:.0f}% through the current chart range)."
             ),
             "",
             "Honest limit: this describes right now; conditions change.",
