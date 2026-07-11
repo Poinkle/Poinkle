@@ -6836,41 +6836,44 @@ def handle_watch_command(
         )
         return
 
-    symbol = validate_tradeable_symbol(exchange, parts[1])
-    if symbol is None:
-        send_telegram_message(
-            telegram_token,
-            response_chat_id,
-            "I couldn’t find that coin yet. Try the ticker, like /watch BTC.",
-        )
-        return
-
     watchlists = load_user_watchlists()
     user_symbols = watchlists.setdefault(user_chat_id, [])
-    if symbol in user_symbols:
-        send_telegram_message(
-            telegram_token,
-            response_chat_id,
-            f"✅ You’re already watching {base_symbol(symbol)}.",
-        )
-        return
+    added = []
+    already_watching = []
+    not_found = []
+    not_added_full = []
 
-    if len(user_symbols) >= MAX_USER_WATCHLIST:
-        send_telegram_message(
-            telegram_token,
-            response_chat_id,
-            f"You’re at the {MAX_USER_WATCHLIST}-coin limit. Remove one first with /unwatch BTC.",
-        )
-        return
+    for raw_symbol in parts[1:]:
+        symbol = validate_tradeable_symbol(exchange, raw_symbol)
+        if symbol is None:
+            not_found.append(raw_symbol.upper())
+            continue
+        ticker = base_symbol(symbol)
+        if symbol in user_symbols:
+            already_watching.append(ticker)
+            continue
+        if len(user_symbols) >= MAX_USER_WATCHLIST:
+            not_added_full.append(ticker)
+            continue
+        user_symbols.append(symbol)
+        added.append(ticker)
 
-    user_symbols.append(symbol)
-    watchlists[user_chat_id] = sorted(user_symbols, key=base_symbol)
-    save_user_watchlists(watchlists)
-    send_telegram_message(
-        telegram_token,
-        response_chat_id,
-        f"✅ Added {base_symbol(symbol)} to your Poinkle watchlist.",
-    )
+    if added:
+        watchlists[user_chat_id] = sorted(user_symbols, key=base_symbol)
+        save_user_watchlists(watchlists)
+
+    lines = []
+    if added:
+        lines.append(f"✅ Added to your watchlist: {', '.join(added)}")
+    if already_watching:
+        lines.append(f"Already watching: {', '.join(already_watching)}")
+    if not_found:
+        lines.append(f"Couldn’t find: {', '.join(not_found)}")
+    if not_added_full:
+        lines.append(f"Watchlist full ({MAX_USER_WATCHLIST} max). Not added: {', '.join(not_added_full)}")
+    if not lines:
+        lines.append("No watchlist changes.")
+    send_telegram_message(telegram_token, response_chat_id, "\n".join(lines))
 
 
 def handle_unwatch_command(
@@ -6894,32 +6897,43 @@ def handle_unwatch_command(
         )
         return
 
-    symbol = normalize_trade_symbol_input(parts[1])
-    if symbol is None:
-        send_telegram_message(telegram_token, response_chat_id, "Tell me which coin to remove, like /unwatch BTC.")
-        return
-
     watchlists = load_user_watchlists()
     user_symbols = watchlists.get(user_chat_id, [])
-    if symbol not in user_symbols:
-        send_telegram_message(
-            telegram_token,
-            response_chat_id,
-            f"You weren’t watching {base_symbol(symbol)} yet.",
-        )
-        return
+    removed = []
+    not_watching = []
+    invalid = []
+    symbols_to_remove = set()
 
-    user_symbols = [existing_symbol for existing_symbol in user_symbols if existing_symbol != symbol]
+    for raw_symbol in parts[1:]:
+        symbol = normalize_trade_symbol_input(raw_symbol)
+        if symbol is None:
+            invalid.append(raw_symbol.upper())
+            continue
+        ticker = base_symbol(symbol)
+        if symbol not in user_symbols:
+            not_watching.append(ticker)
+            continue
+        symbols_to_remove.add(symbol)
+        removed.append(ticker)
+
+    user_symbols = [existing_symbol for existing_symbol in user_symbols if existing_symbol not in symbols_to_remove]
     if user_symbols:
         watchlists[user_chat_id] = user_symbols
     else:
         watchlists.pop(user_chat_id, None)
-    save_user_watchlists(watchlists)
-    send_telegram_message(
-        telegram_token,
-        response_chat_id,
-        f"✅ Removed {base_symbol(symbol)} from your Poinkle watchlist.",
-    )
+    if removed:
+        save_user_watchlists(watchlists)
+
+    lines = []
+    if removed:
+        lines.append(f"✅ Removed from your watchlist: {', '.join(removed)}")
+    if not_watching:
+        lines.append(f"You weren’t watching: {', '.join(not_watching)}")
+    if invalid:
+        lines.append(f"Couldn’t read: {', '.join(invalid)}")
+    if not lines:
+        lines.append("No watchlist changes.")
+    send_telegram_message(telegram_token, response_chat_id, "\n".join(lines))
 
 
 def user_watchlist_symbols(user_chat_id):
