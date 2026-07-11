@@ -4858,6 +4858,61 @@ def format_market_cap_value(value):
     return f"${formatted}"
 
 
+def format_whole_percent(value):
+    try:
+        return f"{float(value):.0f}%"
+    except (TypeError, ValueError):
+        return ""
+
+
+def fdv_market_cap_read(market_cap, fully_diluted_valuation):
+    market_cap = numeric_market_value(market_cap)
+    fully_diluted_valuation = numeric_market_value(fully_diluted_valuation)
+    if not market_cap or not fully_diluted_valuation:
+        return ""
+
+    ratio = fully_diluted_valuation / market_cap
+    if abs(ratio - 1) <= 0.05:
+        return (
+            "FDV is roughly equal to market cap - nearly all tokens are already "
+            "in circulation, so there is little future dilution from unlocks."
+        )
+    if ratio > 1.2:
+        return (
+            f"FDV is {ratio:.1f}x market cap - a large share of tokens are not "
+            "yet circulating. Future unlocks would increase supply."
+        )
+    return ""
+
+
+def circulating_supply_read(circulating_supply, max_supply):
+    circulating_supply = numeric_market_value(circulating_supply)
+    max_supply = numeric_market_value(max_supply)
+    if max_supply is None:
+        return "No fixed max supply - this token has no hard cap."
+    if not circulating_supply or max_supply <= 0:
+        return ""
+
+    circulating_percent = (circulating_supply / max_supply) * 100
+    if circulating_percent >= 95:
+        return "Circulating supply is at/near max - fully distributed."
+    return f"{format_whole_percent(circulating_percent)} of max supply is circulating."
+
+
+def coingecko_fundamentals_teaching_line(fundamentals_data):
+    reads = [
+        fdv_market_cap_read(
+            fundamentals_data.get("market_cap"),
+            fundamentals_data.get("fully_diluted_valuation"),
+        ),
+        circulating_supply_read(
+            fundamentals_data.get("circulating_supply"),
+            fundamentals_data.get("max_supply"),
+        ),
+    ]
+    return " ".join(read for read in reads if read)
+
+
 def extract_coingecko_coin_metadata(payload):
     market_data = payload.get("market_data") or {}
     description = payload.get("description") or {}
@@ -4999,9 +5054,15 @@ def render_prb(snapshot, news_data=None, fundamentals_data=None, updated=None, r
         if fundamentals_connected
         else "Pending Evidence"
     )
+    fundamentals_teaching_line = (
+        coingecko_fundamentals_teaching_line(fundamentals_data)
+        if fundamentals_connected
+        else ""
+    )
     fundamentals_detail_lines = (
         f"• Fundamentals: {fundamentals_line}\n"
         f"• Supply: {supply_line}\n"
+        f"{f'• What this means: {fundamentals_teaching_line}\n' if fundamentals_teaching_line else ''}"
         f"• Description: {description_text}\n"
         f"• Data provided by CoinGecko\n"
         if fundamentals_connected
