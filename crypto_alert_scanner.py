@@ -3,6 +3,7 @@ import os
 import sys
 import time
 import html
+from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -29,6 +30,7 @@ except ModuleNotFoundError:
 
 LAST_LEVELS_CHART_DATA = {}
 LAST_RESEARCH_CHART_DATA = {}
+TELEGRAM_COMMAND_JOB_QUEUE = deque()
 
 PROJECT_DIR = Path(__file__).resolve().parent
 if str(PROJECT_DIR) not in sys.path:
@@ -187,6 +189,10 @@ ENTRY_TIMEFRAME = "2h"
 TIMEFRAME_MS = 24 * 60 * 60 * 1000
 CANDLE_LIMIT = 120
 POLL_SECONDS = 15
+TELEGRAM_POLL_EVERY_N_SYMBOLS = 15
+TELEGRAM_COMMAND_JOB_QUEUE_LIMIT = 50
+TELEGRAM_COMMAND_JOB_BATCH_LIMIT = 50
+TELEGRAM_JOB_BUDGET_SECONDS_PER_CHUNK = 8
 TRADE_TRACK_POLL_SECONDS = 60
 TRADE_TRACK_MAX_MINUTES = 60
 TRADE_TRACKING_TELEGRAM_ENABLED = False
@@ -1033,6 +1039,36 @@ def answer_telegram_callback(token, callback_query_id, text=""):
         print(f"[WARN] Telegram callback answer exception: {e}")
 
 
+def clear_telegram_message_keyboard(token, chat_id, message_id):
+    if not chat_id or not message_id:
+        return False
+    url = f"https://api.telegram.org/bot{token}/editMessageReplyMarkup"
+    try:
+        payload = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "reply_markup": json.dumps({"inline_keyboard": []}),
+        }
+        response = requests.post(url, json=payload, timeout=10)
+        if response.status_code != 200:
+            log_warn(f"Telegram keyboard cleanup failed: {response.status_code} {response.text}")
+            return False
+        return True
+    except Exception as error:
+        log_warn(f"Telegram keyboard cleanup exception: {error}")
+        return False
+
+
+def clear_callback_message_keyboard(telegram_token, callback_query):
+    message = (callback_query or {}).get("message") or {}
+    chat = message.get("chat") or {}
+    return clear_telegram_message_keyboard(
+        telegram_token,
+        str(chat.get("id") or ""),
+        message.get("message_id"),
+    )
+
+
 def send_telegram_photo(token, chat_id, photo_path, caption="", reply_markup=None):
     url = f"https://api.telegram.org/bot{token}/sendPhoto"
     try:
@@ -1202,6 +1238,101 @@ def mark_telegram_callback_handled(command_state, callback_query_id):
         return
     handled_ids.append(callback_query_id)
     del handled_ids[:-TELEGRAM_CALLBACK_DEDUPE_LIMIT]
+
+
+def heavy_command_action_for_text(message_text):
+    if is_snapshot_command(message_text):
+        return "snapshot"
+    if is_research_command(message_text):
+        return "research"
+    if is_whynot_command(message_text):
+        return "whynot"
+    return ""
+
+
+def should_enqueue_heavy_command(message_text):
+    return bool(heavy_command_action_for_text(message_text)) and len(message_text.strip().split()) >= 2
+
+
+def enqueue_telegram_command_job(action, telegram_chat_id, message_text, source_chat=None, from_user=None):
+    if len(TELEGRAM_COMMAND_JOB_QUEUE) >= TELEGRAM_COMMAND_JOB_QUEUE_LIMIT:
+        log_warn(f"Telegram command job queue full; dropped {action} job for {message_text!r}.")
+        return False
+    TELEGRAM_COMMAND_JOB_QUEUE.append(
+        {
+            "action": action,
+            "telegram_chat_id": str(telegram_chat_id),
+            "message_text": message_text,
+            "source_chat": source_chat or {"id": telegram_chat_id, "type": "private"},
+            "from_user": from_user or {},
+        }
+    )
+    return True
+
+
+def run_telegram_command_job(exchange, telegram_token, job):
+    action = job.get("action")
+    telegram_chat_id = job.get("telegram_chat_id")
+    message_text = job.get("message_text", "")
+    source_chat = job.get("source_chat") or {"id": telegram_chat_id, "type": "private"}
+    from_user = job.get("from_user") or {}
+
+    if action == "snapshot":
+        handle_levels_command(
+            exchange,
+            telegram_token,
+            telegram_chat_id,
+            message_text,
+            source_chat=source_chat,
+            from_user=from_user,
+        )
+        return True
+    if action == "research":
+        handle_research_command(
+            exchange,
+            telegram_token,
+            telegram_chat_id,
+            message_text,
+            source_chat=source_chat,
+            from_user=from_user,
+        )
+        return True
+    if action == "whynot":
+        handle_whynot_command(
+            exchange,
+            telegram_token,
+            telegram_chat_id,
+            message_text,
+            source_chat=source_chat,
+            from_user=from_user,
+        )
+        return True
+
+    log_warn(f"Unknown Telegram command job action: {action}")
+    return False
+
+
+def process_telegram_command_jobs(
+    exchange,
+    telegram_token,
+    max_jobs=TELEGRAM_COMMAND_JOB_BATCH_LIMIT,
+    time_budget_seconds=None,
+):
+    processed = 0
+    started_at = time.perf_counter()
+    while TELEGRAM_COMMAND_JOB_QUEUE and processed < max_jobs:
+        job = TELEGRAM_COMMAND_JOB_QUEUE.popleft()
+        try:
+            run_telegram_command_job(exchange, telegram_token, job)
+        except Exception as error:
+            log_warn(f"Telegram command job failed for {job.get('action')}: {error}")
+        processed += 1
+        if (
+            time_budget_seconds is not None
+            and time.perf_counter() - started_at >= time_budget_seconds
+        ):
+            break
+    return processed
 
 
 def bot_username_text():
@@ -4053,6 +4184,20 @@ def watchlist_coin_keyboard(symbols):
     }
 
 
+def watchlist_direct_action_keyboard(symbols, action):
+    return {
+        "inline_keyboard": [
+            [
+                {
+                    "text": base_symbol(symbol),
+                    "callback_data": f"{WATCHLIST_ACTION_CALLBACK_PREFIX}:{action}:{symbol}",
+                }
+            ]
+            for symbol in symbols
+        ]
+    }
+
+
 def watchlist_action_keyboard(symbol):
     return {
         "inline_keyboard": [
@@ -5229,20 +5374,26 @@ def handle_research_command(
     telegram_chat_id,
     message_text,
     source_chat=None,
+    from_user=None,
 ):
     parts = message_text.strip().split()
     command = snapshot_command_name(message_text) or "/research"
     log_info(f"Received {message_text.strip()}")
     source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
+    from_user = from_user or {}
     response_chat_id = str(source_chat.get("id", telegram_chat_id))
 
     if len(parts) < 2:
         log_warn(f"Missing symbol for {command} command")
-        send_telegram_message(
+        send_bare_command_watchlist_panel(
             telegram_token,
-            response_chat_id,
-            f"Use: {command} {command_example_asset(0)}\n"
-            f"Example: /research {command_example_asset(2)}",
+            telegram_chat_id,
+            source_chat,
+            from_user,
+            command,
+            "research",
+            "Research",
+            command_example_asset(2),
         )
         return
 
@@ -5285,18 +5436,25 @@ def handle_whynot_command(
     telegram_chat_id,
     message_text,
     source_chat=None,
+    from_user=None,
 ):
     parts = message_text.strip().split()
     command = snapshot_command_name(message_text) or "/whynot"
     log_info(f"Received {message_text.strip()}")
     source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
+    from_user = from_user or {}
     response_chat_id = str(source_chat.get("id", telegram_chat_id))
 
     if len(parts) < 2:
-        send_telegram_message(
+        send_bare_command_watchlist_panel(
             telegram_token,
-            response_chat_id,
-            f"Use: {command} BTC\nExample: /whynot SOL",
+            telegram_chat_id,
+            source_chat,
+            from_user,
+            command,
+            "whynot",
+            "Why not?",
+            "BTC",
         )
         return
 
@@ -5491,6 +5649,7 @@ def handle_watchlist_coin_callback(telegram_token, callback_query, payload, exch
         f"<b>{base_symbol(symbol)}</b>\nWhat do you want to open?",
         reply_markup=watchlist_action_keyboard(symbol),
     )
+    clear_callback_message_keyboard(telegram_token, callback_query)
     return True
 
 
@@ -5515,32 +5674,37 @@ def handle_watchlist_action_callback(telegram_token, callback_query, payload, ex
     source_chat = {"id": user_id, "type": "private"}
     ticker = base_symbol(symbol)
     if action == "snapshot":
-        handle_levels_command(
-            exchange,
-            telegram_token,
+        queued = enqueue_telegram_command_job(
+            "snapshot",
             user_id,
             f"/snapshot {ticker}",
             source_chat=source_chat,
             from_user=user,
         )
+        if queued:
+            clear_callback_message_keyboard(telegram_token, callback_query)
         return True
     if action == "research":
-        handle_research_command(
-            exchange,
-            telegram_token,
+        queued = enqueue_telegram_command_job(
+            "research",
             user_id,
             f"/research {ticker}",
             source_chat=source_chat,
+            from_user=user,
         )
+        if queued:
+            clear_callback_message_keyboard(telegram_token, callback_query)
         return True
     if action == "whynot":
-        handle_whynot_command(
-            exchange,
-            telegram_token,
+        queued = enqueue_telegram_command_job(
+            "whynot",
             user_id,
             f"/whynot {ticker}",
             source_chat=source_chat,
+            from_user=user,
         )
+        if queued:
+            clear_callback_message_keyboard(telegram_token, callback_query)
         return True
 
     return False
@@ -5950,6 +6114,54 @@ def user_watchlist_symbols(user_chat_id):
     return load_user_watchlists().get(str(user_chat_id), [])
 
 
+def send_bare_command_watchlist_panel(
+    telegram_token,
+    telegram_chat_id,
+    source_chat,
+    from_user,
+    command,
+    action,
+    action_label,
+    example_ticker,
+):
+    source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
+    from_user = from_user or {}
+    response_chat_id = str(source_chat.get("id", telegram_chat_id))
+    user_chat_id = alert_dm_chat_id(source_chat, from_user, telegram_chat_id)
+    user_symbols = user_watchlist_symbols(user_chat_id)
+
+    if not user_symbols:
+        send_telegram_message(
+            telegram_token,
+            response_chat_id,
+            f"Use: {command} {example_ticker}\n"
+            f"Or start a watchlist with /watch {example_ticker}.",
+        )
+        return True
+
+    sorted_symbols = sorted(user_symbols, key=base_symbol)
+    is_private = is_private_chat(source_chat)
+    try:
+        send_telegram_message(
+            telegram_token,
+            user_chat_id,
+            f"{action_label} — pick a coin:\n\n"
+            f"Or type: {command} {example_ticker}",
+            reply_markup=watchlist_direct_action_keyboard(sorted_symbols, action),
+        )
+        if not is_private:
+            send_telegram_message(
+                telegram_token,
+                response_chat_id,
+                f"I sent your {action_label.lower()} coin picker to your DM.",
+            )
+    except Exception as error:
+        log_warn(f"Could not DM {action} picker to user {user_chat_id}: {error}")
+        if not is_private:
+            send_telegram_message(telegram_token, response_chat_id, levels_dm_failed_message())
+    return True
+
+
 def handle_mywatch_command(
     telegram_token,
     telegram_chat_id,
@@ -6117,10 +6329,15 @@ def handle_levels_command(
 
     if len(parts) < 2:
         log_warn(f"Missing symbol for {command} command")
-        send_telegram_message(
+        send_bare_command_watchlist_panel(
             telegram_token,
-            response_chat_id,
-            f"Use: {command} BTC\nExample: /snapshot DOGE",
+            telegram_chat_id,
+            source_chat,
+            from_user,
+            command,
+            "snapshot",
+            "Snapshot",
+            "BTC",
         )
         return
 
@@ -6324,7 +6541,7 @@ def check_user_level_alerts(exchange, telegram_token):
         save_user_alerts(user_alerts)
 
 
-def process_telegram_commands(exchange, telegram_token, telegram_chat_id, state):
+def process_telegram_commands(exchange, telegram_token, telegram_chat_id, state, defer_heavy_commands=False):
     command_state = state.setdefault("__telegram_commands", {})
     last_update_id = command_state.get("last_update_id")
 
@@ -6490,30 +6707,41 @@ def process_telegram_commands(exchange, telegram_token, telegram_chat_id, state)
                 source_chat=chat,
             )
         elif is_whynot_command(text):
-            handle_whynot_command(
-                exchange,
-                telegram_token,
-                chat_id,
-                text,
-                source_chat=chat,
-            )
+            if defer_heavy_commands and should_enqueue_heavy_command(text):
+                enqueue_telegram_command_job("whynot", chat_id, text, source_chat=chat, from_user=from_user)
+            else:
+                handle_whynot_command(
+                    exchange,
+                    telegram_token,
+                    chat_id,
+                    text,
+                    source_chat=chat,
+                    from_user=from_user,
+                )
         elif is_research_command(text):
-            handle_research_command(
-                exchange,
-                telegram_token,
-                chat_id,
-                text,
-                source_chat=chat,
-            )
+            if defer_heavy_commands and should_enqueue_heavy_command(text):
+                enqueue_telegram_command_job("research", chat_id, text, source_chat=chat, from_user=from_user)
+            else:
+                handle_research_command(
+                    exchange,
+                    telegram_token,
+                    chat_id,
+                    text,
+                    source_chat=chat,
+                    from_user=from_user,
+                )
         elif is_snapshot_command(text):
-            handle_levels_command(
-                exchange,
-                telegram_token,
-                chat_id,
-                text,
-                source_chat=chat,
-                from_user=from_user,
-            )
+            if defer_heavy_commands and should_enqueue_heavy_command(text):
+                enqueue_telegram_command_job("snapshot", chat_id, text, source_chat=chat, from_user=from_user)
+            else:
+                handle_levels_command(
+                    exchange,
+                    telegram_token,
+                    chat_id,
+                    text,
+                    source_chat=chat,
+                    from_user=from_user,
+                )
 
         command_state["last_update_id"] = update_id
         save_state(state)
@@ -7585,7 +7813,7 @@ def scan_symbol(exchange, symbol):
     )
 
 
-def run_once(exchange, telegram_token, telegram_chat_id, state):
+def run_once(exchange, telegram_token, telegram_chat_id, state, poll_telegram_during_scan=False):
     scan_start = time.perf_counter()
     scanned_symbols = 0
     skipped_symbols = 0
@@ -7593,7 +7821,25 @@ def run_once(exchange, telegram_token, telegram_chat_id, state):
     compact_scan_lines = []
     main_chat_safe_mode = main_chat_safe_mode_enabled()
     scan_symbols = build_scan_symbols()
-    for symbol in scan_symbols:
+    for symbol_index, symbol in enumerate(scan_symbols, start=1):
+        if (
+            poll_telegram_during_scan
+            and symbol_index > 1
+            and (symbol_index - 1) % TELEGRAM_POLL_EVERY_N_SYMBOLS == 0
+        ):
+            process_telegram_commands(
+                exchange,
+                telegram_token,
+                telegram_chat_id,
+                state,
+                defer_heavy_commands=True,
+            )
+            process_telegram_command_jobs(
+                exchange,
+                telegram_token,
+                time_budget_seconds=TELEGRAM_JOB_BUDGET_SECONDS_PER_CHUNK,
+            )
+
         if symbol in UNSUPPORTED_SYMBOLS_THIS_SESSION:
             skipped_symbols += 1
             continue
@@ -7994,16 +8240,30 @@ def main():
             loop_phase_start = time.perf_counter()
             update_bot_status(state, "Online", "Checking commands")
             save_state(state)
-            process_telegram_commands(exchange, telegram_token, telegram_chat_id, state)
+            process_telegram_commands(
+                exchange,
+                telegram_token,
+                telegram_chat_id,
+                state,
+                defer_heavy_commands=True,
+            )
             command_seconds = time.perf_counter() - loop_phase_start
 
             scan_phase_start = time.perf_counter()
             update_bot_status(state, "Online", "Scanning")
             save_state(state)
-            run_once(exchange, telegram_token, telegram_chat_id, state)
+            run_once(
+                exchange,
+                telegram_token,
+                telegram_chat_id,
+                state,
+                poll_telegram_during_scan=True,
+            )
             update_bot_status(state, "Online", "Scan complete", last_scan_time=eastern_time_now())
             save_state(state)
             scan_seconds = time.perf_counter() - scan_phase_start
+
+            process_telegram_command_jobs(exchange, telegram_token)
 
             user_alert_phase_start = time.perf_counter()
             check_user_level_alerts(exchange, telegram_token)
