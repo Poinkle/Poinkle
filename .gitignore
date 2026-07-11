@@ -12,3 +12,5 @@ scanner_state.json
 diagnostics/*.jsonl
 
 diagnostics/*.jsonl
+.env
+.DS_Store
