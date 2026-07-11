@@ -1051,6 +1051,8 @@ def clear_telegram_message_keyboard(token, chat_id, message_id):
         }
         response = requests.post(url, json=payload, timeout=10)
         if response.status_code != 200:
+            if response.status_code == 400 and "message is not modified" in response.text.lower():
+                return True
             log_warn(f"Telegram keyboard cleanup failed: {response.status_code} {response.text}")
             return False
         return True
@@ -1204,9 +1206,9 @@ def send_status_update(telegram_token, telegram_chat_id, state, indicator=None, 
         log_warn(f"Could not send status update: {error}")
 
 
-def get_telegram_updates(token, offset=None):
+def get_telegram_updates(token, offset=None, poll_timeout=1):
     url = f"https://api.telegram.org/bot{token}/getUpdates"
-    params = {"timeout": 1}
+    params = {"timeout": poll_timeout}
     if offset is not None:
         params["offset"] = offset
 
@@ -6541,13 +6543,20 @@ def check_user_level_alerts(exchange, telegram_token):
         save_user_alerts(user_alerts)
 
 
-def process_telegram_commands(exchange, telegram_token, telegram_chat_id, state, defer_heavy_commands=False):
+def process_telegram_commands(
+    exchange,
+    telegram_token,
+    telegram_chat_id,
+    state,
+    defer_heavy_commands=False,
+    telegram_poll_timeout=1,
+):
     command_state = state.setdefault("__telegram_commands", {})
     last_update_id = command_state.get("last_update_id")
 
     try:
         offset = last_update_id + 1 if last_update_id is not None else None
-        updates = get_telegram_updates(telegram_token, offset)
+        updates = get_telegram_updates(telegram_token, offset, poll_timeout=telegram_poll_timeout)
     except Exception as error:
         throttled_log_warn(
             "telegram",
@@ -7833,6 +7842,7 @@ def run_once(exchange, telegram_token, telegram_chat_id, state, poll_telegram_du
                 telegram_chat_id,
                 state,
                 defer_heavy_commands=True,
+                telegram_poll_timeout=0,
             )
             process_telegram_command_jobs(
                 exchange,
