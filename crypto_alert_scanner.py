@@ -31,6 +31,8 @@ except ModuleNotFoundError:
 LAST_LEVELS_CHART_DATA = {}
 LAST_RESEARCH_CHART_DATA = {}
 TELEGRAM_COMMAND_JOB_QUEUE = deque()
+TELEGRAM_HTTP_SESSION = None
+COINGECKO_COIN_METADATA_CACHE = {}
 
 PROJECT_DIR = Path(__file__).resolve().parent
 if str(PROJECT_DIR) not in sys.path:
@@ -90,6 +92,66 @@ WATCHLIST_FILE = Path(__file__).resolve().parent / "watchlist.json"
 SYMBOL_ALIASES = {
     "XAO": "XAU",
     "GOLD": "XAU",
+}
+COINGECKO_DEMO_API_BASE_URL = "https://api.coingecko.com/api/v3"
+COINGECKO_COIN_METADATA_TTL_SECONDS = 6 * 60 * 60
+COINGECKO_COIN_IDS = {
+    "BTC": "bitcoin",
+    "ETH": "ethereum",
+    "SOL": "solana",
+    "XRP": "ripple",
+    "BNB": "binancecoin",
+    "DOGE": "dogecoin",
+    "TRX": "tron",
+    "ADA": "cardano",
+    "HYPE": "hyperliquid",
+    "SUI": "sui",
+    "LINK": "chainlink",
+    "XLM": "stellar",
+    "BCH": "bitcoin-cash",
+    "AVAX": "avalanche-2",
+    "TON": "the-open-network",
+    "SHIB": "shiba-inu",
+    "HBAR": "hedera-hashgraph",
+    "LTC": "litecoin",
+    "DOT": "polkadot",
+    "PEPE": "pepe",
+    "UNI": "uniswap",
+    "AAVE": "aave",
+    "TAO": "bittensor",
+    "NEAR": "near",
+    "ICP": "internet-computer",
+    "ETC": "ethereum-classic",
+    "ONDO": "ondo-finance",
+    "APT": "aptos",
+    "POL": "polygon-ecosystem-token",
+    "CRO": "crypto-com-chain",
+    "VET": "vechain",
+    "ALGO": "algorand",
+    "FIL": "filecoin",
+    "ATOM": "cosmos",
+    "ARB": "arbitrum",
+    "FET": "fetch-ai",
+    "RENDER": "render-token",
+    "ENA": "ethena",
+    "WLD": "worldcoin-wld",
+    "SEI": "sei-network",
+    "OP": "optimism",
+    "INJ": "injective-protocol",
+    "XMR": "monero",
+    "JUP": "jupiter-exchange-solana",
+    "BONK": "bonk",
+    "IMX": "immutable-x",
+    "STX": "blockstack",
+    "QNT": "quant-network",
+    "GRT": "the-graph",
+    "FLOKI": "floki",
+    "RUNE": "thorchain",
+    "LDO": "lido-dao",
+    "PYTH": "pyth-network",
+    "GALA": "gala",
+    "JASMY": "jasmycoin",
+    "SAND": "the-sandbox",
 }
 OFFICIAL_COIN_LINKS = {
     "BTC": "https://bitcoin.org",
@@ -1004,6 +1066,13 @@ def alert_time_text(timestamp_ms):
     )
 
 
+def telegram_http_session():
+    global TELEGRAM_HTTP_SESSION
+    if TELEGRAM_HTTP_SESSION is None:
+        TELEGRAM_HTTP_SESSION = requests.Session()
+    return TELEGRAM_HTTP_SESSION
+
+
 def send_telegram_message(token, chat_id, text, reply_markup=None):
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     try:
@@ -1015,7 +1084,7 @@ def send_telegram_message(token, chat_id, text, reply_markup=None):
         }
         if reply_markup is not None:
             payload["reply_markup"] = json.dumps(reply_markup)
-        response = requests.post(
+        response = telegram_http_session().post(
             url,
             json=payload,
             timeout=20,
@@ -1032,7 +1101,7 @@ def answer_telegram_callback(token, callback_query_id, text=""):
         payload = {"callback_query_id": callback_query_id}
         if text:
             payload["text"] = text
-        response = requests.post(url, json=payload, timeout=10)
+        response = telegram_http_session().post(url, json=payload, timeout=10)
         if response.status_code != 200:
             print(f"[WARN] Telegram callback answer failed: {response.status_code} {response.text}")
     except Exception as e:
@@ -1049,7 +1118,7 @@ def clear_telegram_message_keyboard(token, chat_id, message_id):
             "message_id": message_id,
             "reply_markup": json.dumps({"inline_keyboard": []}),
         }
-        response = requests.post(url, json=payload, timeout=10)
+        response = telegram_http_session().post(url, json=payload, timeout=10)
         if response.status_code != 200:
             if response.status_code == 400 and "message is not modified" in response.text.lower():
                 return True
@@ -1082,7 +1151,7 @@ def send_telegram_photo(token, chat_id, photo_path, caption="", reply_markup=Non
             }
             if reply_markup is not None:
                 payload["reply_markup"] = json.dumps(reply_markup)
-            response = requests.post(
+            response = telegram_http_session().post(
                 url,
                 data=payload,
                 files={"photo": photo},
@@ -1116,7 +1185,7 @@ def send_telegram_media_group(token, chat_id, photo_paths):
             files[attachment_name] = photo
             media.append({"type": "photo", "media": f"attach://{attachment_name}"})
 
-        response = requests.post(
+        response = telegram_http_session().post(
             url,
             data={
                 "chat_id": chat_id,
@@ -1143,7 +1212,7 @@ def send_telegram_media_group(token, chat_id, photo_paths):
 def register_bot_commands(token):
     url = f"https://api.telegram.org/bot{token}/setMyCommands"
     try:
-        response = requests.post(
+        response = telegram_http_session().post(
             url,
             json={"commands": PUBLIC_BOT_COMMANDS},
             timeout=20,
@@ -1212,7 +1281,7 @@ def get_telegram_updates(token, offset=None, poll_timeout=1):
     if offset is not None:
         params["offset"] = offset
 
-    response = requests.get(url, params=params, timeout=10)
+    response = telegram_http_session().get(url, params=params, timeout=10)
     response.raise_for_status()
     return response.json().get("result", [])
 
@@ -4711,8 +4780,158 @@ def collect_future_news(symbol):
     }
 
 
-def collect_future_fundamentals(symbol):
-    # Future live research source: connect fundamentals, on-chain, and macro data here.
+def coingecko_api_key():
+    return str(os.getenv("COINGECKO_API_KEY") or "").strip()
+
+
+def coingecko_coin_id_for_symbol(symbol):
+    base = str(symbol or "").strip().upper().split("/", 1)[0]
+    return COINGECKO_COIN_IDS.get(base)
+
+
+def coingecko_metadata_cache_key(coin_id):
+    return f"coin:{coin_id}"
+
+
+def cached_coingecko_coin_metadata(coin_id):
+    cache_key = coingecko_metadata_cache_key(coin_id)
+    cached = COINGECKO_COIN_METADATA_CACHE.get(cache_key)
+    if not cached:
+        return None
+    fetched_at, data = cached
+    if time.time() - fetched_at > COINGECKO_COIN_METADATA_TTL_SECONDS:
+        COINGECKO_COIN_METADATA_CACHE.pop(cache_key, None)
+        return None
+    return data
+
+
+def store_coingecko_coin_metadata(coin_id, data):
+    COINGECKO_COIN_METADATA_CACHE[coingecko_metadata_cache_key(coin_id)] = (time.time(), data)
+
+
+def clean_coingecko_description(description, max_length=280):
+    text = html.unescape(str(description or ""))
+    clean = []
+    in_tag = False
+    for character in text:
+        if character == "<":
+            in_tag = True
+            continue
+        if character == ">":
+            in_tag = False
+            continue
+        if not in_tag:
+            clean.append(character)
+    text = " ".join("".join(clean).split())
+    if len(text) <= max_length:
+        return text
+    clipped = text[:max_length].rsplit(" ", 1)[0].rstrip(".,;:")
+    return f"{clipped}..."
+
+
+def numeric_market_value(value):
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def format_compact_number(value):
+    value = numeric_market_value(value)
+    if value is None:
+        return "Pending Evidence"
+    abs_value = abs(value)
+    for suffix, divisor in (("T", 1_000_000_000_000), ("B", 1_000_000_000), ("M", 1_000_000)):
+        if abs_value >= divisor:
+            return f"{value / divisor:.2f}{suffix}"
+    if abs_value >= 1_000:
+        return f"{value:,.0f}"
+    return f"{value:.2f}".rstrip("0").rstrip(".")
+
+
+def format_market_cap_value(value):
+    formatted = format_compact_number(value)
+    if formatted == "Pending Evidence":
+        return formatted
+    return f"${formatted}"
+
+
+def extract_coingecko_coin_metadata(payload):
+    market_data = payload.get("market_data") or {}
+    description = payload.get("description") or {}
+    return {
+        "fundamentals": "CoinGecko metadata connected",
+        "source": "CoinGecko",
+        "coin_id": payload.get("id"),
+        "name": payload.get("name"),
+        "symbol": str(payload.get("symbol") or "").upper(),
+        "circulating_supply": market_data.get("circulating_supply"),
+        "total_supply": market_data.get("total_supply"),
+        "max_supply": market_data.get("max_supply"),
+        "market_cap": (market_data.get("market_cap") or {}).get("usd"),
+        "fully_diluted_valuation": (
+            market_data.get("fully_diluted_valuation") or {}
+        ).get("usd"),
+        "description": clean_coingecko_description(description.get("en")),
+    }
+
+
+def fetch_coingecko_coin_metadata(symbol):
+    coin_id = coingecko_coin_id_for_symbol(symbol)
+    if not coin_id:
+        return None
+
+    cached = cached_coingecko_coin_metadata(coin_id)
+    if cached is not None:
+        return cached
+
+    api_key = coingecko_api_key()
+    if not api_key:
+        throttled_log_warn(
+            symbol,
+            "coingecko:missing-key",
+            f"{symbol}: CoinGecko metadata unavailable; missing COINGECKO_API_KEY.",
+        )
+        return None
+
+    if requests is None:
+        throttled_log_warn(
+            symbol,
+            "coingecko:requests-unavailable",
+            f"{symbol}: CoinGecko metadata unavailable; requests is not installed.",
+        )
+        return None
+
+    try:
+        response = telegram_http_session().get(
+            f"{COINGECKO_DEMO_API_BASE_URL}/coins/{coin_id}",
+            headers={"x-cg-demo-api-key": api_key},
+            params={
+                "localization": "false",
+                "tickers": "false",
+                "market_data": "true",
+                "community_data": "false",
+                "developer_data": "false",
+                "sparkline": "false",
+            },
+            timeout=10,
+        )
+        response.raise_for_status()
+        data = extract_coingecko_coin_metadata(response.json())
+        store_coingecko_coin_metadata(coin_id, data)
+        return data
+    except Exception as error:
+        throttled_log_warn(
+            symbol,
+            "coingecko:metadata",
+            f"{symbol}: CoinGecko metadata unavailable. Research will use pending fundamentals. {error}",
+        )
+        return None
+
+
+def pending_fundamentals():
     return {
         "fundamentals": "Pending Evidence",
         "on_chain": "Pending Evidence",
@@ -4720,6 +4939,14 @@ def collect_future_fundamentals(symbol):
         "institutional_adoption": "Pending Evidence",
         "historical_pattern": "Pending Evidence",
     }
+
+
+def collect_future_fundamentals(symbol):
+    fundamentals = pending_fundamentals()
+    coingecko_metadata = fetch_coingecko_coin_metadata(symbol)
+    if coingecko_metadata:
+        fundamentals.update(coingecko_metadata)
+    return fundamentals
 
 
 def collect_reference_research(symbol):
@@ -4754,6 +4981,32 @@ def render_prb(snapshot, news_data=None, fundamentals_data=None, updated=None, r
     strategy = snapshot.get("strategy", "watch")
     support_text = format_zone(support_zones[0]) if support_zones else "Pending Evidence"
     resistance_text = format_zone(resistance_zones[0]) if resistance_zones else "Pending Evidence"
+    market_cap_text = format_market_cap_value(fundamentals_data.get("market_cap"))
+    fdv_text = format_market_cap_value(fundamentals_data.get("fully_diluted_valuation"))
+    circulating_supply_text = format_compact_number(fundamentals_data.get("circulating_supply"))
+    total_supply_text = format_compact_number(fundamentals_data.get("total_supply"))
+    max_supply_text = format_compact_number(fundamentals_data.get("max_supply"))
+    description_text = fundamentals_data.get("description") or "Pending Evidence"
+    fundamentals_connected = fundamentals_data.get("source") == "CoinGecko"
+    fundamentals_line = (
+        f"Market cap {market_cap_text}; FDV {fdv_text}; "
+        f"circulating supply {circulating_supply_text}"
+        if fundamentals_connected
+        else "Full Research Pending"
+    )
+    supply_line = (
+        f"Circulating {circulating_supply_text}; total {total_supply_text}; max {max_supply_text}"
+        if fundamentals_connected
+        else "Pending Evidence"
+    )
+    fundamentals_detail_lines = (
+        f"• Fundamentals: {fundamentals_line}\n"
+        f"• Supply: {supply_line}\n"
+        f"• Description: {description_text}\n"
+        f"• Data provided by CoinGecko\n"
+        if fundamentals_connected
+        else ""
+    )
     updated = updated or prb_created_date()
     separator = prb_separator()
     data_freshness_line = f"• Data: {last_updated_label}\n" if last_updated_label else ""
@@ -4785,6 +5038,7 @@ def render_prb(snapshot, news_data=None, fundamentals_data=None, updated=None, r
         f"• Market Structure: {market_structure_label}\n"
         f"• Nearest Support: {support_text}\n"
         f"• Nearest Resistance: {resistance_text}\n"
+        f"{fundamentals_detail_lines}"
         f"• Best Use Case: {strategy_text_for_research(strategy)}\n\n"
         f"📈 HISTORICAL PATTERN\n\n"
         f"Full historical research pending. Use this brief as a market-structure read until saved or live research is connected.\n\n"
@@ -4806,7 +5060,7 @@ def render_prb(snapshot, news_data=None, fundamentals_data=None, updated=None, r
         f"• Future research finds weak fundamentals or poor catalyst quality.\n\n"
         f"{separator}\n\n"
         f"📊 POINKLE SCORECARD\n\n"
-        f"Fundamentals: Full Research Pending\n"
+        f"Fundamentals: {fundamentals_line}\n"
         f"Technical Structure: {snapshot.get('market_score', 0) / 10:.1f}/10\n"
         f"Historical Pattern: Full Research Pending\n"
         f"Macro Environment: Full Research Pending\n"
