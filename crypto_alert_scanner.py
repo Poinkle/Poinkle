@@ -992,17 +992,35 @@ def send_telegram_message(token, chat_id, text):
             print(f"[WARN] Telegram send failed: {response.status_code} {response.text}")
     except Exception as e:
         print(f"[WARN] Telegram send exception: {e}")
-def send_telegram_photo(token, chat_id, photo_path, caption=""):
+
+
+def answer_telegram_callback(token, callback_query_id, text=""):
+    url = f"https://api.telegram.org/bot{token}/answerCallbackQuery"
+    try:
+        payload = {"callback_query_id": callback_query_id}
+        if text:
+            payload["text"] = text
+        response = requests.post(url, json=payload, timeout=10)
+        if response.status_code != 200:
+            print(f"[WARN] Telegram callback answer failed: {response.status_code} {response.text}")
+    except Exception as e:
+        print(f"[WARN] Telegram callback answer exception: {e}")
+
+
+def send_telegram_photo(token, chat_id, photo_path, caption="", reply_markup=None):
     url = f"https://api.telegram.org/bot{token}/sendPhoto"
     try:
         with open(photo_path, "rb") as photo:
+            payload = {
+                "chat_id": chat_id,
+                "caption": caption[:1024],
+                "parse_mode": "HTML",
+            }
+            if reply_markup is not None:
+                payload["reply_markup"] = json.dumps(reply_markup)
             response = requests.post(
                 url,
-                data={
-                    "chat_id": chat_id,
-                    "caption": caption[:1024],
-                    "parse_mode": "HTML",
-                },
+                data=payload,
                 files={"photo": photo},
                 timeout=30,
             )
@@ -3939,7 +3957,31 @@ def render_research_snapshot_chart(symbol, chart_data):
     )
 
 
-def send_levels_chart(telegram_token, chat_id, symbol, caption):
+SNAPSHOT_LOOK_ORDER_BUTTONS = (
+    ("1 Trend", "trend"),
+    ("2 Key Levels", "key_level"),
+    ("3 Liquidity", "liquidity"),
+    ("4 Confirmation", "confirmation"),
+    ("5 Plan", "trade_plan"),
+)
+SNAPSHOT_LOOK_ORDER_CALLBACK_PREFIX = "look_order"
+
+
+def snapshot_look_order_keyboard():
+    return {
+        "inline_keyboard": [
+            [
+                {
+                    "text": label,
+                    "callback_data": f"{SNAPSHOT_LOOK_ORDER_CALLBACK_PREFIX}:{concept_key}",
+                }
+            ]
+            for label, concept_key in SNAPSHOT_LOOK_ORDER_BUTTONS
+        ]
+    }
+
+
+def send_levels_chart(telegram_token, chat_id, symbol, caption, reply_markup=None):
     try:
         if generate_levels_chart is None:
             raise RuntimeError("Chart generator unavailable")
@@ -3961,7 +4003,13 @@ def send_levels_chart(telegram_token, chat_id, symbol, caption):
                 chart_data.get("last_updated_label"),
             ),
         )
-        send_telegram_photo(telegram_token, chat_id, chart_path, caption=caption)
+        send_telegram_photo(
+            telegram_token,
+            chat_id,
+            chart_path,
+            caption=caption,
+            reply_markup=reply_markup,
+        )
         return True
     except Exception:
         log_warn(f"Snapshot generation failed for {symbol.split('/')[0]}.")
@@ -5250,6 +5298,41 @@ def send_explain_command_response(telegram_token, response_chat_id, message, con
     send_telegram_message(telegram_token, response_chat_id, message)
 
 
+def handle_snapshot_look_order_callback(telegram_token, callback_query):
+    callback_query = callback_query or {}
+    callback_query_id = callback_query.get("id")
+    data = callback_query.get("data") or ""
+    if not data.startswith(f"{SNAPSHOT_LOOK_ORDER_CALLBACK_PREFIX}:"):
+        return False
+
+    concept_key = data.split(":", 1)[1]
+    resolved_key = normalize_concept_key(concept_key)
+    if not resolved_key:
+        if callback_query_id:
+            answer_telegram_callback(telegram_token, callback_query_id, "Concept unavailable.")
+        return True
+
+    message = callback_query.get("message") or {}
+    chat = message.get("chat") or {}
+    chat_id = str(chat.get("id") or "")
+    if not chat_id:
+        if callback_query_id:
+            answer_telegram_callback(telegram_token, callback_query_id, "Concept unavailable.")
+        return True
+
+    user_id = str((callback_query.get("from") or {}).get("id") or "")
+    skill_level = user_skill_level(user_id) if user_id else None
+    if callback_query_id:
+        answer_telegram_callback(telegram_token, callback_query_id)
+    send_explain_command_response(
+        telegram_token,
+        chat_id,
+        build_explain_command_message(f"/explain {resolved_key}", skill_level=skill_level),
+        concept_key=resolved_key,
+    )
+    return True
+
+
 def handle_explain_command(telegram_token, telegram_chat_id, message_text, source_chat=None, from_user=None):
     source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
     from_user = from_user or {}
@@ -5801,7 +5884,13 @@ def handle_levels_command(
 
     if is_private:
         log_info("Sending Poinkle snapshot")
-        if not send_levels_chart(telegram_token, response_chat_id, symbol, message):
+        if not send_levels_chart(
+            telegram_token,
+            response_chat_id,
+            symbol,
+            message,
+            reply_markup=snapshot_look_order_keyboard(),
+        ):
             send_telegram_message(telegram_token, response_chat_id, message)
         log_info(f"Answered {command} command for {symbol}")
         return
@@ -5812,7 +5901,13 @@ def handle_levels_command(
         return
 
     try:
-        if not send_levels_chart(telegram_token, str(user_id), symbol, message):
+        if not send_levels_chart(
+            telegram_token,
+            str(user_id),
+            symbol,
+            message,
+            reply_markup=snapshot_look_order_keyboard(),
+        ):
             send_telegram_message(telegram_token, str(user_id), message)
         send_telegram_message(
             telegram_token,
@@ -5976,6 +6071,13 @@ def process_telegram_commands(exchange, telegram_token, telegram_chat_id, state)
 
     for update in updates:
         update_id = update["update_id"]
+        callback_query = update.get("callback_query")
+        if callback_query:
+            handle_snapshot_look_order_callback(telegram_token, callback_query)
+            command_state["last_update_id"] = update_id
+            save_state(state)
+            continue
+
         message = update.get("message") or {}
         chat = message.get("chat", {})
         chat_id = str(chat.get("id", ""))
