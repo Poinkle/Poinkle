@@ -207,6 +207,7 @@ SCAN_PERFORMANCE_TARGET_SYMBOLS = 150
 COINBASE_PUBLIC_REQUESTS_PER_SECOND = 10
 ACCURACY_AUDIT_SYMBOLS = {"BTC/USD", "ETH/USD", "SOL/USD", "AAVE/USD", "PEPE/USD"}
 ALERT_DELIVERY_METRIC_LIMIT = 100
+TELEGRAM_CALLBACK_DEDUPE_LIMIT = 200
 LEVEL_ALERT_TYPES = {"support", "resistance", "all", "critical"}
 BREAKOUT_BODY_ATR_MULT = 1.0
 TREND_GATE_FAST_EMA = 21
@@ -769,6 +770,25 @@ def user_skill_level(user_id):
     return user_profile(user_id).get("skill_level")
 
 
+def user_preference(user_id, key, default=None):
+    preferences = user_profile(user_id).get("preferences", {})
+    if not isinstance(preferences, dict):
+        return default
+    return preferences.get(key, default)
+
+
+def set_user_preference(user_id, key, value):
+    profiles = load_user_profiles()
+    profile = profiles.setdefault(str(user_id), {})
+    preferences = profile.setdefault("preferences", {})
+    if not isinstance(preferences, dict):
+        preferences = {}
+        profile["preferences"] = preferences
+    preferences[key] = value
+    save_user_profiles(profiles)
+    return profile
+
+
 def set_user_skill_level(user_id, skill_level):
     profiles = load_user_profiles()
     profile = profiles.setdefault(str(user_id), {})
@@ -978,17 +998,20 @@ def alert_time_text(timestamp_ms):
     )
 
 
-def send_telegram_message(token, chat_id, text):
+def send_telegram_message(token, chat_id, text, reply_markup=None):
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     try:
+        payload = {
+            "chat_id": chat_id,
+            "text": text,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True,
+        }
+        if reply_markup is not None:
+            payload["reply_markup"] = json.dumps(reply_markup)
         response = requests.post(
             url,
-            json={
-                "chat_id": chat_id,
-                "text": text,
-                "parse_mode": "HTML",
-                "disable_web_page_preview": True,
-            },
+            json=payload,
             timeout=20,
         )
         if response.status_code != 200:
@@ -1154,6 +1177,31 @@ def get_telegram_updates(token, offset=None):
     response = requests.get(url, params=params, timeout=10)
     response.raise_for_status()
     return response.json().get("result", [])
+
+
+def handled_telegram_callback_ids(command_state):
+    handled_ids = command_state.setdefault("handled_callback_ids", [])
+    if not isinstance(handled_ids, list):
+        handled_ids = []
+        command_state["handled_callback_ids"] = handled_ids
+    return handled_ids
+
+
+def telegram_callback_already_handled(command_state, callback_query_id):
+    if not callback_query_id:
+        return False
+    return str(callback_query_id) in set(handled_telegram_callback_ids(command_state))
+
+
+def mark_telegram_callback_handled(command_state, callback_query_id):
+    if not callback_query_id:
+        return
+    callback_query_id = str(callback_query_id)
+    handled_ids = handled_telegram_callback_ids(command_state)
+    if callback_query_id in handled_ids:
+        return
+    handled_ids.append(callback_query_id)
+    del handled_ids[:-TELEGRAM_CALLBACK_DEDUPE_LIMIT]
 
 
 def bot_username_text():
@@ -3968,6 +4016,13 @@ SNAPSHOT_LOOK_ORDER_BUTTONS = (
     ("5 Plan", "trade_plan"),
 )
 SNAPSHOT_LOOK_ORDER_CALLBACK_PREFIX = "look_order"
+WATCHLIST_COIN_CALLBACK_PREFIX = "wcoin"
+WATCHLIST_ACTION_CALLBACK_PREFIX = "wact"
+WATCHLIST_ACTIONS = {
+    "snapshot": "Snapshot",
+    "research": "Research",
+    "whynot": "Why not?",
+}
 
 
 def snapshot_look_order_keyboard():
@@ -3980,6 +4035,34 @@ def snapshot_look_order_keyboard():
                 }
             ]
             for label, concept_key in SNAPSHOT_LOOK_ORDER_BUTTONS
+        ]
+    }
+
+
+def watchlist_coin_keyboard(symbols):
+    return {
+        "inline_keyboard": [
+            [
+                {
+                    "text": base_symbol(symbol),
+                    "callback_data": f"{WATCHLIST_COIN_CALLBACK_PREFIX}:{symbol}",
+                }
+            ]
+            for symbol in symbols
+        ]
+    }
+
+
+def watchlist_action_keyboard(symbol):
+    return {
+        "inline_keyboard": [
+            [
+                {
+                    "text": label,
+                    "callback_data": f"{WATCHLIST_ACTION_CALLBACK_PREFIX}:{action}:{symbol}",
+                }
+                for action, label in WATCHLIST_ACTIONS.items()
+            ]
         ]
     }
 
@@ -5387,6 +5470,122 @@ def handle_snapshot_look_order_callback(telegram_token, callback_query):
     return True
 
 
+def handle_watchlist_coin_callback(telegram_token, callback_query, payload, exchange=None):
+    callback_query_id = (callback_query or {}).get("id")
+    if callback_query_id:
+        answer_telegram_callback(telegram_token, callback_query_id)
+
+    symbol = normalize_trade_symbol_input(payload)
+    if not symbol:
+        return False
+
+    user_id = str(((callback_query or {}).get("from") or {}).get("id") or "")
+    if not user_id:
+        return False
+    if symbol not in user_watchlist_symbols(user_id):
+        return False
+
+    send_telegram_message(
+        telegram_token,
+        user_id,
+        f"<b>{base_symbol(symbol)}</b>\nWhat do you want to open?",
+        reply_markup=watchlist_action_keyboard(symbol),
+    )
+    return True
+
+
+def handle_watchlist_action_callback(telegram_token, callback_query, payload, exchange=None):
+    callback_query_id = (callback_query or {}).get("id")
+    if callback_query_id:
+        answer_telegram_callback(telegram_token, callback_query_id)
+
+    parts = str(payload or "").split(":", 1)
+    if len(parts) != 2:
+        return False
+
+    action, symbol = parts
+    symbol = normalize_trade_symbol_input(symbol)
+    user = (callback_query or {}).get("from") or {}
+    user_id = str(user.get("id") or "")
+    if not user_id or not symbol:
+        return False
+    if symbol not in user_watchlist_symbols(user_id):
+        return False
+
+    source_chat = {"id": user_id, "type": "private"}
+    ticker = base_symbol(symbol)
+    if action == "snapshot":
+        handle_levels_command(
+            exchange,
+            telegram_token,
+            user_id,
+            f"/snapshot {ticker}",
+            source_chat=source_chat,
+            from_user=user,
+        )
+        return True
+    if action == "research":
+        handle_research_command(
+            exchange,
+            telegram_token,
+            user_id,
+            f"/research {ticker}",
+            source_chat=source_chat,
+        )
+        return True
+    if action == "whynot":
+        handle_whynot_command(
+            exchange,
+            telegram_token,
+            user_id,
+            f"/whynot {ticker}",
+            source_chat=source_chat,
+        )
+        return True
+
+    return False
+
+
+def handle_telegram_callback_query(exchange, telegram_token, callback_query):
+    callback_query = callback_query or {}
+    callback_query_id = callback_query.get("id")
+    data = callback_query.get("data") or ""
+    namespace, separator, payload = data.partition(":")
+    if not separator:
+        if callback_query_id:
+            answer_telegram_callback(telegram_token, callback_query_id, "Button unavailable.")
+        log_warn(f"Unknown Telegram callback data: {data}")
+        return False
+
+    callback_handlers = {
+        SNAPSHOT_LOOK_ORDER_CALLBACK_PREFIX: (
+            lambda token, query, _payload, _exchange=None: handle_snapshot_look_order_callback(token, query)
+        ),
+        WATCHLIST_COIN_CALLBACK_PREFIX: handle_watchlist_coin_callback,
+        WATCHLIST_ACTION_CALLBACK_PREFIX: handle_watchlist_action_callback,
+    }
+    handler = callback_handlers.get(namespace)
+    if handler is None:
+        if callback_query_id:
+            answer_telegram_callback(telegram_token, callback_query_id, "Button unavailable.")
+        log_warn(f"Unknown Telegram callback namespace: {namespace}")
+        return False
+
+    try:
+        handled = handler(telegram_token, callback_query, payload, exchange)
+    except Exception as error:
+        if callback_query_id:
+            answer_telegram_callback(telegram_token, callback_query_id, "Button unavailable.")
+        log_warn(f"Telegram callback handler failed for {namespace}: {error}")
+        return False
+
+    if not handled:
+        if callback_query_id:
+            answer_telegram_callback(telegram_token, callback_query_id, "Button unavailable.")
+        log_warn(f"Unhandled Telegram callback data: {data}")
+    return bool(handled)
+
+
 def handle_explain_command(telegram_token, telegram_chat_id, message_text, source_chat=None, from_user=None):
     source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
     from_user = from_user or {}
@@ -5747,6 +5946,10 @@ def handle_unwatch_command(
     )
 
 
+def user_watchlist_symbols(user_chat_id):
+    return load_user_watchlists().get(str(user_chat_id), [])
+
+
 def handle_mywatch_command(
     telegram_token,
     telegram_chat_id,
@@ -5756,7 +5959,8 @@ def handle_mywatch_command(
     source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
     response_chat_id = str(source_chat.get("id", telegram_chat_id))
     user_chat_id = alert_dm_chat_id(source_chat, from_user or {}, telegram_chat_id)
-    user_symbols = load_user_watchlists().get(user_chat_id, [])
+    is_private = is_private_chat(source_chat)
+    user_symbols = user_watchlist_symbols(user_chat_id)
 
     if not user_symbols:
         send_telegram_message(
@@ -5770,11 +5974,23 @@ def handle_mywatch_command(
     lines = ["Your watchlist:"]
     for index, symbol in enumerate(sorted_symbols, start=1):
         lines.append(f"{index}. {base_symbol(symbol)}")
-    send_telegram_message(
-        telegram_token,
-        response_chat_id,
-        "\n".join(lines),
-    )
+    try:
+        send_telegram_message(
+            telegram_token,
+            user_chat_id,
+            "\n".join(lines),
+            reply_markup=watchlist_coin_keyboard(sorted_symbols),
+        )
+        if not is_private:
+            send_telegram_message(
+                telegram_token,
+                response_chat_id,
+                "I sent your watchlist panel to your DM.",
+            )
+    except Exception as error:
+        log_warn(f"Could not DM watchlist panel to user {user_chat_id}: {error}")
+        if not is_private:
+            send_telegram_message(telegram_token, response_chat_id, levels_dm_failed_message())
 
 
 def handle_clearwatch_command(
@@ -6127,8 +6343,18 @@ def process_telegram_commands(exchange, telegram_token, telegram_chat_id, state)
         update_id = update["update_id"]
         callback_query = update.get("callback_query")
         if callback_query:
-            handle_snapshot_look_order_callback(telegram_token, callback_query)
+            callback_query_id = callback_query.get("id")
+            if telegram_callback_already_handled(command_state, callback_query_id):
+                if callback_query_id:
+                    answer_telegram_callback(telegram_token, callback_query_id)
+                command_state["last_update_id"] = update_id
+                save_state(state)
+                continue
+
+            mark_telegram_callback_handled(command_state, callback_query_id)
             command_state["last_update_id"] = update_id
+            save_state(state)
+            handle_telegram_callback_query(exchange, telegram_token, callback_query)
             save_state(state)
             continue
 
