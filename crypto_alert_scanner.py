@@ -3525,10 +3525,10 @@ def alert_signal_summary(alert):
 def severity_label_for_alerts(alerts):
     count = len({alert.get("type") for alert in alerts if alert.get("type")})
     if count <= 2:
-        return ""
+        return f"Developing · {count} signals"
     if count == 3:
-        return "🟡 3 signals"
-    return f"🔴 {count} signals"
+        return "Building · 3 signals"
+    return f"Strong confluence · {count} signals"
 
 
 def alert_card_data(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, skill_level=None):
@@ -3725,7 +3725,7 @@ def send_alert_group_to_chat(
             resistances=resistances,
         )
 
-    severity_label = severity_label_for_alerts(alerts)
+    severity_label = severity_label_for_alerts(alerts) if len(alerts) >= 2 else ""
     fallback_message = build_combined_alert_message(symbol, candle, alerts, ema_21, ema_55, current_rsi, volume_avg)
     if severity_label:
         fallback_message = f"{severity_label}\n{fallback_message}"
