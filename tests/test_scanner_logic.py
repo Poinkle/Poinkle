@@ -956,6 +956,33 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(volume_alert["direction"], "neutral")
         self.assertEqual(volume_alert["label"], "Volume Spike — Indecision Candle")
 
+    def test_whynot_command_message_accepts_current_scan_symbol_shape(self):
+        candles = make_ohlcv_series([100 for _ in range(80)], volume=100)
+        candles[-1] = candle(candles[-1][0], 98.5, 100.0, 98.0, 99.5, 250)
+        signal_state = scanner.evaluate_lightweight_signal_state(candles[:-1], candles)
+
+        scan_result = (
+            candles[-2],
+            candles[-1],
+            signal_state["alerts"],
+            signal_state["ema_21"],
+            signal_state["ema_55"],
+            signal_state["rsi"],
+            1.0,
+            signal_state["volume_average"],
+            90.0,
+            110.0,
+            candles,
+            {"support": [90.0], "resistance": [110.0]},
+            signal_state,
+        )
+
+        with patch.object(scanner, "scan_symbol", return_value=scan_result):
+            message = scanner.build_whynot_command_message(object(), "BTC/USD")
+
+        self.assertIn("<b>BTC/USD - Why not?</b>", message)
+        self.assertIn("Current lightweight signal state:", message)
+
     def test_telegram_sends_html_parse_mode_for_messages_and_photos(self):
         class FakeResponse:
             status_code = 200

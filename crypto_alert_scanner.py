@@ -8680,9 +8680,9 @@ def evaluate_whynot_scorecard(exchange, symbol):
         range_high,
         closed_candles,
         key_levels,
+        signal_state,
     ) = scan_symbol(exchange, symbol)
 
-    signal_state = evaluate_lightweight_signal_state(closed_candles[:-2], closed_candles)
     directional_group = strongest_directional_lightweight_group(alerts)
     range_location, range_position = get_range_location(candle[4], range_low, range_high)
 
