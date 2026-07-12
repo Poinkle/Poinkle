@@ -983,6 +983,73 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("<b>BTC/USD - Why not?</b>", message)
         self.assertIn("Current lightweight signal state:", message)
 
+    def whynot_scan_result(self, current_price=100.0):
+        signal_state = {
+            "alerts": [],
+            "scorecard": [
+                {"type": "volume_spike", "state": "fail", "reason": "0.8x, no spike"},
+                {"type": "ema_cross_above", "state": "fail", "reason": "EMA 21 below EMA 55; no fresh bullish cross"},
+                {"type": "ema_cross_below", "state": "fail", "reason": "EMA 21 below EMA 55; no fresh bearish cross"},
+                {"type": "rsi_cross_above_70", "state": "fail", "reason": "RSI 52; below 70"},
+                {"type": "rsi_cross_below_30", "state": "fail", "reason": "RSI 52; above 30"},
+            ],
+            "volume_multiple": 0.8,
+        }
+        previous_candle = candle(1_700_000_000_000, 99.0, 101.0, 98.0, 99.0, 100)
+        current_candle = candle(1_700_086_400_000, 99.0, 102.0, 94.0, current_price, 100)
+        return (
+            previous_candle,
+            current_candle,
+            signal_state["alerts"],
+            101.0,
+            103.0,
+            52.0,
+            1.0,
+            100.0,
+            80.0,
+            120.0,
+            [previous_candle, current_candle],
+            {"support": [95.0], "resistance": [110.0]},
+            signal_state,
+        )
+
+    def test_whynot_zone_state_renders_pending_setup_direction(self):
+        state = {
+            "BTC/USD": {
+                "pending_setups": {
+                    "live:breakdown:95.0": {
+                        "level": 95.0,
+                        "direction": "breakdown",
+                    }
+                }
+            }
+        }
+
+        with patch.object(scanner, "scan_symbol", return_value=self.whynot_scan_result()):
+            message = scanner.build_whynot_command_message(object(), "BTC/USD", state=state)
+
+        self.assertIn("<b>ZONE STATE</b>", message)
+        self.assertIn("BTC/USD closed below the 95.00 zone once.", message)
+        self.assertIn("It needs a SECOND daily close below to confirm.", message)
+        self.assertIn("One close is an attempt. Two consecutive closes is confirmation.", message)
+
+    def test_whynot_zone_state_renders_nearest_zones_without_pending_setup(self):
+        with patch.object(scanner, "scan_symbol", return_value=self.whynot_scan_result()):
+            message = scanner.build_whynot_command_message(object(), "BTC/USD", state={})
+
+        self.assertIn("<b>ZONE STATE</b>", message)
+        self.assertIn("Nearest support: around 95.00 (5.0% below)", message)
+        self.assertIn("Nearest resistance: around 110.00 (10.0% above)", message)
+        self.assertIn("Price isn't at a zone. There's nothing to confirm yet.", message)
+
+    def test_whynot_zone_state_renders_without_state(self):
+        with patch.object(scanner, "scan_symbol", return_value=self.whynot_scan_result()):
+            message = scanner.build_whynot_command_message(object(), "BTC/USD", state=None)
+
+        self.assertIn("<b>ZONE STATE</b>", message)
+        self.assertIn("Nearest support: around 95.00 (5.0% below)", message)
+        self.assertIn("Price isn't at a zone. There's nothing to confirm yet.", message)
+
     def test_telegram_sends_html_parse_mode_for_messages_and_photos(self):
         class FakeResponse:
             status_code = 200

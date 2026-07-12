@@ -1655,7 +1655,7 @@ def enqueue_telegram_command_job(action, telegram_chat_id, message_text, source_
     return True
 
 
-def run_telegram_command_job(exchange, telegram_token, job):
+def run_telegram_command_job(exchange, telegram_token, job, state=None):
     action = job.get("action")
     telegram_chat_id = job.get("telegram_chat_id")
     message_text = job.get("message_text", "")
@@ -1690,6 +1690,7 @@ def run_telegram_command_job(exchange, telegram_token, job):
             message_text,
             source_chat=source_chat,
             from_user=from_user,
+            state=state,
         )
         return True
 
@@ -1700,6 +1701,7 @@ def run_telegram_command_job(exchange, telegram_token, job):
 def process_telegram_command_jobs(
     exchange,
     telegram_token,
+    state=None,
     max_jobs=TELEGRAM_COMMAND_JOB_BATCH_LIMIT,
     time_budget_seconds=None,
     allowed_weights=None,
@@ -1723,7 +1725,7 @@ def process_telegram_command_jobs(
                 TELEGRAM_COMMAND_JOB_QUEUE.appendleft(job)
                 break
         try:
-            run_telegram_command_job(exchange, telegram_token, job)
+            run_telegram_command_job(exchange, telegram_token, job, state=state)
         except Exception as error:
             log_warn(f"Telegram command job failed for {job.get('action')}: {error}")
         processed += 1
@@ -6873,6 +6875,7 @@ def handle_whynot_command(
     message_text,
     source_chat=None,
     from_user=None,
+    state=None,
 ):
     parts = message_text.strip().split()
     command = snapshot_command_name(message_text) or "/whynot"
@@ -6905,7 +6908,7 @@ def handle_whynot_command(
         return
 
     try:
-        message = build_whynot_command_message(exchange, symbol)
+        message = build_whynot_command_message(exchange, symbol, state=state)
     except Exception as error:
         log_warn(f"{symbol}: {command} unavailable: {error}")
         send_telegram_message(
@@ -8350,6 +8353,7 @@ def process_telegram_commands(
                     text,
                     source_chat=chat,
                     from_user=from_user,
+                    state=state,
                 )
         elif is_research_command(text):
             if defer_heavy_commands and should_enqueue_heavy_command(text):
@@ -8666,7 +8670,83 @@ def whynot_display_scorecard(scorecard):
     ]
 
 
-def evaluate_whynot_scorecard(exchange, symbol):
+def whynot_level_distance_pct(current_price, level):
+    if not is_real_number(current_price) or current_price <= 0 or not is_real_number(level):
+        return None
+    return abs(current_price - level) / current_price * 100
+
+
+def whynot_pending_setup(state, symbol, current_price):
+    if not state:
+        return None
+    pending_setups = state.get(symbol, {}).get("pending_setups", {})
+    if not isinstance(pending_setups, dict) or not pending_setups:
+        return None
+
+    candidates = []
+    for setup_key, setup in pending_setups.items():
+        if not isinstance(setup, dict):
+            continue
+        level = setup.get("level")
+        direction = setup.get("direction")
+        if direction not in {"breakdown", "breakout"} or not is_real_number(level):
+            continue
+        level = float(level)
+        candidates.append(
+            {
+                "setup_key": setup_key,
+                "level": level,
+                "direction": direction,
+                "distance_pct": whynot_level_distance_pct(current_price, level),
+            }
+        )
+
+    if not candidates:
+        return None
+    return min(
+        candidates,
+        key=lambda setup: setup["distance_pct"] if setup["distance_pct"] is not None else float("inf"),
+    )
+
+
+def format_whynot_zone_distance(distance_pct, side):
+    if distance_pct is None:
+        return ""
+    return f"{distance_pct:.1f}% {side}"
+
+
+def render_whynot_zone_state(scorecard):
+    lines = ["", "<b>ZONE STATE</b>"]
+    symbol = html.escape(scorecard.get("symbol", ""))
+    pending_setup = scorecard.get("pending_setup")
+    if pending_setup:
+        direction = pending_setup.get("direction")
+        side_word = "below" if direction == "breakdown" else "above"
+        level = html.escape(format_zone_price(pending_setup.get("level", 0)))
+        lines.extend(
+            [
+                f"{symbol} closed {side_word} the {level} zone once.",
+                f"It needs a SECOND daily close {side_word} to confirm.",
+                "One close is an attempt. Two consecutive closes is confirmation.",
+            ]
+        )
+        return lines
+
+    nearest_support = scorecard.get("nearest_support")
+    nearest_resistance = scorecard.get("nearest_resistance")
+    if nearest_support is not None:
+        distance = format_whynot_zone_distance(scorecard.get("support_distance_pct"), "below")
+        distance_text = f" ({html.escape(distance)})" if distance else ""
+        lines.append(f"Nearest support: around {html.escape(format_zone_price(nearest_support))}{distance_text}")
+    if nearest_resistance is not None:
+        distance = format_whynot_zone_distance(scorecard.get("resistance_distance_pct"), "above")
+        distance_text = f" ({html.escape(distance)})" if distance else ""
+        lines.append(f"Nearest resistance: around {html.escape(format_zone_price(nearest_resistance))}{distance_text}")
+    lines.append("Price isn't at a zone. There's nothing to confirm yet.")
+    return lines
+
+
+def evaluate_whynot_scorecard(exchange, symbol, state=None):
     (
         _previous_candle,
         candle,
@@ -8685,6 +8765,11 @@ def evaluate_whynot_scorecard(exchange, symbol):
 
     directional_group = strongest_directional_lightweight_group(alerts)
     range_location, range_position = get_range_location(candle[4], range_low, range_high)
+    current_price = candle[4]
+    support_levels = key_levels.get("support", []) if isinstance(key_levels, dict) else []
+    resistance_levels = key_levels.get("resistance", []) if isinstance(key_levels, dict) else []
+    nearest_support = support_levels[0] if support_levels else None
+    nearest_resistance = resistance_levels[0] if resistance_levels else None
 
     scorecard = {
         "symbol": symbol,
@@ -8703,13 +8788,18 @@ def evaluate_whynot_scorecard(exchange, symbol):
         "range_high": range_high,
         "range_location": range_location,
         "range_position": range_position,
+        "nearest_support": nearest_support,
+        "nearest_resistance": nearest_resistance,
+        "support_distance_pct": whynot_level_distance_pct(current_price, nearest_support),
+        "resistance_distance_pct": whynot_level_distance_pct(current_price, nearest_resistance),
+        "pending_setup": whynot_pending_setup(state, symbol, current_price),
     }
     enforce_validation(symbol, "whynot", validate_whynot_scorecard_data(scorecard))
     return scorecard
 
 
-def build_whynot_command_message(exchange, symbol):
-    scorecard = evaluate_whynot_scorecard(exchange, symbol)
+def build_whynot_command_message(exchange, symbol, state=None):
+    scorecard = evaluate_whynot_scorecard(exchange, symbol, state=state)
     display_rows = whynot_display_scorecard(scorecard["scorecard"])
     lines = [
         f"<b>{html.escape(symbol)} - Why not?</b>",
@@ -8722,6 +8812,8 @@ def build_whynot_command_message(exchange, symbol):
         label = html.escape(item.get("label", "Signal"))
         reason = html.escape(item.get("reason", "No current signal"))
         lines.append(f"{marker} {label}: {reason}")
+
+    lines.extend(render_whynot_zone_state(scorecard))
 
     aligned_count = scorecard["aligned_count"]
     present_count = sum(1 for item in display_rows if item.get("state") == "pass")
@@ -9504,6 +9596,7 @@ def run_once(exchange, telegram_token, telegram_chat_id, state, poll_telegram_du
             process_telegram_command_jobs(
                 exchange,
                 telegram_token,
+                state=state,
                 time_budget_seconds=TELEGRAM_JOB_BUDGET_SECONDS_PER_CHUNK,
                 allowed_weights={TELEGRAM_JOB_LIGHT},
             )
@@ -9953,7 +10046,7 @@ def main():
             save_state(state)
             scan_seconds = time.perf_counter() - scan_phase_start
 
-            process_telegram_command_jobs(exchange, telegram_token)
+            process_telegram_command_jobs(exchange, telegram_token, state=state)
 
             user_alert_phase_start = time.perf_counter()
             check_user_level_alerts(exchange, telegram_token)
