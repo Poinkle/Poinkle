@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Poinkle Command Deck</title>
+<style>
+  :root {
+    --bg: #081320;
+    --bg-2: #0b1a2b;
+    --panel: #0f2438;
+    --panel-edge: #1c3d5a;
+    --ink: #e6eef6;
+    --muted: #7c95ac;
+    --teal: #2dd4bf;
+    --cyan: #38bdf8;
+    --go: #34d399;
+    --caution: #fbbf24;
+    --danger: #f87171;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { -webkit-font-smoothing: antialiased; }
+
+  body {
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(45,212,191,0.08), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(56,189,248,0.06), transparent 55%),
+      var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    min-height: 100vh;
+    padding: 32px 20px 64px;
+    line-height: 1.4;
+  }
+
+  .wrap { max-width: 760px; margin: 0 auto; }
+
+  header {
+    border-bottom: 1px solid var(--panel-edge);
+    padding-bottom: 20px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .brand {
+    font-family: var(--mono);
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
+  .brand span { color: var(--teal); }
+
+  .mission {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .note {
+    font-size: 12.5px;
+    color: var(--muted);
+    background: var(--bg-2);
+    border: 1px solid var(--panel-edge);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 20px 0 28px;
+  }
+  .note b { color: var(--cyan); font-weight: 600; }
+
+  section { margin-bottom: 32px; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--teal);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .eyebrow::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, var(--panel-edge), transparent);
+  }
+
+  .cmd {
+    background: var(--panel);
+    border: 1px solid var(--panel-edge);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px 16px;
+    align-items: center;
+    transition: border-color 0.15s ease, transform 0.05s ease;
+  }
+  .cmd:hover { border-color: var(--teal); }
+  .cmd.go { border-left: 3px solid var(--go); }
+  .cmd.caution { border-left: 3px solid var(--caution); }
+  .cmd.danger { border-left: 3px solid var(--danger); }
+  .cmd.info { border-left: 3px solid var(--cyan); }
+
+  .cmd .label {
+    grid-column: 1;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .cmd .step {
+    font-family: var(--mono);
+    color: var(--muted);
+    font-weight: 700;
+    margin-right: 8px;
+  }
+  .cmd .code {
+    grid-column: 1;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--cyan);
+    word-break: break-all;
+    margin-top: 2px;
+  }
+  .cmd.go .code { color: var(--go); }
+  .cmd.caution .code { color: var(--caution); }
+  .cmd.danger .code { color: var(--danger); }
+
+  .copy {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: center;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink);
+    background: var(--bg-2);
+    border: 1px solid var(--panel-edge);
+    border-radius: 7px;
+    padding: 9px 14px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+    min-width: 78px;
+    text-align: center;
+  }
+  .copy:hover { border-color: var(--teal); color: var(--teal); }
+  .copy:active { transform: scale(0.96); }
+  .copy.copied { background: var(--teal); color: var(--bg); border-color: var(--teal); }
+
+  .telegram .cmd { cursor: default; }
+  .telegram .copy { display: none; }
+  .telegram .cmd { grid-template-columns: 1fr; }
+
+  footer {
+    margin-top: 40px;
+    padding-top: 20px;
+    border-top: 1px solid var(--panel-edge);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  @media (max-width: 520px) {
+    .cmd { grid-template-columns: 1fr; }
+    .copy { grid-column: 1; grid-row: auto; justify-self: start; margin-top: 8px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">POINKLE <span>COMMAND DECK</span></div>
+    <div class="mission">Patience Compounds</div>
+  </header>
+
+  <div class="note">
+    Buttons <b>copy</b> the command to your clipboard — click, then paste into your terminal.
+    A browser page can't run commands directly. Restart steps run in order, top to bottom.
+  </div>
+
+  <section>
+    <div class="eyebrow">Restart Protocol — run in order</div>
+
+    <div class="cmd danger">
+      <div class="label"><span class="step">1</span>Stop the bot</div>
+      <div class="code">pkill -f crypto_alert_scanner.py</div>
+      <button class="copy" data-cmd="pkill -f crypto_alert_scanner.py">Copy</button>
+    </div>
+
+    <div class="cmd caution">
+      <div class="label"><span class="step">2</span>Verify nothing is still running</div>
+      <div class="code">ps aux | grep crypto_alert_scanner | grep -v grep</div>
+      <button class="copy" data-cmd="ps aux | grep crypto_alert_scanner | grep -v grep">Copy</button>
+    </div>
+
+    <div class="cmd go">
+      <div class="label"><span class="step">3</span>Start one clean process</div>
+      <div class="code">python3 crypto_alert_scanner.py</div>
+      <button class="copy" data-cmd="python3 crypto_alert_scanner.py">Copy</button>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Health Checks</div>
+
+    <div class="cmd info">
+      <div class="label">Go to project folder</div>
+      <div class="code">cd "/Users/travisjoshinabery/Desktop/TIC BOT"</div>
+      <button class="copy" data-cmd='cd "/Users/travisjoshinabery/Desktop/TIC BOT"'>Copy</button>
+    </div>
+
+    <div class="cmd info">
+      <div class="label">Check for any running bot process</div>
+      <div class="code">ps aux | grep crypto_alert_scanner | grep -v grep</div>
+      <button class="copy" data-cmd="ps aux | grep crypto_alert_scanner | grep -v grep">Copy</button>
+    </div>
+
+    <div class="cmd info">
+      <div class="label">Check for log files</div>
+      <div class="code">ls -lt *.log logs/*.log 2>/dev/null</div>
+      <button class="copy" data-cmd="ls -lt *.log logs/*.log 2>/dev/null">Copy</button>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Git</div>
+
+    <div class="cmd info">
+      <div class="label">See what changed</div>
+      <div class="code">git status</div>
+      <button class="copy" data-cmd="git status">Copy</button>
+    </div>
+
+    <div class="cmd info">
+      <div class="label">Review recent commits</div>
+      <div class="code">git log --oneline -10</div>
+      <button class="copy" data-cmd="git log --oneline -10">Copy</button>
+    </div>
+
+    <div class="cmd info">
+      <div class="label">Stage the scanner and commit (edit the message)</div>
+      <div class="code">git add crypto_alert_scanner.py &amp;&amp; git commit -m "your message here"</div>
+      <button class="copy" data-cmd='git add crypto_alert_scanner.py && git commit -m "your message here"'>Copy</button>
+    </div>
+  </section>
+
+  <section class="telegram">
+    <div class="eyebrow">Telegram — type in the group, not the terminal</div>
+
+    <div class="cmd go">
+      <div class="label">Turn live alerts on</div>
+      <div class="code">/livealerts ON</div>
+    </div>
+
+    <div class="cmd caution">
+      <div class="label">Turn live alerts off</div>
+      <div class="code">/livealerts OFF</div>
+    </div>
+  </section>
+
+  <footer>Poinkle · Trading Intelligence · Command Deck</footer>
+
+</div>
+
+<script>
+  document.querySelectorAll('.copy').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var text = btn.getAttribute('data-cmd');
+      var done = function () {
+        var original = btn.textContent;
+        btn.textContent = 'Copied';
+        btn.classList.add('copied');
+        setTimeout(function () {
+          btn.textContent = original;
+          btn.classList.remove('copied');
+        }, 1200);
+      };
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(done).catch(fallback);
+      } else {
+        fallback();
+      }
+      function fallback() {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        try { document.execCommand('copy'); done(); }
+        catch (e) { btn.textContent = 'Copy failed'; }
+        document.body.removeChild(ta);
+      }
+    });
+  });
+</script>
+</body>
+</html>
