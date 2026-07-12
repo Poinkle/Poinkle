@@ -254,6 +254,7 @@ CANDLE_LIMIT = 120
 COMMAND_DAILY_CANDLE_LIMIT = 220
 POLL_SECONDS = 15
 TELEGRAM_POLL_EVERY_N_SYMBOLS = 15
+TELEGRAM_JOB_DRAIN_EVERY_N_SYMBOLS = 15
 TELEGRAM_INLINE_RESULT_LIMIT = 20
 TELEGRAM_INLINE_CACHE_SECONDS = 10
 TELEGRAM_INLINE_POPULAR_SYMBOLS = ("BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD", "TAO/USD")
@@ -9322,6 +9323,11 @@ def run_once(exchange, telegram_token, telegram_chat_id, state, poll_telegram_du
                 defer_heavy_commands=True,
                 telegram_poll_timeout=0,
             )
+        if (
+            poll_telegram_during_scan
+            and symbol_index > 1
+            and (symbol_index - 1) % TELEGRAM_JOB_DRAIN_EVERY_N_SYMBOLS == 0
+        ):
             process_telegram_command_jobs(
                 exchange,
                 telegram_token,
