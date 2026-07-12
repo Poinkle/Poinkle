@@ -21,8 +21,10 @@ MAX_BODY_LINES = 28
 PRB_CHART_HEADER_SCALE = 2
 PRB_CHART_META_SCALE = 2
 PRB_CHART_TITLE_SCALE = 2
-PRB_CHART_CENTER_Y = 628
-PRB_CHART_MAX_HEIGHT = 840
+PRB_CHART_TOP_Y = 250
+PRB_CHART_BOTTOM_Y = HEIGHT - 124
+PRB_CHART_MAX_WIDTH = WIDTH - 96
+PRB_MIN_FINAL_PAGE_LINES = 8
 
 BG_TOP = (2, 12, 22)
 BG_BOTTOM = (5, 42, 55)
@@ -294,9 +296,11 @@ def read_png(path):
     return width, height, rows
 
 
-def draw_png_image(pixels, logo_path, center_x, top_y, max_width, max_height):
+def draw_png_image(pixels, logo_path, center_x, top_y, max_width, max_height, allow_upscale=False):
     logo_width, logo_height, logo_pixels = read_png(logo_path)
     scale = min(max_width / logo_width, max_height / logo_height, 1.0)
+    if allow_upscale:
+        scale = min(max_width / logo_width, max_height / logo_height)
     draw_width = max(1, int(logo_width * scale))
     draw_height = max(1, int(logo_height * scale))
     left = center_x - draw_width // 2
@@ -402,7 +406,7 @@ def paginate(lines, max_lines=MAX_BODY_LINES):
 
 def paginate_prb_lines(lines, has_first_page_chart=False):
     if not has_first_page_chart:
-        return paginate(lines)
+        return rebalance_orphan_final_page(paginate(lines))
 
     first_page_lines = 11
     pages = []
@@ -416,7 +420,26 @@ def paginate_prb_lines(lines, has_first_page_chart=False):
         current.append(line)
     if current:
         pages.append(current)
-    return pages or [[]]
+    return rebalance_orphan_final_page(pages or [[]])
+
+
+def rebalance_orphan_final_page(pages, min_final_lines=PRB_MIN_FINAL_PAGE_LINES):
+    if len(pages) < 2:
+        return pages
+
+    final_lines = [line for line in pages[-1] if sanitize_text(line)]
+    if len(final_lines) >= min_final_lines:
+        return pages
+
+    previous = pages[-2]
+    final = pages[-1]
+    while len([line for line in final if sanitize_text(line)]) < min_final_lines and len(previous) > min_final_lines:
+        final.insert(0, previous.pop())
+
+    if not previous:
+        pages[-2] = final
+        pages.pop()
+    return pages
 
 
 def extract_prb_id(prb_text):
@@ -448,18 +471,20 @@ def draw_logo(pixels, logo_path=None):
     draw_logo_placeholder(pixels)
 
 
-def draw_chart_embed(pixels, chart_path, center_y=318, max_height=560):
+def draw_chart_embed(pixels, chart_path, top_y=PRB_CHART_TOP_Y, bottom_y=PRB_CHART_BOTTOM_Y, max_width=PRB_CHART_MAX_WIDTH):
     if not chart_path or not Path(chart_path).exists():
         return 330
 
     try:
+        available_height = max(1, bottom_y - top_y)
         left, top, draw_width, draw_height = draw_png_image(
             pixels,
             chart_path,
             WIDTH // 2,
-            center_y,
-            WIDTH - 96,
-            max_height,
+            top_y,
+            max_width,
+            available_height,
+            allow_upscale=True,
         )
     except Exception:
         return 330
@@ -503,8 +528,9 @@ def draw_card(page_lines, page_number, page_count, prb_id, title, output_path, l
         y = draw_chart_embed(
             pixels,
             chart_path,
-            center_y=PRB_CHART_CENTER_Y,
-            max_height=PRB_CHART_MAX_HEIGHT,
+            top_y=PRB_CHART_TOP_Y,
+            bottom_y=PRB_CHART_BOTTOM_Y,
+            max_width=PRB_CHART_MAX_WIDTH,
         )
         lines_to_draw = chart_card_lines(page_lines)
     else:
