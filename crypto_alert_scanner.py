@@ -4237,10 +4237,6 @@ def lightweight_alert_direction(alert):
         return "bullish"
     if alert_type in {"rsi_cross_below_30", "ema_cross_below"}:
         return "bearish"
-    if alert_type == "volume_spike":
-        direction = alert.get("direction")
-        if direction in {"bullish", "bearish"}:
-            return direction
     return None
 
 
@@ -4657,6 +4653,32 @@ def rolling_confluence_alerts(state, symbol, pending_alerts, now=None):
 
 def has_lightweight_confluence(alerts):
     return len(strongest_directional_lightweight_group(alerts)) >= 2
+
+
+def inversion_metrics(state):
+    metrics = state.setdefault("__inversion_metrics", {})
+    if not isinstance(metrics, dict):
+        metrics = {}
+        state["__inversion_metrics"] = metrics
+    metrics.setdefault("suppressed_lightweight_groups", 0)
+    metrics.setdefault("would_have_fired_under_old_rules", 0)
+    metrics.setdefault("level_breaks_sent", 0)
+    metrics.setdefault("since", iso_utc_now())
+    return metrics
+
+
+def record_inversion_suppression(state, would_have_fired_under_old_rules=False):
+    metrics = inversion_metrics(state)
+    metrics["suppressed_lightweight_groups"] += 1
+    if would_have_fired_under_old_rules:
+        metrics["would_have_fired_under_old_rules"] += 1
+    return metrics
+
+
+def record_inversion_level_break_sent(state):
+    metrics = inversion_metrics(state)
+    metrics["level_breaks_sent"] += 1
+    return metrics
 
 
 def alert_signal_summary(alert):
@@ -9916,12 +9938,15 @@ def run_once(exchange, telegram_token, telegram_chat_id, state, poll_telegram_du
                 else:
                     alert_group = rolling_confluence_alerts(state, symbol, pending_alerts, now)
                     record_scan_alert_history(state, symbol, pending_alerts, now)
-                if pending_alerts and all(is_lightweight_alert(alert) for alert in alert_group) and not has_lightweight_confluence(alert_group):
+                has_confirmed_level_break = any(is_confirmed_level_break_alert(alert) for alert in alert_group)
+                if pending_alerts and not has_confirmed_level_break:
+                    would_have_fired_under_old_rules = has_lightweight_confluence(alert_group)
+                    record_inversion_suppression(state, would_have_fired_under_old_rules)
                     log_suppressed_lightweight_alert(
                         symbol,
                         candle,
                         alert_group,
-                        "Waiting for another distinct lightweight signal within 15 minutes.",
+                        "No confirmed level break. Indicators are confirmation context only.",
                     )
                     for alert in pending_alerts:
                         dedup_key = alert_dedupe_key(alert, candle[4])
@@ -10012,6 +10037,8 @@ def run_once(exchange, telegram_token, telegram_chat_id, state, poll_telegram_du
                     supports=support_levels,
                     resistances=resistance_levels,
                 )
+                if any(is_confirmed_level_break_alert(alert) for alert in alert_group):
+                    record_inversion_level_break_sent(state)
                 sent_at = time.time()
                 metric = record_alert_delivery_metric(
                     state,

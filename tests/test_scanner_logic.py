@@ -47,6 +47,46 @@ def make_ohlcv_series(closes, start=1_700_000_000_000, step=900_000, volume=100)
     return candles
 
 
+def scan_result_for_alerts(alerts=None, current_close=101, current_volume=250, current_timestamp=None):
+    alerts = alerts or []
+    current_timestamp = scanner.TIMEFRAME_MS if current_timestamp is None else current_timestamp
+    previous_candle = candle(current_timestamp - scanner.TIMEFRAME_MS, 99, 101, 98, 100, 100)
+    current_candle = candle(current_timestamp, 100, 102, 99, current_close, current_volume)
+    signal_state = {
+        "alerts": alerts,
+        "scorecard": [],
+        "ema_21": 101,
+        "ema_55": 99,
+        "rsi": 55,
+        "volume_average": 100,
+        "volume_multiple": current_volume / 100,
+    }
+    return (
+        previous_candle,
+        current_candle,
+        alerts,
+        101,
+        99,
+        55,
+        1,
+        100,
+        90,
+        110,
+        [previous_candle, current_candle],
+        {"support": [90], "resistance": [110]},
+        signal_state,
+    )
+
+
+def confirmed_break_alert(direction="breakout", level=100):
+    return {
+        "type": f"live:{direction}:{level}:confirmation",
+        "label": "Breakout Confirmation" if direction == "breakout" else "Breakdown Confirmation",
+        "emoji": "✅",
+        "level": level,
+    }
+
+
 class FakeExchange:
     def __init__(self, candles_by_timeframe, ticker_price, failing_timeframes=None):
         self.candles_by_timeframe = candles_by_timeframe
@@ -945,6 +985,7 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertEqual(volume_alert["direction"], "bullish")
         self.assertEqual(volume_alert["label"], "Volume Spike on an Up Candle")
+        self.assertIsNone(scanner.lightweight_alert_direction(volume_alert))
 
     def test_volume_spike_doji_is_neutral(self):
         candles = make_ohlcv_series([100 for _ in range(80)], volume=100)
@@ -955,6 +996,7 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertEqual(volume_alert["direction"], "neutral")
         self.assertEqual(volume_alert["label"], "Volume Spike — Indecision Candle")
+        self.assertIsNone(scanner.lightweight_alert_direction(volume_alert))
 
     def test_whynot_command_message_accepts_current_scan_symbol_shape(self):
         candles = make_ohlcv_series([100 for _ in range(80)], volume=100)
@@ -1577,7 +1619,7 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("ETH: Price 102 | Trend bullish | RSI 57.00", sent_messages[0][1])
         self.assertIn("NOTREAL: Price market data unavailable | Trend n/a | RSI n/a", sent_messages[0][1])
 
-    def test_lightweight_confluence_requires_two_distinct_signal_types(self):
+    def test_lightweight_confluence_requires_two_distinct_directional_signal_types(self):
         volume_alert = {
             "type": "volume_spike",
             "label": "Bullish Volume Spike",
@@ -1600,8 +1642,20 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertFalse(scanner.has_lightweight_confluence([ema_alert]))
         self.assertFalse(scanner.has_lightweight_confluence([rsi_alert]))
         self.assertFalse(scanner.has_lightweight_confluence([volume_alert, volume_alert.copy()]))
-        self.assertTrue(scanner.has_lightweight_confluence([volume_alert, ema_alert]))
+        self.assertFalse(scanner.has_lightweight_confluence([volume_alert, ema_alert]))
         self.assertTrue(scanner.has_lightweight_confluence([ema_alert, rsi_alert]))
+
+    def test_volume_spike_returns_no_lightweight_direction(self):
+        self.assertIsNone(
+            scanner.lightweight_alert_direction(
+                {
+                    "type": "volume_spike",
+                    "label": "Volume Spike on an Up Candle",
+                    "direction": "bullish",
+                    "volume_multiple": 2.5,
+                }
+            )
+        )
 
     def test_tracking_failed_break_title_includes_symbol(self):
         trade = {"direction": "LONG", "level": 100}
@@ -1757,18 +1811,7 @@ class ScannerLogicTests(unittest.TestCase):
             "label": "EMA 21 crossed above EMA 55",
             "emoji": "🟢",
         }
-        scan_result = (
-            candle(0, 99, 101, 98, 100, 100),
-            candle(scanner.TIMEFRAME_MS, 100, 102, 99, 101, 200),
-            [volume_alert, ema_alert],
-            101,
-            99,
-            55,
-            1,
-            100,
-            90,
-            110,
-        )
+        scan_result = scan_result_for_alerts([confirmed_break_alert(), volume_alert, ema_alert], current_volume=200)
 
         try:
             with patch.object(scanner, "scan_symbol", return_value=scan_result), patch.object(
@@ -1781,7 +1824,7 @@ class ScannerLogicTests(unittest.TestCase):
                 side_effect=lambda *args, **kwargs: sent_alert_groups.append(args),
             ), patch.object(
                 scanner, "load_bot_config", return_value={"live_alerts_enabled": False}
-            ), patch.object(scanner, "save_state"):
+            ), patch.object(scanner, "load_user_watchlists", return_value={}), patch.object(scanner, "save_state"):
                 scanner.run_once(object(), "TOKEN", "999", {})
         finally:
             scanner.WATCHLIST = original_watchlist
@@ -1805,18 +1848,7 @@ class ScannerLogicTests(unittest.TestCase):
             "label": "EMA 21 crossed above EMA 55",
             "emoji": "🟢",
         }
-        scan_result = (
-            candle(0, 99, 101, 98, 100, 100),
-            candle(scanner.TIMEFRAME_MS, 100, 102, 99, 101, 200),
-            [volume_alert, ema_alert],
-            101,
-            99,
-            55,
-            1,
-            100,
-            90,
-            110,
-        )
+        scan_result = scan_result_for_alerts([confirmed_break_alert(), volume_alert, ema_alert], current_volume=200)
 
         try:
             with patch.object(scanner, "scan_symbol", return_value=scan_result), patch.object(
@@ -1824,12 +1856,14 @@ class ScannerLogicTests(unittest.TestCase):
             ), patch.object(
                 scanner, "build_level_alerts", side_effect=AssertionError("level alerts disabled")
             ), patch.object(
+                scanner, "get_secondary_timeframe_context", return_value={"6h": {"latest_close": 101}}
+            ), patch.object(
                 scanner,
                 "send_alert_group_to_chat",
                 side_effect=lambda token, chat_id, *args, **kwargs: sent_alert_groups.append((str(chat_id), args)),
             ), patch.object(
                 scanner, "load_bot_config", return_value={"live_alerts_enabled": False}
-            ), patch.object(scanner, "save_state"):
+            ), patch.object(scanner, "load_user_watchlists", return_value={}), patch.object(scanner, "save_state"):
                 scanner.run_once(object(), "TOKEN", "999", {})
         finally:
             scanner.WATCHLIST = original_watchlist
@@ -1854,32 +1888,25 @@ class ScannerLogicTests(unittest.TestCase):
             "label": "EMA 21 crossed above EMA 55",
             "emoji": "🟢",
         }
+        level_alert = confirmed_break_alert()
 
         def fake_scan_symbol(exchange, symbol):
             call_counts[symbol] += 1
-            candle_time = scanner.TIMEFRAME_MS * call_counts[symbol]
-            return (
-                candle(candle_time - scanner.TIMEFRAME_MS, 99, 101, 98, 100, 100),
-                candle(candle_time, 100, 102, 99, 101, 250),
-                [volume_alert.copy(), ema_alert.copy()],
-                101,
-                99,
-                55,
-                1,
-                100,
-                90,
-                110,
-            )
+            return scan_result_for_alerts([level_alert.copy(), volume_alert.copy(), ema_alert.copy()])
 
         state = {}
         try:
             with patch.object(scanner, "scan_symbol", side_effect=fake_scan_symbol), patch.object(
                 scanner, "get_current_market_price", return_value=101
             ), patch.object(scanner, "build_level_alerts", return_value=[]), patch.object(
+                scanner, "get_secondary_timeframe_context", return_value={"6h": {"latest_close": 101}}
+            ), patch.object(
                 scanner,
                 "send_alert_group_to_chat",
                 side_effect=lambda token, chat_id, *args, **kwargs: sent_alert_groups.append((str(chat_id), args)),
             ), patch.object(scanner, "load_bot_config", return_value={"live_alerts_enabled": True}), patch.object(
+                scanner, "load_user_watchlists", return_value={}
+            ), patch.object(
                 scanner, "save_state"
             ), patch.object(scanner.time, "time", return_value=1_000):
                 scanner.WATCHLIST = ["BTC/USD"]
@@ -1898,7 +1925,7 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(state["__scan_alert_cooldowns"]["BTC/USD"]["tier2"], 1_000)
         self.assertEqual(state["__scan_alert_cooldowns"]["ETH/USD"]["tier2"], 1_000)
 
-    def test_rolling_confluence_combines_signals_across_scan_cycles(self):
+    def test_indicator_only_rolling_confluence_no_longer_sends_across_scan_cycles(self):
         original_watchlist = scanner.WATCHLIST[:]
         scanner.WATCHLIST = ["BTC/USD"]
         sent_alert_groups = []
@@ -1921,18 +1948,7 @@ class ScannerLogicTests(unittest.TestCase):
             call_count[symbol] += 1
             candle_time = scanner.TIMEFRAME_MS * call_count[symbol]
             alerts = [volume_alert.copy()] if call_count[symbol] == 1 else [ema_alert.copy()]
-            return (
-                candle(candle_time - scanner.TIMEFRAME_MS, 99, 101, 98, 100, 100),
-                candle(candle_time, 100, 102, 99, 101, 250),
-                alerts,
-                101,
-                99,
-                55,
-                1,
-                100,
-                90,
-                110,
-            )
+            return scan_result_for_alerts(alerts, current_timestamp=candle_time)
 
         try:
             with patch.object(scanner, "scan_symbol", side_effect=fake_scan_symbol), patch.object(
@@ -1944,6 +1960,8 @@ class ScannerLogicTests(unittest.TestCase):
                     [alert["type"] for alert in alerts]
                 ),
             ), patch.object(scanner, "load_bot_config", return_value={"live_alerts_enabled": True}), patch.object(
+                scanner, "load_user_watchlists", return_value={}
+            ), patch.object(
                 scanner, "save_state"
             ), patch.object(scanner.time, "time", side_effect=lambda: current_time["now"]):
                 state = {}
@@ -1953,9 +1971,9 @@ class ScannerLogicTests(unittest.TestCase):
         finally:
             scanner.WATCHLIST = original_watchlist
 
-        self.assertEqual(len(sent_alert_groups), 1)
-        self.assertEqual(set(sent_alert_groups[0]), {"volume_spike", "ema_cross_above"})
-        self.assertIn("tier2", state["__scan_alert_cooldowns"]["BTC/USD"])
+        self.assertEqual(sent_alert_groups, [])
+        self.assertEqual(state["__inversion_metrics"]["suppressed_lightweight_groups"], 2)
+        self.assertEqual(state["__inversion_metrics"]["would_have_fired_under_old_rules"], 0)
 
     def test_rolling_confluence_does_not_combine_signals_outside_window(self):
         original_watchlist = scanner.WATCHLIST[:]
@@ -1981,17 +1999,9 @@ class ScannerLogicTests(unittest.TestCase):
         def fake_scan_symbol(exchange, symbol):
             call_count[symbol] += 1
             candle_time = scanner.TIMEFRAME_MS * call_count[symbol]
-            return (
-                candle(candle_time - scanner.TIMEFRAME_MS, 99, 101, 98, 100, 100),
-                candle(candle_time, 100, 102, 99, 101, 250),
+            return scan_result_for_alerts(
                 [alerts_by_call[call_count[symbol] - 1].copy()],
-                101,
-                99,
-                55,
-                1,
-                100,
-                90,
-                110,
+                current_timestamp=candle_time,
             )
 
         try:
@@ -2004,6 +2014,8 @@ class ScannerLogicTests(unittest.TestCase):
                     [alert["type"] for alert in alerts]
                 ),
             ), patch.object(scanner, "load_bot_config", return_value={"live_alerts_enabled": True}), patch.object(
+                scanner, "load_user_watchlists", return_value={}
+            ), patch.object(
                 scanner, "save_state"
             ), patch.object(scanner.time, "time", side_effect=lambda: current_time["now"]):
                 state = {}
@@ -2018,18 +2030,7 @@ class ScannerLogicTests(unittest.TestCase):
     def test_run_once_does_not_fetch_secondary_context_without_daily_alerts(self):
         original_watchlist = scanner.WATCHLIST[:]
         scanner.WATCHLIST = ["BTC/USD"]
-        scan_result = (
-            candle(0, 99, 101, 98, 100, 100),
-            candle(scanner.TIMEFRAME_MS, 100, 102, 99, 101, 100),
-            [],
-            101,
-            99,
-            55,
-            1,
-            100,
-            90,
-            110,
-        )
+        scan_result = scan_result_for_alerts([], current_volume=100)
 
         try:
             with patch.object(scanner, "scan_symbol", return_value=scan_result), patch.object(
@@ -2046,6 +2047,75 @@ class ScannerLogicTests(unittest.TestCase):
             scanner.WATCHLIST = original_watchlist
 
         send_group.assert_not_called()
+
+    def test_run_once_suppresses_lightweight_only_group_that_old_gate_would_have_sent(self):
+        original_watchlist = scanner.WATCHLIST[:]
+        scanner.WATCHLIST = ["BTC/USD"]
+        sent_alert_groups = []
+        ema_below = {
+            "type": "ema_cross_below",
+            "label": "EMA 21 crossed below EMA 55",
+            "emoji": "🔴",
+        }
+        rsi_below = {
+            "type": "rsi_cross_below_30",
+            "label": "RSI crossed below 30",
+            "emoji": "🧊",
+        }
+        scan_result = scan_result_for_alerts([ema_below, rsi_below])
+        state = {}
+
+        try:
+            with patch.object(scanner, "scan_symbol", return_value=scan_result), patch.object(
+                scanner, "get_current_market_price", return_value=101
+            ), patch.object(scanner, "build_level_alerts", return_value=[]), patch.object(
+                scanner,
+                "send_alert_group_to_chat",
+                side_effect=lambda token, chat_id, symbol, candle_arg, alerts, *args, **kwargs: sent_alert_groups.append(
+                    [alert["type"] for alert in alerts]
+                ),
+            ), patch.object(scanner, "load_bot_config", return_value={"live_alerts_enabled": True}), patch.object(
+                scanner, "load_user_watchlists", return_value={}
+            ), patch.object(
+                scanner, "save_state"
+            ):
+                scanner.run_once(object(), "TOKEN", "MAIN_CHAT", state)
+        finally:
+            scanner.WATCHLIST = original_watchlist
+
+        self.assertEqual(sent_alert_groups, [])
+        self.assertEqual(state["__inversion_metrics"]["suppressed_lightweight_groups"], 1)
+        self.assertEqual(state["__inversion_metrics"]["would_have_fired_under_old_rules"], 1)
+
+    def test_run_once_sends_group_with_confirmed_level_break(self):
+        original_watchlist = scanner.WATCHLIST[:]
+        scanner.WATCHLIST = ["BTC/USD"]
+        sent_alert_groups = []
+        scan_result = scan_result_for_alerts([confirmed_break_alert()])
+        state = {}
+
+        try:
+            with patch.object(scanner, "scan_symbol", return_value=scan_result), patch.object(
+                scanner, "get_current_market_price", return_value=101
+            ), patch.object(scanner, "build_level_alerts", return_value=[]), patch.object(
+                scanner, "get_secondary_timeframe_context", return_value={"6h": {"latest_close": 101}}
+            ), patch.object(
+                scanner,
+                "send_alert_group_to_chat",
+                side_effect=lambda token, chat_id, symbol, candle_arg, alerts, *args, **kwargs: sent_alert_groups.append(
+                    [alert["type"] for alert in alerts]
+                ),
+            ), patch.object(scanner, "load_bot_config", return_value={"live_alerts_enabled": True}), patch.object(
+                scanner, "load_user_watchlists", return_value={}
+            ), patch.object(
+                scanner, "save_state"
+            ):
+                scanner.run_once(object(), "TOKEN", "MAIN_CHAT", state)
+        finally:
+            scanner.WATCHLIST = original_watchlist
+
+        self.assertEqual(sent_alert_groups, [["live:breakout:100:confirmation"]])
+        self.assertEqual(state["__inversion_metrics"]["level_breaks_sent"], 1)
 
     def test_run_once_attaches_secondary_context_to_outgoing_alert_group(self):
         original_watchlist = scanner.WATCHLIST[:]
@@ -2064,18 +2134,8 @@ class ScannerLogicTests(unittest.TestCase):
             "label": "EMA 21 crossed above EMA 55",
             "emoji": "🟢",
         }
-        scan_result = (
-            candle(0, 99, 101, 98, 100, 100),
-            candle(scanner.TIMEFRAME_MS, 100, 102, 99, 101, 250),
-            [volume_alert, ema_alert],
-            101,
-            99,
-            55,
-            1,
-            100,
-            90,
-            110,
-        )
+        level_alert = confirmed_break_alert()
+        scan_result = scan_result_for_alerts([level_alert, volume_alert, ema_alert])
 
         try:
             with patch.object(scanner, "scan_symbol", return_value=scan_result), patch.object(
@@ -2089,6 +2149,8 @@ class ScannerLogicTests(unittest.TestCase):
                     alerts
                 ),
             ), patch.object(scanner, "load_bot_config", return_value={"live_alerts_enabled": True}), patch.object(
+                scanner, "load_user_watchlists", return_value={}
+            ), patch.object(
                 scanner, "save_state"
             ):
                 scanner.run_once(object(), "TOKEN", "MAIN_CHAT", {})
@@ -2100,8 +2162,12 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertTrue(
             all(alert["secondary_timeframe_context"] == secondary_context for alert in sent_alert_groups[0])
         )
+        self.assertEqual(
+            [alert["type"] for alert in sent_alert_groups[0]],
+            ["live:breakout:100:confirmation", "volume_spike", "ema_cross_above"],
+        )
 
-    def test_run_once_sends_daily_alert_when_secondary_context_is_unavailable(self):
+    def test_run_once_suppresses_confirmed_alert_when_secondary_context_is_unavailable(self):
         original_watchlist = scanner.WATCHLIST[:]
         scanner.WATCHLIST = ["BTC/USD"]
         sent_alert_groups = []
@@ -2117,18 +2183,7 @@ class ScannerLogicTests(unittest.TestCase):
             "label": "EMA 21 crossed above EMA 55",
             "emoji": "🟢",
         }
-        scan_result = (
-            candle(0, 99, 101, 98, 100, 100),
-            candle(scanner.TIMEFRAME_MS, 100, 102, 99, 101, 250),
-            [volume_alert, ema_alert],
-            101,
-            99,
-            55,
-            1,
-            100,
-            90,
-            110,
-        )
+        scan_result = scan_result_for_alerts([confirmed_break_alert(), volume_alert, ema_alert])
 
         try:
             with patch.object(scanner, "scan_symbol", return_value=scan_result), patch.object(
@@ -2142,15 +2197,17 @@ class ScannerLogicTests(unittest.TestCase):
                     [alert["type"] for alert in alerts]
                 ),
             ), patch.object(scanner, "load_bot_config", return_value={"live_alerts_enabled": True}), patch.object(
+                scanner, "load_user_watchlists", return_value={}
+            ), patch.object(
                 scanner, "save_state"
             ):
                 scanner.run_once(object(), "TOKEN", "MAIN_CHAT", {})
         finally:
             scanner.WATCHLIST = original_watchlist
 
-        self.assertEqual(sent_alert_groups, [["volume_spike", "ema_cross_above"]])
+        self.assertEqual(sent_alert_groups, [])
 
-    def test_run_once_suppresses_level_attempts_without_suppressing_confluence(self):
+    def test_run_once_suppresses_level_attempts_and_indicator_only_context(self):
         original_watchlist = scanner.WATCHLIST[:]
         scanner.WATCHLIST = ["BTC/USD"]
         sent_alert_groups = []
@@ -2172,18 +2229,7 @@ class ScannerLogicTests(unittest.TestCase):
             "emoji": "⚠️",
             "level": 100,
         }
-        scan_result = (
-            candle(0, 99, 101, 98, 100, 100),
-            candle(scanner.TIMEFRAME_MS, 100, 102, 99, 101, 250),
-            [volume_alert, ema_alert],
-            101,
-            99,
-            55,
-            1,
-            100,
-            90,
-            110,
-        )
+        scan_result = scan_result_for_alerts([volume_alert, ema_alert])
         state = {}
 
         try:
@@ -2196,21 +2242,26 @@ class ScannerLogicTests(unittest.TestCase):
                     [alert["type"] for alert in alerts]
                 ),
             ), patch.object(scanner, "load_bot_config", return_value={"live_alerts_enabled": True}), patch.object(
+                scanner, "load_user_watchlists", return_value={}
+            ), patch.object(
                 scanner, "save_state"
             ):
                 scanner.run_once(object(), "TOKEN", "MAIN_CHAT", state)
         finally:
             scanner.WATCHLIST = original_watchlist
 
-        self.assertEqual(sent_alert_groups, [["volume_spike", "ema_cross_above"]])
-        self.assertEqual(
-            state["BTC/USD"]["sent_alerts"]["live:breakout:100:early_warning"],
-            f"{scanner.TIMEFRAME_MS}:live:breakout:100:early_warning",
-        )
+        self.assertEqual(sent_alert_groups, [])
+        early_warning_keys = [
+            key
+            for key in state["BTC/USD"]["sent_alerts"]
+            if key.startswith("live:breakout:") and key.endswith(":early_warning")
+        ]
+        self.assertEqual(len(early_warning_keys), 1)
         self.assertEqual(
             state["__active_trades"]["BTC/USD"]["source_alert"],
             "Breakout Attempt",
         )
+        self.assertEqual(state["__inversion_metrics"]["suppressed_lightweight_groups"], 1)
 
     def test_livealerts_command_toggles_main_chat_routing(self):
         original_watchlist = scanner.WATCHLIST[:]
@@ -2232,18 +2283,7 @@ class ScannerLogicTests(unittest.TestCase):
             "label": "EMA 21 crossed above EMA 55",
             "emoji": "🟢",
         }
-        scan_result = (
-            candle(0, 99, 101, 98, 100, 100),
-            candle(scanner.TIMEFRAME_MS, 100, 102, 99, 101, 200),
-            [volume_alert, ema_alert],
-            101,
-            99,
-            55,
-            1,
-            100,
-            90,
-            110,
-        )
+        scan_result = scan_result_for_alerts([confirmed_break_alert(), volume_alert, ema_alert], current_volume=200)
 
         def save_config(updated_config):
             config.clear()
@@ -2271,10 +2311,12 @@ class ScannerLogicTests(unittest.TestCase):
                 with patch.object(scanner, "scan_symbol", return_value=scan_result), patch.object(
                     scanner, "get_current_market_price", return_value=101
                 ), patch.object(scanner, "build_level_alerts", return_value=[]), patch.object(
+                    scanner, "get_secondary_timeframe_context", return_value={"6h": {"latest_close": 101}}
+                ), patch.object(
                     scanner,
                     "send_alert_group_to_chat",
                     side_effect=lambda token, chat_id, *args, **kwargs: sent_alert_groups.append((str(chat_id), args)),
-                ), patch.object(scanner, "save_state"):
+                ), patch.object(scanner, "load_user_watchlists", return_value={}), patch.object(scanner, "save_state"):
                     scanner.run_once(object(), "TOKEN", "MAIN_CHAT", {})
 
                 scanner.handle_mode_command(
@@ -2289,10 +2331,12 @@ class ScannerLogicTests(unittest.TestCase):
                 with patch.object(scanner, "scan_symbol", return_value=scan_result), patch.object(
                     scanner, "get_current_market_price", return_value=101
                 ), patch.object(scanner, "build_level_alerts", side_effect=AssertionError("level alerts disabled")), patch.object(
+                    scanner, "get_secondary_timeframe_context", return_value={"6h": {"latest_close": 101}}
+                ), patch.object(
                     scanner,
                     "send_alert_group_to_chat",
                     side_effect=lambda token, chat_id, *args, **kwargs: sent_alert_groups.append((str(chat_id), args)),
-                ), patch.object(
+                ), patch.object(scanner, "load_user_watchlists", return_value={}), patch.object(
                     scanner, "save_state"
                 ):
                     scanner.run_once(object(), "TOKEN", "MAIN_CHAT", {})
@@ -3971,7 +4015,7 @@ class ScannerLogicTests(unittest.TestCase):
     def test_personal_watchlist_alerts_respect_user_severity_preference(self):
         sent_alert_groups = []
         alerts = [
-            {"type": "volume_spike", "label": "Bullish Volume Spike", "volume_multiple": 2.5},
+            confirmed_break_alert(),
             {"type": "ema_cross_above", "label": "EMA 21 crossed above EMA 55"},
         ]
 
@@ -4003,15 +4047,15 @@ class ScannerLogicTests(unittest.TestCase):
             )
 
         self.assertEqual(delivered, ["111"])
-        self.assertEqual(sent_alert_groups, [("111", "BTC/USD", ["volume_spike", "ema_cross_above"])])
+        self.assertEqual(sent_alert_groups, [("111", "BTC/USD", ["live:breakout:100:confirmation", "ema_cross_above"])])
 
     def test_personal_watchlist_alerts_send_when_group_meets_user_severity_preference(self):
         sent_alert_groups = []
         alerts = [
+            confirmed_break_alert(),
             {"type": "volume_spike", "label": "Bullish Volume Spike", "volume_multiple": 2.5},
             {"type": "ema_cross_above", "label": "EMA 21 crossed above EMA 55"},
             {"type": "rsi_cross_above_70", "label": "RSI crossed above 70"},
-            {"type": "live:breakout:100:confirmation", "label": "Breakout Confirmation"},
         ]
 
         with patch.object(scanner, "users_watching_symbol", return_value=["222"]), patch.object(
