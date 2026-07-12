@@ -18,19 +18,23 @@ try:
     from prb_card_renderer import (
         render_alert_card,
         render_mike_list_card,
-        render_prb_cards,
         render_reference_card,
         render_welcome_card,
     )
 except ModuleNotFoundError:
     render_alert_card = None
     render_mike_list_card = None
-    render_prb_cards = None
     render_reference_card = None
     render_welcome_card = None
 
+try:
+    from research_card_renderer import render_research_cards
+except ModuleNotFoundError:
+    render_research_cards = None
+
 LAST_LEVELS_CHART_DATA = {}
 LAST_RESEARCH_CHART_DATA = {}
+LAST_RESEARCH_CARD_DATA = {}
 TELEGRAM_COMMAND_JOB_QUEUE = deque()
 TELEGRAM_HTTP_SESSION = None
 COINGECKO_COIN_METADATA_CACHE = {}
@@ -5379,7 +5383,7 @@ def build_levels_command_message(exchange, symbol, skill_level=None):
         ema_21,
         ema_55,
     )
-    _range_location, range_fraction = get_range_location(current_price, range_low, range_high)
+    range_location, range_fraction = get_range_location(current_price, range_low, range_high)
     enforce_validation(
         symbol,
         "snapshot",
@@ -5525,7 +5529,7 @@ def build_levels_scan_snapshot(exchange, symbol):
         trend_bias,
         market_structure,
     )
-    _range_location, range_fraction = get_range_location(current_price, range_low, range_high)
+    range_location, range_fraction = get_range_location(current_price, range_low, range_high)
     validation_data = {
         "current_price": current_price,
         "rsi": current_rsi,
@@ -5565,6 +5569,8 @@ def build_levels_scan_snapshot(exchange, symbol):
         "support_distance_label": support_distance_label,
         "distance_to_support": distance_to_support,
         "distance_to_resistance": distance_to_resistance,
+        "range_location": range_location,
+        "range_fraction": range_fraction,
         "market_structure": market_structure,
         "market_structure_label": market_structure_label,
         "chart_data": build_chart_data(
@@ -5967,11 +5973,145 @@ def collect_reference_research(symbol):
     return REFERENCE_RESEARCH_BRIEFS.get(symbol)
 
 
+def research_read_headline(snapshot):
+    ticker = snapshot["symbol"].split("/")[0]
+    ema_200 = snapshot.get("ema_200")
+    current_price = snapshot.get("current_price", 0)
+    if ema_200 is None:
+        location = str(snapshot.get("location") or "in its current zone").lower()
+        return f"{ticker} is {location}."
+    if current_price >= ema_200:
+        return f"{ticker} is above its 200 EMA."
+    return f"{ticker} is below its 200 EMA."
+
+
+def research_zone_headline(snapshot):
+    range_location = snapshot.get("range_location") or "Current range"
+    range_fraction = snapshot.get("range_fraction")
+    if isinstance(range_fraction, (int, float)):
+        return f"{range_location} - {range_fraction * 100:.0f}% through."
+    return f"{range_location}."
+
+
+def fundamentals_headline(fundamentals_data):
+    if fundamentals_data.get("source") != "CoinGecko":
+        return "Project data is unavailable."
+
+    market_cap = numeric_market_value(fundamentals_data.get("market_cap"))
+    fdv = numeric_market_value(fundamentals_data.get("fully_diluted_valuation"))
+    circulating = numeric_market_value(fundamentals_data.get("circulating_supply"))
+    max_supply = numeric_market_value(fundamentals_data.get("max_supply"))
+    if market_cap and fdv and abs((fdv / market_cap) - 1) <= 0.05:
+        return "FDV is roughly equal to market cap."
+    if market_cap and fdv and fdv / market_cap > 1.2:
+        return f"FDV is {fdv / market_cap:.1f}x market cap."
+    if max_supply is None:
+        return "This token has no fixed max supply."
+    if circulating and max_supply and circulating / max_supply >= 0.95:
+        return "Circulating supply is at or near max."
+    return "CoinGecko fundamentals are connected."
+
+
+def build_research_card_sections(snapshot, fundamentals_data):
+    symbol = snapshot["symbol"]
+    current_price = snapshot.get("current_price", 0)
+    price_source = snapshot.get("price_source")
+    last_updated_label = snapshot.get("last_updated_label") or "as of now"
+    support_zones = snapshot.get("support_zones", [])
+    resistance_zones = snapshot.get("resistance_zones", [])
+    support_text = format_zone(support_zones[0]) if support_zones else "None nearby"
+    resistance_text = format_zone(resistance_zones[0]) if resistance_zones else "None nearby"
+    ema_200 = snapshot.get("ema_200")
+    current_rsi = snapshot.get("rsi")
+    market_structure_label = snapshot.get("market_structure_label", "Market structure unavailable")
+    range_fraction = snapshot.get("range_fraction")
+    fundamentals_connected = fundamentals_data.get("source") == "CoinGecko"
+    market_cap_text = format_market_cap_value(fundamentals_data.get("market_cap"))
+    fdv_text = format_market_cap_value(fundamentals_data.get("fully_diluted_valuation"))
+    circulating_supply_text = format_compact_number(fundamentals_data.get("circulating_supply"))
+    total_supply_text = format_compact_number(fundamentals_data.get("total_supply"))
+    max_supply_text = format_compact_number(fundamentals_data.get("max_supply"))
+    description_text = fundamentals_data.get("description") or ""
+    teaching_line = coingecko_fundamentals_teaching_line(fundamentals_data) if fundamentals_connected else ""
+
+    read_body = [
+        f"Trend read: {snapshot.get('bias', 'Neutral')}. {market_structure_label}.",
+        f"Location: {snapshot.get('location', 'Current zone unavailable')}.",
+        ema_200_trend_line(current_price, ema_200),
+    ]
+    ema_200_accumulation = ema_200_accumulation_line(ema_200)
+    if ema_200_accumulation:
+        read_body.append(ema_200_accumulation)
+
+    project_body = []
+    if fundamentals_connected:
+        if teaching_line:
+            project_body.append(teaching_line)
+        if description_text:
+            project_body.append(description_text)
+    else:
+        project_body.append("CoinGecko project data is unavailable for this symbol right now.")
+
+    return [
+        {
+            "title": "The Read",
+            "headline": research_read_headline(snapshot),
+            "body": read_body,
+            "details": [
+                f"Price: {price_display_text(current_price, price_source)}",
+                f"RSI: {current_rsi_text(current_rsi)}",
+                f"Data: {last_updated_label}",
+            ],
+        },
+        {
+            "title": "The Zones",
+            "headline": research_zone_headline(snapshot),
+            "body": [
+                f"Support zone: {support_text}. This is the lower area to watch for buyers showing up.",
+                f"Resistance zone: {resistance_text}. This is the upper area to watch for supply or rejection.",
+            ],
+            "notes": [ZONE_HONEST_LIMIT_LINE],
+            "details": [
+                f"Support: {support_text}",
+                f"Resistance: {resistance_text}",
+                f"Range position: {range_fraction * 100:.0f}%" if isinstance(range_fraction, (int, float)) else "Range position: unavailable",
+            ],
+        },
+        {
+            "title": "The Project",
+            "headline": fundamentals_headline(fundamentals_data),
+            "body": project_body,
+            "details": [
+                f"Market cap: {market_cap_text}",
+                f"FDV: {fdv_text}",
+                f"Circulating: {circulating_supply_text}",
+                f"Total / max: {total_supply_text} / {max_supply_text}",
+                "Data provided by CoinGecko" if fundamentals_connected else "Fundamentals data unavailable",
+            ],
+        },
+        {
+            "title": "The Honest Limits",
+            "headline": "This brief reads current conditions, not the future.",
+            "body": [
+                f"Bull case: trend strengthens, support zones hold, resistance zones are reclaimed, and liquidity expands.",
+                f"Bear case: support zones fail, structure weakens, liquidity contracts, or new evidence contradicts the setup.",
+                "Unknowns: adoption, token supply dynamics, regulation, macro liquidity, and catalyst quality.",
+            ],
+            "details": [
+                "Not Financial Advice",
+                "Poinkle did the research.",
+                "The decision is yours.",
+            ],
+        },
+    ]
+
+
 def build_research_brief(exchange, symbol):
     market_data = collect_market_data(exchange, symbol)
     reference_research = collect_reference_research(symbol)
     news_data = collect_future_news(symbol)
     fundamentals_data = collect_future_fundamentals(symbol)
+    LAST_RESEARCH_CARD_DATA[symbol] = build_research_card_sections(market_data, fundamentals_data)
     return render_prb(market_data, news_data, fundamentals_data, reference_research=reference_research)
 
 
@@ -6007,12 +6147,12 @@ def render_prb(snapshot, news_data=None, fundamentals_data=None, updated=None, r
         f"Market cap {market_cap_text}; FDV {fdv_text}; "
         f"circulating supply {circulating_supply_text}"
         if fundamentals_connected
-        else "Full Research Pending"
+        else "CoinGecko fundamentals unavailable"
     )
     supply_line = (
         f"Circulating {circulating_supply_text}; total {total_supply_text}; max {max_supply_text}"
         if fundamentals_connected
-        else "Pending Evidence"
+        else "CoinGecko fundamentals unavailable"
     )
     fundamentals_teaching_line = (
         coingecko_fundamentals_teaching_line(fundamentals_data)
@@ -6036,7 +6176,7 @@ def render_prb(snapshot, news_data=None, fundamentals_data=None, updated=None, r
         return render_reference_prb(snapshot, reference_research, separator)
 
     title = f"{ticker} Market-Structure Research Brief"
-    status = "Market-Structure Brief — Full Research Pending"
+    status = "Market-Structure Brief"
     overall_rating = research_confidence_text(snapshot)
     long_term_thesis = "Full long-term thesis pending. Current evidence is limited to Poinkle market structure, trend, RSI, support, and resistance context."
     short_term_thesis = f"Price is currently showing {bias.lower()} bias, {location.lower()}, and {market_structure_label.lower()} conditions."
@@ -6058,7 +6198,6 @@ def render_prb(snapshot, news_data=None, fundamentals_data=None, updated=None, r
         f"Short-Term Thesis: {short_term_thesis}\n"
         f"\n{separator}\n\n"
         f"✅ WHAT WE KNOW\n\n"
-        f"• This is not a full fundamental research brief yet.\n"
         f"• Current Price: {price_display_text(current_price, price_source)}\n"
         f"{data_freshness_line}"
         f"• Trend: {bias}\n"
@@ -6070,7 +6209,7 @@ def render_prb(snapshot, news_data=None, fundamentals_data=None, updated=None, r
         f"{fundamentals_detail_lines}"
         f"• Best Use Case: {strategy_text_for_research(strategy)}\n\n"
         f"📈 HISTORICAL PATTERN\n\n"
-        f"Full historical research pending. Use this brief as a market-structure read until saved or live research is connected.\n\n"
+        f"Historical pattern, macro, and institutional layers are not connected yet. Use this as a market-structure read.\n\n"
         f"{separator}\n\n"
         f"🐂 BULL CASE\n\n"
         f"{ticker} improves if trend strengthens, accumulation zones hold, resistance zones are reclaimed, liquidity expands, and fundamental evidence confirms the thesis.\n\n"
@@ -6091,9 +6230,9 @@ def render_prb(snapshot, news_data=None, fundamentals_data=None, updated=None, r
         f"📊 POINKLE SCORECARD\n\n"
         f"Fundamentals: {fundamentals_line}\n"
         f"Technical Structure: {snapshot.get('market_score', 0) / 10:.1f}/10\n"
-        f"Historical Pattern: Full Research Pending\n"
-        f"Macro Environment: Full Research Pending\n"
-        f"Institutional Adoption: Full Research Pending\n"
+        f"Historical Pattern: Not connected yet\n"
+        f"Macro Environment: Not connected yet\n"
+        f"Institutional Adoption: Not connected yet\n"
         f"SETUP GRADE: {patience_grade} — {patience_label}\n\n"
         f"{separator}\n\n"
         f"📌 RESEARCH CONCLUSION\n\n"
@@ -6188,8 +6327,8 @@ def send_research_branding_image(telegram_token, chat_id):
 
 def send_research_cards(telegram_token, chat_id, prb_text, symbol=None, chart_data=None):
     try:
-        if render_prb_cards is None:
-            raise RuntimeError("PRB card renderer unavailable")
+        if render_research_cards is None:
+            raise RuntimeError("Research card renderer unavailable")
 
         chart_path = None
         if symbol and chart_data:
@@ -6197,11 +6336,16 @@ def send_research_cards(telegram_token, chat_id, prb_text, symbol=None, chart_da
                 chart_path = render_research_snapshot_chart(symbol, chart_data)
             except Exception as error:
                 log_warn(f"PRB chart rendering failed for {symbol}: {error}")
+        if chart_path and not send_telegram_photo(telegram_token, chat_id, chart_path):
+            log_warn(f"PRB chart send failed for {symbol}; continuing with research cards.")
 
-        card_paths = render_prb_cards(
-            prb_text,
+        card_data = LAST_RESEARCH_CARD_DATA.get(symbol)
+        if not card_data:
+            raise RuntimeError("No structured research card data available")
+
+        card_paths = render_research_cards(
+            card_data,
             logo_path=POINKLE_RESEARCH_EMBLEM_PATH,
-            chart_path=chart_path,
         )
         if not card_paths:
             raise RuntimeError("No PRB cards rendered")
