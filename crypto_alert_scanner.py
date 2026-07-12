@@ -3998,7 +3998,9 @@ def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, 
             f"<b>Zone entered:</b> around {format_level(trade_plan['level'])}\n"
             f"<b>First candle close:</b> {format_level(trade_plan['first_close'])}\n"
             f"<b>Confirmation close:</b> "
-            f"{format_level(trade_plan['confirmation_close'])}\n\n"
+            f"{format_level(trade_plan['confirmation_close'])}\n"
+            f"<b>Why it's confirmed:</b> Two daily candles have now closed beyond this "
+            f"zone. One close is an attempt. Two consecutive closes is confirmation.\n\n"
             f"<b>RSI:</b> {trade_plan['rsi']:.2f} - {trade_plan['rsi_trend']}\n"
             f"<b>EMA trend:</b> {trade_plan['ema_trend']}\n"
             f"<b>EMA21:</b> {format_level(trade_plan['ema_21'])}\n"
@@ -9322,7 +9324,10 @@ def build_level_alerts(
                     "label": label,
                     "emoji": "✅",
                     "level": level,
-                    "detail": "First confirmation candle closed beyond the level.",
+                    "detail": (
+                        "Confirmed by two consecutive daily closes beyond the zone. "
+                        "The first close was the attempt. This close is the confirmation."
+                    ),
                     "trade_plan": trade_plan,
                     "location_filter": location_filter,
                 }
