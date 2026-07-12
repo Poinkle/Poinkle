@@ -5028,6 +5028,7 @@ SNAPSHOT_LOOK_ORDER_CALLBACK_PREFIX = "look_order"
 WATCHLIST_COIN_CALLBACK_PREFIX = "wcoin"
 WATCHLIST_ACTION_CALLBACK_PREFIX = "wact"
 ALERT_SEVERITY_CALLBACK_PREFIX = "sev"
+COIN_PICKER_BUTTONS_PER_ROW = 3
 WATCHLIST_ACTIONS = {
     "snapshot": "Snapshot",
     "research": "Research",
@@ -5049,31 +5050,36 @@ def snapshot_look_order_keyboard():
     }
 
 
+def coin_picker_button_rows(buttons, buttons_per_row=COIN_PICKER_BUTTONS_PER_ROW):
+    return [
+        buttons[index : index + buttons_per_row]
+        for index in range(0, len(buttons), buttons_per_row)
+    ]
+
+
 def watchlist_coin_keyboard(symbols):
+    buttons = [
+        {
+            "text": base_symbol(symbol),
+            "callback_data": f"{WATCHLIST_COIN_CALLBACK_PREFIX}:{symbol}",
+        }
+        for symbol in symbols
+    ]
     return {
-        "inline_keyboard": [
-            [
-                {
-                    "text": base_symbol(symbol),
-                    "callback_data": f"{WATCHLIST_COIN_CALLBACK_PREFIX}:{symbol}",
-                }
-            ]
-            for symbol in symbols
-        ]
+        "inline_keyboard": coin_picker_button_rows(buttons)
     }
 
 
 def watchlist_direct_action_keyboard(symbols, action):
+    buttons = [
+        {
+            "text": base_symbol(symbol),
+            "callback_data": f"{WATCHLIST_ACTION_CALLBACK_PREFIX}:{action}:{symbol}",
+        }
+        for symbol in symbols
+    ]
     return {
-        "inline_keyboard": [
-            [
-                {
-                    "text": base_symbol(symbol),
-                    "callback_data": f"{WATCHLIST_ACTION_CALLBACK_PREFIX}:{action}:{symbol}",
-                }
-            ]
-            for symbol in symbols
-        ]
+        "inline_keyboard": coin_picker_button_rows(buttons)
     }
 
 
