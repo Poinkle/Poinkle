@@ -254,6 +254,9 @@ CANDLE_LIMIT = 120
 COMMAND_DAILY_CANDLE_LIMIT = 220
 POLL_SECONDS = 15
 TELEGRAM_POLL_EVERY_N_SYMBOLS = 15
+TELEGRAM_INLINE_RESULT_LIMIT = 20
+TELEGRAM_INLINE_CACHE_SECONDS = 10
+TELEGRAM_INLINE_POPULAR_SYMBOLS = ("BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD", "TAO/USD")
 TELEGRAM_COMMAND_JOB_QUEUE_LIMIT = 50
 TELEGRAM_COMMAND_JOB_BATCH_LIMIT = 50
 TELEGRAM_JOB_BUDGET_SECONDS_PER_CHUNK = 8
@@ -1202,6 +1205,27 @@ def answer_telegram_callback(token, callback_query_id, text=""):
             print(f"[WARN] Telegram callback answer failed: {response.status_code} {response.text}")
     except Exception as e:
         print(f"[WARN] Telegram callback answer exception: {e}")
+
+
+def answer_telegram_inline_query(token, inline_query_id, results, cache_time=TELEGRAM_INLINE_CACHE_SECONDS):
+    if not inline_query_id:
+        return False
+    url = f"https://api.telegram.org/bot{token}/answerInlineQuery"
+    try:
+        payload = {
+            "inline_query_id": inline_query_id,
+            "results": results,
+            "cache_time": cache_time,
+            "is_personal": True,
+        }
+        response = telegram_http_session().post(url, json=payload, timeout=10)
+        if response.status_code != 200:
+            log_warn(f"Telegram inline query answer failed: {response.status_code} {response.text}")
+            return False
+        return True
+    except Exception as error:
+        log_warn(f"Telegram inline query answer exception: {error}")
+        return False
 
 
 def clear_telegram_message_keyboard(token, chat_id, message_id):
@@ -7259,6 +7283,94 @@ def user_watchlist_symbols(user_chat_id):
     return load_user_watchlists().get(str(user_chat_id), [])
 
 
+def inline_query_symbol_universe(user_id):
+    symbols = []
+    seen = set()
+
+    def add_symbol(symbol):
+        normalized_symbol = normalize_trade_symbol_input(str(symbol or ""))
+        if not normalized_symbol or normalized_symbol in seen:
+            return
+        if normalized_symbol in UNSUPPORTED_SYMBOLS_THIS_SESSION:
+            return
+        symbols.append(normalized_symbol)
+        seen.add(normalized_symbol)
+
+    for symbol in user_watchlist_symbols(user_id):
+        add_symbol(symbol)
+    for symbol in WATCHLIST:
+        add_symbol(symbol)
+    return symbols
+
+
+def default_inline_query_symbols(user_id):
+    user_symbols = [
+        symbol
+        for symbol in user_watchlist_symbols(user_id)
+        if normalize_trade_symbol_input(str(symbol or "")) not in UNSUPPORTED_SYMBOLS_THIS_SESSION
+    ]
+    if user_symbols:
+        return user_symbols[:TELEGRAM_INLINE_RESULT_LIMIT]
+    return [
+        symbol
+        for symbol in TELEGRAM_INLINE_POPULAR_SYMBOLS
+        if symbol in WATCHLIST and symbol not in UNSUPPORTED_SYMBOLS_THIS_SESSION
+    ][:TELEGRAM_INLINE_RESULT_LIMIT]
+
+
+def matching_inline_query_symbols(query_text, user_id):
+    query = str(query_text or "").strip().upper()
+    if not query:
+        return default_inline_query_symbols(user_id)
+
+    prefix_matches = []
+    contains_matches = []
+    for symbol in inline_query_symbol_universe(user_id):
+        ticker = base_symbol(symbol).upper()
+        if ticker.startswith(query):
+            prefix_matches.append(symbol)
+        elif query in ticker:
+            contains_matches.append(symbol)
+    return (prefix_matches + contains_matches)[:TELEGRAM_INLINE_RESULT_LIMIT]
+
+
+def build_inline_query_results(query_text, user_id):
+    results = []
+    for symbol in matching_inline_query_symbols(query_text, user_id):
+        ticker = base_symbol(symbol)
+        command_text = f"/research {ticker}"
+        results.append(
+            {
+                "type": "article",
+                "id": f"research:{ticker}",
+                "title": f"{ticker} - Research",
+                "description": "Open the Poinkle research brief.",
+                "input_message_content": {
+                    "message_text": command_text,
+                    "disable_web_page_preview": True,
+                },
+            }
+        )
+    return results
+
+
+def handle_telegram_inline_query(telegram_token, inline_query):
+    inline_query = inline_query or {}
+    inline_query_id = inline_query.get("id")
+    from_user = inline_query.get("from") or {}
+    user_id = str(from_user.get("id") or "")
+    query_text = inline_query.get("query") or ""
+    try:
+        return answer_telegram_inline_query(
+            telegram_token,
+            inline_query_id,
+            build_inline_query_results(query_text, user_id),
+        )
+    except Exception as error:
+        log_warn(f"Telegram inline query handling failed: {error}")
+        return False
+
+
 def send_bare_command_watchlist_panel(
     telegram_token,
     telegram_chat_id,
@@ -7712,6 +7824,14 @@ def process_telegram_commands(
 
     for update in updates:
         update_id = update["update_id"]
+        inline_query = update.get("inline_query")
+        if inline_query:
+            command_state["last_update_id"] = update_id
+            save_state(state)
+            handle_telegram_inline_query(telegram_token, inline_query)
+            save_state(state)
+            continue
+
         callback_query = update.get("callback_query")
         if callback_query:
             callback_query_id = callback_query.get("id")
