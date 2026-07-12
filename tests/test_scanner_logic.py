@@ -3211,7 +3211,10 @@ class ScannerLogicTests(unittest.TestCase):
         with patch.object(scanner, "render_lightweight_alert_card", return_value="/tmp/alert-card.png") as render_card, patch.object(
             scanner,
             "send_telegram_photo",
-            side_effect=lambda token, chat_id, path, caption="": sent_photos.append((str(chat_id), path, caption)) or True,
+            side_effect=lambda token, chat_id, path, caption="", reply_markup=None: sent_photos.append(
+                (str(chat_id), path, caption, reply_markup)
+            )
+            or True,
         ), patch.object(
             scanner, "send_telegram_message", side_effect=AssertionError("text fallback should not be sent")
         ):
@@ -3234,7 +3237,11 @@ class ScannerLogicTests(unittest.TestCase):
             )
 
         render_card.assert_called_once()
-        self.assertEqual(sent_photos, [("999", "/tmp/alert-card.png", "🟢 <b>BTC/USD Bullish Volume Spike</b>")])
+        self.assertEqual(sent_photos[0][:3], ("999", "/tmp/alert-card.png", "🟢 <b>BTC/USD Bullish Volume Spike</b>"))
+        self.assertEqual(
+            sent_photos[0][3]["inline_keyboard"][0][0],
+            {"text": "📊 Research BTC", "callback_data": "wact:research:BTC/USD"},
+        )
 
     def test_alert_card_draws_signal_scope_line(self):
         drawn_text = []
@@ -3278,7 +3285,7 @@ class ScannerLogicTests(unittest.TestCase):
         ), patch.object(
             scanner,
             "send_telegram_message",
-            side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append((str(chat_id), text, reply_markup)),
         ):
             scanner.send_alert_to_chat(
                 "TOKEN",
@@ -3294,6 +3301,10 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertEqual(sent_messages[0][0], "999")
         self.assertIn("🟢 <b>BTC/USD Bullish Volume Spike</b>", sent_messages[0][1])
+        self.assertEqual(
+            sent_messages[0][2]["inline_keyboard"][0][0],
+            {"text": "📊 Research BTC", "callback_data": "wact:research:BTC/USD"},
+        )
 
     def test_confluence_alerts_send_one_combined_snapshot_chart(self):
         sent_photos = []
@@ -3318,11 +3329,14 @@ class ScannerLogicTests(unittest.TestCase):
         ), patch.object(
             scanner,
             "send_telegram_photo",
-            side_effect=lambda token, chat_id, path, caption="": sent_photos.append((str(chat_id), path, caption)) or True,
+            side_effect=lambda token, chat_id, path, caption="", reply_markup=None: sent_photos.append(
+                (str(chat_id), path, caption, reply_markup)
+            )
+            or True,
         ), patch.object(
             scanner,
             "send_telegram_message",
-            side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append((str(chat_id), text, reply_markup)),
         ):
             scanner.send_alert_group_to_chat(
                 "TOKEN",
@@ -3347,9 +3361,14 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(sent_photos[0][1], "/tmp/confluence.png")
         self.assertEqual(
             sent_photos[0][2],
+            "Developing · 2 signals\n"
             "<b>BTC/USD Confluence Alert</b> — "
             "Bullish Volume Spike (2.50x) + EMA 21 crossed above EMA 55\n"
             "Learn more: https://bitcoin.org",
+        )
+        self.assertEqual(
+            sent_photos[0][3]["inline_keyboard"][0][0],
+            {"text": "📊 Research BTC", "callback_data": "wact:research:BTC/USD"},
         )
         self.assertEqual(sent_messages, [])
 
@@ -3431,7 +3450,10 @@ class ScannerLogicTests(unittest.TestCase):
         with patch.object(scanner, "render_alert_snapshot_chart", return_value="/tmp/confluence.png"), patch.object(
             scanner,
             "send_telegram_photo",
-            side_effect=lambda token, chat_id, path, caption="": sent_photos.append((str(chat_id), path, caption)) or True,
+            side_effect=lambda token, chat_id, path, caption="", reply_markup=None: sent_photos.append(
+                (str(chat_id), path, caption, reply_markup)
+            )
+            or True,
         ), patch.object(scanner, "send_telegram_message"):
             scanner.send_alert_group_to_chat(
                 "TOKEN",
@@ -3450,6 +3472,41 @@ class ScannerLogicTests(unittest.TestCase):
             )
 
         self.assertTrue(sent_photos[0][2].startswith("Building · 3 signals\n<b>BTC/USD Confluence Alert</b> — "))
+
+    def test_alert_research_button_reuses_wact_without_clearing_alert_keyboard(self):
+        callback_query = {
+            "id": "callback-1",
+            "from": {"id": 111},
+            "message": {
+                "chat": {"id": -100, "type": "group"},
+                "message_id": 44,
+                "reply_markup": scanner.alert_research_keyboard("BTC/USD"),
+            },
+        }
+
+        with patch.object(scanner, "answer_telegram_callback") as answer_callback, patch.object(
+            scanner, "user_watchlist_symbols", return_value=[]
+        ), patch.object(scanner, "enqueue_telegram_command_job", return_value=True) as enqueue_job, patch.object(
+            scanner, "send_heavy_job_acknowledgment"
+        ) as send_ack, patch.object(
+            scanner, "clear_callback_message_keyboard", side_effect=AssertionError("alert keyboard should stay tappable")
+        ):
+            handled = scanner.handle_watchlist_action_callback(
+                "TOKEN",
+                callback_query,
+                "research:BTC/USD",
+            )
+
+        self.assertTrue(handled)
+        answer_callback.assert_called_once_with("TOKEN", "callback-1")
+        enqueue_job.assert_called_once_with(
+            "research",
+            "111",
+            "/research BTC",
+            source_chat={"id": "111", "type": "private"},
+            from_user={"id": 111},
+        )
+        send_ack.assert_called_once_with("TOKEN", "111", "research", "/research BTC")
 
     def test_personal_watchlist_alerts_respect_user_severity_preference(self):
         sent_alert_groups = []

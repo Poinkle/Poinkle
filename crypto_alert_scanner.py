@@ -4696,6 +4696,7 @@ def send_alert_to_chat(
     resistances=None,
 ):
     message = build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg)
+    reply_markup = alert_research_keyboard(symbol)
     if is_lightweight_alert(alert):
         try:
             card_path = render_lightweight_alert_card(
@@ -4708,13 +4709,13 @@ def send_alert_to_chat(
                 volume_avg,
             )
             caption = f"{alert.get('emoji', '')} <b>{symbol} {alert['label']}</b>".strip()
-            if send_telegram_photo(telegram_token, chat_id, card_path, caption=caption):
+            if send_telegram_photo(telegram_token, chat_id, card_path, caption=caption, reply_markup=reply_markup):
                 return True
             raise RuntimeError("Alert card send failed")
         except Exception as error:
             log_warn(f"Alert card rendering failed for {symbol}: {error}")
 
-    send_telegram_message(telegram_token, chat_id, message)
+    send_telegram_message(telegram_token, chat_id, message, reply_markup=reply_markup)
     return False
 
 
@@ -4741,6 +4742,7 @@ def send_alert_group_to_chat(
 ):
     if not alerts:
         return False
+    reply_markup = alert_research_keyboard(symbol)
     if len(alerts) == 1 and not use_full_alert_chart(alerts):
         return send_alert_to_chat(
             telegram_token,
@@ -4781,13 +4783,13 @@ def send_alert_group_to_chat(
         link = official_coin_link(symbol)
         if link:
             caption = f"{caption}\nLearn more: {link}"
-        if send_telegram_photo(telegram_token, chat_id, chart_path, caption=caption):
+        if send_telegram_photo(telegram_token, chat_id, chart_path, caption=caption, reply_markup=reply_markup):
             return True
         raise RuntimeError("Alert snapshot send failed")
     except Exception as error:
         log_warn(f"Alert snapshot rendering failed for {symbol}: {error}")
 
-    send_telegram_message(telegram_token, chat_id, fallback_message)
+    send_telegram_message(telegram_token, chat_id, fallback_message, reply_markup=reply_markup)
     return False
 
 
@@ -5093,6 +5095,32 @@ def alert_severity_keyboard():
             ],
         ]
     }
+
+
+def alert_research_keyboard(symbol):
+    ticker = base_symbol(symbol)
+    return {
+        "inline_keyboard": [
+            [
+                {
+                    "text": f"📊 Research {ticker}",
+                    "callback_data": f"{WATCHLIST_ACTION_CALLBACK_PREFIX}:research:{symbol}",
+                }
+            ]
+        ]
+    }
+
+
+def callback_query_has_alert_research_keyboard(callback_query, symbol):
+    message = (callback_query or {}).get("message") or {}
+    reply_markup = message.get("reply_markup") or {}
+    rows = reply_markup.get("inline_keyboard") or []
+    expected_data = f"{WATCHLIST_ACTION_CALLBACK_PREFIX}:research:{symbol}"
+    for row in rows:
+        for button in row:
+            if button.get("callback_data") == expected_data and str(button.get("text", "")).startswith("📊 Research"):
+                return True
+    return False
 
 
 def alert_severity_panel_message(current_tier):
@@ -6911,7 +6939,8 @@ def handle_watchlist_action_callback(telegram_token, callback_query, payload, ex
     user_id = str(user.get("id") or "")
     if not user_id or not symbol:
         return False
-    if symbol not in user_watchlist_symbols(user_id):
+    is_alert_research_button = action == "research" and callback_query_has_alert_research_keyboard(callback_query, symbol)
+    if symbol not in user_watchlist_symbols(user_id) and not is_alert_research_button:
         return False
 
     source_chat = {"id": user_id, "type": "private"}
@@ -6938,7 +6967,8 @@ def handle_watchlist_action_callback(telegram_token, callback_query, payload, ex
         )
         if queued:
             send_heavy_job_acknowledgment(telegram_token, user_id, "research", f"/research {ticker}")
-            clear_callback_message_keyboard(telegram_token, callback_query)
+            if not is_alert_research_button:
+                clear_callback_message_keyboard(telegram_token, callback_query)
         return True
     if action == "whynot":
         queued = enqueue_telegram_command_job(
