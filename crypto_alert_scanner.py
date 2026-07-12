@@ -207,7 +207,8 @@ def validate_watchlist_against_exchange(exchange, watchlist):
     supported = []
     unsupported = []
     for symbol in watchlist:
-        if symbol in markets or resolve_data_source(symbol) == "kraken":
+        source = resolve_data_source(symbol)
+        if symbol in markets or source in ("kraken", "kucoin"):
             supported.append(symbol)
         else:
             unsupported.append(symbol)
@@ -357,10 +358,17 @@ MIKES_LIST = [
     "PENGU/USD",
 ]
 MIKE_ALTERNATE_EXCHANGE_ID = "kucoin"
-MIKE_ALTERNATE_SYMBOLS = {
+KUCOIN_SCAN_SYMBOLS = {
+    "THETA/USD": "THETA/USDT",
+    "KAIA/USD": "KAIA/USDT",
+    "IOTA/USD": "IOTA/USDT",
     "BRETT/USD": "BRETT/USDT",
-    "JCT/USD": "JCT/USDT",
+    "TWT/USD": "TWT/USDT",
+    "ZIL/USD": "ZIL/USDT",
+    "SFP/USD": "SFP/USDT",
+    "RVN/USD": "RVN/USDT",
 }
+MIKE_ALTERNATE_SYMBOLS = {**KUCOIN_SCAN_SYMBOLS, "JCT/USD": "JCT/USDT"}
 MIKE_ALTERNATE_EXCHANGE = None
 KRAKEN_EXCHANGE_ID = "kraken"
 KRAKEN_EXCHANGE = None
@@ -664,21 +672,21 @@ def is_unsupported_market_error(error):
     return any(marker in text for marker in unsupported_markers)
 
 
-def candle_error_message(symbol, error):
+def candle_error_message(symbol, error, source_label="Coinbase"):
     text = str(error).lower()
     if "no candles" in text:
-        return f"{symbol}: Coinbase returned no candles. Skipping."
+        return f"{symbol}: {source_label} returned no candles. Skipping."
     if "malformed" in text or "missing" in text:
-        return f"{symbol}: Coinbase returned malformed candles. Skipping."
+        return f"{symbol}: {source_label} returned malformed candles. Skipping."
     if "not enough" in text:
         return f"{symbol}: Not enough candles for indicators. Skipping."
     if is_rate_limit_error(error):
-        return f"{symbol}: Coinbase rate limited candle fetch. Will retry quietly."
+        return f"{symbol}: {source_label} rate limited candle fetch. Will retry quietly."
     if is_transient_exchange_error(error):
-        return f"{symbol}: Temporary Coinbase candle fetch failure. Will retry quietly."
+        return f"{symbol}: Temporary {source_label} candle fetch failure. Will retry quietly."
     if is_unsupported_market_error(error):
-        return f"{symbol}: Unsupported Coinbase pair. Skipping."
-    return f"{symbol}: Coinbase candle fetch failed. Will retry quietly."
+        return f"{symbol}: Unsupported {source_label} pair. Skipping."
+    return f"{symbol}: {source_label} candle fetch failed. Will retry quietly."
 
 
 def classify_scan_failure_error(error):
@@ -1887,13 +1895,19 @@ PRICE_SOURCE_DAILY_CLOSE_FALLBACK = "daily_close_fallback"
 
 def get_current_market_price_info(exchange, symbol, fallback_price):
     source = resolve_data_source(symbol)
-    source_label = "Kraken" if source == "kraken" else "Coinbase"
+    source_label = {"kraken": "Kraken", "kucoin": "KuCoin"}.get(source, "Coinbase")
     try:
         if source == "kraken":
             ticker_exchange = kraken_exchange()
             if ticker_exchange is None:
                 raise RuntimeError("Kraken exchange unavailable")
             ticker = ticker_exchange.fetch_ticker(kraken_ohlcv_symbol(symbol))
+        elif source == "kucoin":
+            ticker_exchange = kucoin_scan_exchange()
+            ticker_symbol = kucoin_scan_symbol(symbol)
+            if ticker_exchange is None or not ticker_symbol:
+                raise RuntimeError("KuCoin exchange unavailable")
+            ticker = ticker_exchange.fetch_ticker(ticker_symbol)
         else:
             ticker = exchange.fetch_ticker(symbol)
         price = ticker.get("last") or ticker.get("close")
@@ -6467,15 +6481,16 @@ def fetch_swing_ohlcv(exchange, symbol, timeframe, limit):
         log_warn(f"{normalized_symbol}: requested {limit} candles; clamping swing OHLCV limit to 300.")
         limit = 300
 
-    if resolve_data_source(normalized_symbol) == "kraken":
+    source = resolve_data_source(normalized_symbol)
+    if source == "kraken":
         fetch_exchange = kraken_exchange()
         if fetch_exchange is None:
             raise RuntimeError("Kraken exchange unavailable")
         fetch_symbol = kraken_ohlcv_symbol(normalized_symbol)
         exchange_label = KRAKEN_EXCHANGE_ID
-    elif normalized_symbol in MIKE_ALTERNATE_SYMBOLS:
+    elif source == "kucoin":
         fetch_exchange = mike_alternate_exchange()
-        fetch_symbol = MIKE_ALTERNATE_SYMBOLS[normalized_symbol]
+        fetch_symbol = kucoin_scan_symbol(normalized_symbol)
         exchange_label = MIKE_ALTERNATE_EXCHANGE_ID
     else:
         fetch_exchange = exchange
@@ -6493,7 +6508,18 @@ def resolve_data_source(symbol):
     normalized_symbol = str(symbol or "").strip().upper()
     if normalized_symbol in KRAKEN_FALLBACK_SYMBOLS:
         return "kraken"
+    if normalized_symbol in KUCOIN_SCAN_SYMBOLS:
+        return "kucoin"
     return "coinbase"
+
+
+def kucoin_scan_symbol(symbol):
+    normalized_symbol = normalize_trade_symbol_input(symbol)
+    return KUCOIN_SCAN_SYMBOLS.get(normalized_symbol, "")
+
+
+def kucoin_scan_exchange():
+    return mike_alternate_exchange()
 
 
 def kraken_exchange():
@@ -9256,13 +9282,21 @@ def build_level_alerts(
 
 def scan_symbol(exchange, symbol):
     try:
-        if resolve_data_source(symbol) == "kraken":
+        source = resolve_data_source(symbol)
+        source_label = {"kraken": "Kraken", "kucoin": "KuCoin"}.get(source, "Coinbase")
+        if source == "kraken":
             candles = fetch_kraken_ohlcv(symbol, timeframe=TIMEFRAME, limit=CANDLE_LIMIT)
+        elif source == "kucoin":
+            kucoin = kucoin_scan_exchange()
+            kucoin_symbol = kucoin_scan_symbol(symbol)
+            if kucoin is None or not kucoin_symbol:
+                raise RuntimeError("KuCoin exchange unavailable")
+            candles = kucoin.fetch_ohlcv(kucoin_symbol, timeframe=TIMEFRAME, limit=CANDLE_LIMIT)
         else:
             candles = exchange.fetch_ohlcv(symbol, timeframe=TIMEFRAME, limit=CANDLE_LIMIT)
         validate_ohlcv_candles(candles, symbol, min_count=80)
     except Exception as error:
-        raise MarketDataError(candle_error_message(symbol, error)) from error
+        raise MarketDataError(candle_error_message(symbol, error, source_label)) from error
 
     if len(candles) < 80:
         raise MarketDataError("Not enough candles for indicators")
