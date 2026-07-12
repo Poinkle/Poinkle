@@ -264,6 +264,21 @@ TELEGRAM_JOB_LIGHT = "light"
 TELEGRAM_JOB_HEAVY = "heavy"
 TELEGRAM_LIGHT_JOB_ESTIMATE_SECONDS = 1.0
 HEAVY_TELEGRAM_JOB_ACTIONS = {"snapshot", "research", "whynot"}
+ALERT_SEVERITY_PREFERENCE_KEY = "alert_severity_min"
+ALERT_SEVERITY_DEVELOPING = "developing"
+ALERT_SEVERITY_BUILDING = "building"
+ALERT_SEVERITY_STRONG = "strong"
+ALERT_SEVERITY_DEFAULT = ALERT_SEVERITY_DEVELOPING
+ALERT_SEVERITY_RANKS = {
+    ALERT_SEVERITY_DEVELOPING: 1,
+    ALERT_SEVERITY_BUILDING: 2,
+    ALERT_SEVERITY_STRONG: 3,
+}
+ALERT_SEVERITY_LABELS = {
+    ALERT_SEVERITY_DEVELOPING: "Send me everything",
+    ALERT_SEVERITY_BUILDING: "Fewer alerts",
+    ALERT_SEVERITY_STRONG: "Only interrupt me for the strongest confluence",
+}
 TRADE_TRACK_POLL_SECONDS = 60
 TRADE_TRACK_MAX_MINUTES = 60
 TRADE_TRACKING_TELEGRAM_ENABLED = False
@@ -313,6 +328,7 @@ PUBLIC_BOT_COMMANDS = [
     {"command": "why", "description": "Alias for whynot"},
     {"command": "levels", "description": "Legacy text-only version"},
     {"command": "alerts", "description": "Set a personal price-zone alert"},
+    {"command": "alertlevel", "description": "Choose personal alert noise level"},
     {"command": "myalerts", "description": "View your active alerts"},
     {"command": "watch", "description": "Add a coin to your watchlist"},
     {"command": "unwatch", "description": "Remove a coin from your watchlist"},
@@ -2039,6 +2055,36 @@ def users_watching_symbol(symbol):
     return watching_users
 
 
+def alert_severity_signal_count(alerts):
+    return len({alert.get("type") for alert in alerts if alert.get("type")})
+
+
+def alert_severity_tier(alerts):
+    count = alert_severity_signal_count(alerts)
+    if count >= 4:
+        return ALERT_SEVERITY_STRONG
+    if count == 3:
+        return ALERT_SEVERITY_BUILDING
+    return ALERT_SEVERITY_DEVELOPING
+
+
+def normalized_alert_severity_preference(value):
+    value = str(value or ALERT_SEVERITY_DEFAULT).strip().lower()
+    return value if value in ALERT_SEVERITY_RANKS else ALERT_SEVERITY_DEFAULT
+
+
+def user_alert_severity_preference(user_id):
+    return normalized_alert_severity_preference(
+        user_preference(user_id, ALERT_SEVERITY_PREFERENCE_KEY, ALERT_SEVERITY_DEFAULT)
+    )
+
+
+def alert_group_meets_user_severity_preference(alerts, user_id):
+    alert_tier = alert_severity_tier(alerts)
+    preferred_tier = user_alert_severity_preference(user_id)
+    return ALERT_SEVERITY_RANKS[alert_tier] >= ALERT_SEVERITY_RANKS[preferred_tier]
+
+
 def personal_watchlist_delivery_key(user_id, symbol, candle_id, alerts):
     alert_types = "+".join(sorted(alert.get("type", "") for alert in alerts if alert.get("type")))
     return f"{user_id}|{symbol}|{candle_id}|{alert_types}"
@@ -2061,6 +2107,13 @@ def deliver_personal_watchlist_alerts(
     delivery_state = state.setdefault("__personal_watchlist_deliveries", {})
     delivered_user_ids = []
     for user_id in users_watching_symbol(symbol):
+        if not alert_group_meets_user_severity_preference(alert_group, user_id):
+            log_info(
+                f"Skipped personal watchlist alert for {user_id}: {symbol} "
+                f"{alert_severity_tier(alert_group)} below "
+                f"{user_alert_severity_preference(user_id)} preference."
+            )
+            continue
         delivery_key = personal_watchlist_delivery_key(user_id, symbol, str(candle[0]), alert_group)
         if delivery_key in delivery_state:
             continue
@@ -4501,10 +4554,11 @@ def alert_signal_summary(alert):
 
 
 def severity_label_for_alerts(alerts):
-    count = len({alert.get("type") for alert in alerts if alert.get("type")})
-    if count <= 2:
+    count = alert_severity_signal_count(alerts)
+    tier = alert_severity_tier(alerts)
+    if tier == ALERT_SEVERITY_DEVELOPING:
         return f"Developing · {count} signals"
-    if count == 3:
+    if tier == ALERT_SEVERITY_BUILDING:
         return "Building · 3 signals"
     return f"Strong confluence · {count} signals"
 
@@ -4952,6 +5006,7 @@ SNAPSHOT_LOOK_ORDER_BUTTONS = (
 SNAPSHOT_LOOK_ORDER_CALLBACK_PREFIX = "look_order"
 WATCHLIST_COIN_CALLBACK_PREFIX = "wcoin"
 WATCHLIST_ACTION_CALLBACK_PREFIX = "wact"
+ALERT_SEVERITY_CALLBACK_PREFIX = "sev"
 WATCHLIST_ACTIONS = {
     "snapshot": "Snapshot",
     "research": "Research",
@@ -5013,6 +5068,42 @@ def watchlist_action_keyboard(symbol):
             ]
         ]
     }
+
+
+def alert_severity_keyboard():
+    return {
+        "inline_keyboard": [
+            [
+                {
+                    "text": ALERT_SEVERITY_LABELS[ALERT_SEVERITY_DEVELOPING],
+                    "callback_data": f"{ALERT_SEVERITY_CALLBACK_PREFIX}:{ALERT_SEVERITY_DEVELOPING}",
+                }
+            ],
+            [
+                {
+                    "text": ALERT_SEVERITY_LABELS[ALERT_SEVERITY_BUILDING],
+                    "callback_data": f"{ALERT_SEVERITY_CALLBACK_PREFIX}:{ALERT_SEVERITY_BUILDING}",
+                }
+            ],
+            [
+                {
+                    "text": ALERT_SEVERITY_LABELS[ALERT_SEVERITY_STRONG],
+                    "callback_data": f"{ALERT_SEVERITY_CALLBACK_PREFIX}:{ALERT_SEVERITY_STRONG}",
+                }
+            ],
+        ]
+    }
+
+
+def alert_severity_panel_message(current_tier):
+    current_tier = normalized_alert_severity_preference(current_tier)
+    current_label = ALERT_SEVERITY_LABELS[current_tier]
+    return (
+        "<b>Personal alert noise level</b>\n\n"
+        f"Current: {current_label}\n\n"
+        "This controls how often Poinkle interrupts your DM. "
+        "It does not rank trades or tell you how much to act."
+    )
 
 
 def send_levels_chart(telegram_token, chat_id, symbol, caption, reply_markup=None):
@@ -6865,6 +6956,34 @@ def handle_watchlist_action_callback(telegram_token, callback_query, payload, ex
     return False
 
 
+def handle_alert_severity_callback(telegram_token, callback_query, payload, exchange=None):
+    callback_query_id = (callback_query or {}).get("id")
+    selected_tier = normalized_alert_severity_preference(payload)
+    if selected_tier != str(payload or "").strip().lower():
+        if callback_query_id:
+            answer_telegram_callback(telegram_token, callback_query_id, "Option unavailable.")
+        return True
+
+    user_id = str(((callback_query or {}).get("from") or {}).get("id") or "")
+    if not user_id:
+        if callback_query_id:
+            answer_telegram_callback(telegram_token, callback_query_id, "Option unavailable.")
+        return True
+
+    set_user_preference(user_id, ALERT_SEVERITY_PREFERENCE_KEY, selected_tier)
+    if callback_query_id:
+        answer_telegram_callback(telegram_token, callback_query_id, "Saved.")
+    send_telegram_message(
+        telegram_token,
+        user_id,
+        (
+            f"Saved: {ALERT_SEVERITY_LABELS[selected_tier]}.\n\n"
+            "This is noise control only - it does not rank trades or tell you how much to act."
+        ),
+    )
+    return True
+
+
 def handle_telegram_callback_query(exchange, telegram_token, callback_query):
     callback_query = callback_query or {}
     callback_query_id = callback_query.get("id")
@@ -6882,6 +7001,7 @@ def handle_telegram_callback_query(exchange, telegram_token, callback_query):
         ),
         WATCHLIST_COIN_CALLBACK_PREFIX: handle_watchlist_coin_callback,
         WATCHLIST_ACTION_CALLBACK_PREFIX: handle_watchlist_action_callback,
+        ALERT_SEVERITY_CALLBACK_PREFIX: handle_alert_severity_callback,
     }
     handler = callback_handlers.get(namespace)
     if handler is None:
@@ -7155,6 +7275,32 @@ def handle_myalerts_command(
     for ticker, config in active_alerts:
         lines.append(f"• {ticker} — {config.get('type', 'critical')}")
     send_telegram_message(telegram_token, response_chat_id, "\n".join(lines))
+
+
+def handle_alertlevel_command(telegram_token, telegram_chat_id, source_chat=None, from_user=None):
+    source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
+    from_user = from_user or {}
+    response_chat_id = str(source_chat.get("id", telegram_chat_id))
+    user_chat_id = alert_dm_chat_id(source_chat, from_user, telegram_chat_id)
+    current_tier = user_alert_severity_preference(user_chat_id)
+
+    try:
+        send_telegram_message(
+            telegram_token,
+            user_chat_id,
+            alert_severity_panel_message(current_tier),
+            reply_markup=alert_severity_keyboard(),
+        )
+        if not is_private_chat(source_chat):
+            send_telegram_message(
+                telegram_token,
+                response_chat_id,
+                "I sent your personal alert noise controls to your DM.",
+            )
+    except Exception as error:
+        log_warn(f"Could not send alert noise controls to user {user_chat_id}: {error}")
+        if not is_private_chat(source_chat):
+            send_telegram_message(telegram_token, response_chat_id, levels_dm_failed_message())
 
 
 def handle_watch_command(
@@ -7915,6 +8061,13 @@ def process_telegram_commands(
             )
         elif lower_text.startswith("/mywatch") or lower_text.startswith("/watching"):
             handle_mywatch_command(
+                telegram_token,
+                chat_id,
+                source_chat=chat,
+                from_user=from_user,
+            )
+        elif lower_text.startswith("/alertlevel"):
+            handle_alertlevel_command(
                 telegram_token,
                 chat_id,
                 source_chat=chat,

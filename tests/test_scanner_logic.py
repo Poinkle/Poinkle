@@ -3361,7 +3361,7 @@ class ScannerLogicTests(unittest.TestCase):
                     {"type": "ema_cross_above"},
                 ]
             ),
-            "",
+            "Developing · 2 signals",
         )
         self.assertEqual(
             scanner.severity_label_for_alerts(
@@ -3371,7 +3371,7 @@ class ScannerLogicTests(unittest.TestCase):
                     {"type": "ema_cross_above"},
                 ]
             ),
-            "",
+            "Developing · 2 signals",
         )
         self.assertEqual(
             scanner.severity_label_for_alerts(
@@ -3381,7 +3381,7 @@ class ScannerLogicTests(unittest.TestCase):
                     {"type": "rsi_cross_above_70"},
                 ]
             ),
-            "🟡 3 signals",
+            "Building · 3 signals",
         )
         self.assertEqual(
             scanner.severity_label_for_alerts(
@@ -3392,7 +3392,7 @@ class ScannerLogicTests(unittest.TestCase):
                     {"type": "live:breakout:100:early_warning"},
                 ]
             ),
-            "🔴 4 signals",
+            "Strong confluence · 4 signals",
         )
         self.assertEqual(
             scanner.severity_label_for_alerts(
@@ -3404,7 +3404,7 @@ class ScannerLogicTests(unittest.TestCase):
                     {"type": "live:breakdown:90:early_warning"},
                 ]
             ),
-            "🔴 5 signals",
+            "Strong confluence · 5 signals",
         )
 
     def test_confluence_caption_adds_severity_for_three_or_more_signals(self):
@@ -3449,7 +3449,80 @@ class ScannerLogicTests(unittest.TestCase):
                 ],
             )
 
-        self.assertTrue(sent_photos[0][2].startswith("🟡 3 signals\n<b>BTC/USD Confluence Alert</b> — "))
+        self.assertTrue(sent_photos[0][2].startswith("Building · 3 signals\n<b>BTC/USD Confluence Alert</b> — "))
+
+    def test_personal_watchlist_alerts_respect_user_severity_preference(self):
+        sent_alert_groups = []
+        alerts = [
+            {"type": "volume_spike", "label": "Bullish Volume Spike", "volume_multiple": 2.5},
+            {"type": "ema_cross_above", "label": "EMA 21 crossed above EMA 55"},
+        ]
+
+        with patch.object(scanner, "users_watching_symbol", return_value=["111", "222"]), patch.object(
+            scanner,
+            "user_preference",
+            side_effect=lambda user_id, key, default=None: {
+                "111": scanner.ALERT_SEVERITY_DEVELOPING,
+                "222": scanner.ALERT_SEVERITY_STRONG,
+            }.get(str(user_id), default),
+        ), patch.object(
+            scanner,
+            "send_alert_group_to_chat",
+            side_effect=lambda token, chat_id, symbol, candle_arg, alert_group, *args, **kwargs: sent_alert_groups.append(
+                (str(chat_id), symbol, [alert["type"] for alert in alert_group])
+            )
+            or True,
+        ), patch.object(scanner, "save_state"):
+            delivered = scanner.deliver_personal_watchlist_alerts(
+                {},
+                "TOKEN",
+                "BTC/USD",
+                candle(0, 100, 105, 99, 104, 250),
+                alerts,
+                ema_21=101,
+                ema_55=99,
+                current_rsi=58,
+                volume_avg=100,
+            )
+
+        self.assertEqual(delivered, ["111"])
+        self.assertEqual(sent_alert_groups, [("111", "BTC/USD", ["volume_spike", "ema_cross_above"])])
+
+    def test_personal_watchlist_alerts_send_when_group_meets_user_severity_preference(self):
+        sent_alert_groups = []
+        alerts = [
+            {"type": "volume_spike", "label": "Bullish Volume Spike", "volume_multiple": 2.5},
+            {"type": "ema_cross_above", "label": "EMA 21 crossed above EMA 55"},
+            {"type": "rsi_cross_above_70", "label": "RSI crossed above 70"},
+            {"type": "live:breakout:100:confirmation", "label": "Breakout Confirmation"},
+        ]
+
+        with patch.object(scanner, "users_watching_symbol", return_value=["222"]), patch.object(
+            scanner,
+            "user_preference",
+            return_value=scanner.ALERT_SEVERITY_STRONG,
+        ), patch.object(
+            scanner,
+            "send_alert_group_to_chat",
+            side_effect=lambda token, chat_id, symbol, candle_arg, alert_group, *args, **kwargs: sent_alert_groups.append(
+                (str(chat_id), symbol, scanner.alert_severity_tier(alert_group))
+            )
+            or True,
+        ), patch.object(scanner, "save_state"):
+            delivered = scanner.deliver_personal_watchlist_alerts(
+                {},
+                "TOKEN",
+                "BTC/USD",
+                candle(0, 100, 105, 99, 104, 250),
+                alerts,
+                ema_21=101,
+                ema_55=99,
+                current_rsi=58,
+                volume_avg=100,
+            )
+
+        self.assertEqual(delivered, ["222"])
+        self.assertEqual(sent_alert_groups, [("222", "BTC/USD", scanner.ALERT_SEVERITY_STRONG)])
 
     def test_research_command_sends_image_cards_when_renderer_succeeds(self):
         sent_groups = []
