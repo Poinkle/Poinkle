@@ -7792,14 +7792,11 @@ def handle_mywatch_command(
         return
 
     sorted_symbols = sorted(user_symbols, key=base_symbol)
-    lines = ["Your watchlist:"]
-    for index, symbol in enumerate(sorted_symbols, start=1):
-        lines.append(f"{index}. {base_symbol(symbol)}")
     try:
         send_telegram_message(
             telegram_token,
             user_chat_id,
-            "\n".join(lines),
+            "Your watchlist - tap a coin.",
             reply_markup=watchlist_coin_keyboard(sorted_symbols),
         )
         if not is_private:
