@@ -308,6 +308,8 @@ ALERT_DELIVERY_METRIC_LIMIT = 100
 TELEGRAM_CALLBACK_DEDUPE_LIMIT = 200
 SIGNAL_FOLLOWUP_TTL_SECONDS = 3 * 86400
 SIGNAL_FOLLOWUP_LIMIT = 200
+FAILED_LEVEL_ATTEMPT_LIMIT = 3
+FAILED_LEVEL_ATTEMPT_TTL_MS = 7 * 86400 * 1000
 LEVEL_ALERT_TYPES = {"support", "resistance", "all", "critical"}
 BREAKOUT_BODY_ATR_MULT = 1.0
 TREND_GATE_FAST_EMA = 21
@@ -8709,10 +8711,33 @@ def whynot_pending_setup(state, symbol, current_price):
     )
 
 
+def whynot_recent_failed_level_attempt(state, symbol, now_ms=None):
+    if not state:
+        return None
+    attempts = state.get(symbol, {}).get("failed_level_attempts", [])
+    if not isinstance(attempts, list) or not attempts:
+        return None
+
+    now_ms = current_time_ms() if now_ms is None else int(now_ms)
+    for attempt in reversed(attempts):
+        if not isinstance(attempt, dict):
+            continue
+        failed_candle = attempt.get("failed_candle")
+        if not is_real_number(failed_candle):
+            continue
+        if now_ms - int(failed_candle) <= FAILED_LEVEL_ATTEMPT_TTL_MS:
+            return attempt
+    return None
+
+
 def format_whynot_zone_distance(distance_pct, side):
     if distance_pct is None:
         return ""
     return f"{distance_pct:.1f}% {side}"
+
+
+def format_failed_attempt_date(timestamp_ms):
+    return datetime.fromtimestamp(int(timestamp_ms) / 1000, tz=EASTERN_TIME).strftime("%b %d").replace(" 0", " ")
 
 
 def render_whynot_zone_state(scorecard):
@@ -8730,6 +8755,9 @@ def render_whynot_zone_state(scorecard):
                 "One close is an attempt. Two consecutive closes is confirmation.",
             ]
         )
+        failed_attempt = scorecard.get("failed_level_attempt")
+        if failed_attempt:
+            lines.append(render_whynot_failed_attempt_line(symbol, failed_attempt))
         return lines
 
     nearest_support = scorecard.get("nearest_support")
@@ -8743,7 +8771,22 @@ def render_whynot_zone_state(scorecard):
         distance_text = f" ({html.escape(distance)})" if distance else ""
         lines.append(f"Nearest resistance: around {html.escape(format_zone_price(nearest_resistance))}{distance_text}")
     lines.append("Price isn't at a zone. There's nothing to confirm yet.")
+    failed_attempt = scorecard.get("failed_level_attempt")
+    if failed_attempt:
+        lines.append(render_whynot_failed_attempt_line(symbol, failed_attempt))
     return lines
+
+
+def render_whynot_failed_attempt_line(symbol, attempt):
+    direction = attempt.get("direction")
+    side_word = "below" if direction == "breakdown" else "above"
+    level = html.escape(format_zone_price(attempt.get("level", 0)))
+    date_text = html.escape(format_failed_attempt_date(attempt.get("failed_candle")))
+    return (
+        f"Last attempt: {symbol} closed {side_word} the {level} zone on {date_text}, "
+        "then failed to confirm the next day. One close is an attempt. "
+        "Two consecutive closes is confirmation — this one never got the second."
+    )
 
 
 def evaluate_whynot_scorecard(exchange, symbol, state=None):
@@ -8793,6 +8836,7 @@ def evaluate_whynot_scorecard(exchange, symbol, state=None):
         "support_distance_pct": whynot_level_distance_pct(current_price, nearest_support),
         "resistance_distance_pct": whynot_level_distance_pct(current_price, nearest_resistance),
         "pending_setup": whynot_pending_setup(state, symbol, current_price),
+        "failed_level_attempt": whynot_recent_failed_level_attempt(state, symbol),
     }
     enforce_validation(symbol, "whynot", validate_whynot_scorecard_data(scorecard))
     return scorecard
@@ -9235,6 +9279,22 @@ def monitor_active_trades(exchange, telegram_token, telegram_chat_id, state):
             )
 
 
+def record_failed_level_attempt(symbol_state, setup, current_close, current_timestamp):
+    attempts = symbol_state.setdefault("failed_level_attempts", [])
+    attempts.append(
+        {
+            "direction": setup["direction"],
+            "level": setup["level"],
+            "first_close": setup["first_candle_close"],
+            "first_candle": setup["first_candle"],
+            "failed_close": current_close,
+            "failed_candle": current_timestamp,
+        }
+    )
+    del attempts[:-FAILED_LEVEL_ATTEMPT_LIMIT]
+    return attempts[-1]
+
+
 def build_level_alerts(
     symbol,
     previous_candle,
@@ -9279,6 +9339,11 @@ def build_level_alerts(
         ) or (
             direction == "breakout" and current_close > level
         )
+
+        if not confirmed:
+            record_failed_level_attempt(symbol_state, setup, current_close, current_timestamp)
+            del pending_setups[setup_key]
+            continue
 
         if confirmed:
             is_breakdown = direction == "breakdown"

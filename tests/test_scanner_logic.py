@@ -1050,6 +1050,158 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("Nearest support: around 95.00 (5.0% below)", message)
         self.assertIn("Price isn't at a zone. There's nothing to confirm yet.", message)
 
+    def pending_breakdown_state(self, expected_candle=2_000, first_candle=1_000):
+        return {
+            "pending_setups": {
+                "live:breakdown:95.0": {
+                    "direction": "breakdown",
+                    "level": 95.0,
+                    "first_candle": first_candle,
+                    "first_candle_open": 97.0,
+                    "first_candle_high": 98.0,
+                    "first_candle_low": 94.0,
+                    "first_candle_close": 94.5,
+                    "first_candle_volume": 100,
+                    "expected_confirmation_candle": expected_candle,
+                    "setup_quality": "B",
+                    "setup_status": "Watch",
+                    "break_strength_score": 72,
+                }
+            }
+        }
+
+    def build_level_alerts_for_pending_state(self, symbol_state, current_close, current_timestamp=2_000):
+        previous_candle = candle(1_000, 97.0, 98.0, 94.0, 94.5, 100)
+        current_candle = candle(current_timestamp, 94.5, 97.0, 94.0, current_close, 100)
+        return scanner.build_level_alerts(
+            "BTC/USD",
+            previous_candle,
+            current_candle,
+            symbol_state,
+            1.0,
+            current_close,
+            80.0,
+            120.0,
+            101.0,
+            103.0,
+            52.0,
+            100.0,
+            candle_series=[previous_candle, current_candle],
+            key_levels={"support": [], "resistance": []},
+        )
+
+    def test_failed_level_attempt_records_only_path_b_failure(self):
+        symbol_state = self.pending_breakdown_state()
+
+        self.build_level_alerts_for_pending_state(symbol_state, current_close=96.0)
+
+        self.assertEqual(
+            symbol_state["failed_level_attempts"],
+            [
+                {
+                    "direction": "breakdown",
+                    "level": 95.0,
+                    "first_close": 94.5,
+                    "first_candle": 1_000,
+                    "failed_close": 96.0,
+                    "failed_candle": 2_000,
+                }
+            ],
+        )
+
+    def test_expired_pending_setup_does_not_record_failed_attempt(self):
+        symbol_state = self.pending_breakdown_state(expected_candle=1_500)
+
+        self.build_level_alerts_for_pending_state(symbol_state, current_close=96.0, current_timestamp=2_000)
+
+        self.assertNotIn("failed_level_attempts", symbol_state)
+
+    def test_confirmed_break_does_not_record_failed_attempt(self):
+        symbol_state = self.pending_breakdown_state()
+        trade_plan = {
+            "setup_quality": "B",
+            "failed_follow_through": False,
+            "break_strength_score": 80,
+            "weak_volume": False,
+        }
+        location_filter = {
+            "allowed": True,
+            "location_quality": "A",
+            "room_to_target": "Open",
+        }
+
+        with (
+            patch.object(scanner, "get_location_filter", return_value=location_filter),
+            patch.object(scanner, "build_trade_plan", return_value=trade_plan),
+        ):
+            self.build_level_alerts_for_pending_state(symbol_state, current_close=94.0)
+
+        self.assertNotIn("failed_level_attempts", symbol_state)
+
+    def test_failed_level_attempts_trim_to_last_three(self):
+        symbol_state = self.pending_breakdown_state()
+        symbol_state["failed_level_attempts"] = [
+            {"failed_candle": 10, "level": 91.0},
+            {"failed_candle": 20, "level": 92.0},
+            {"failed_candle": 30, "level": 93.0},
+        ]
+
+        self.build_level_alerts_for_pending_state(symbol_state, current_close=96.0)
+
+        self.assertEqual([attempt["level"] for attempt in symbol_state["failed_level_attempts"]], [92.0, 93.0, 95.0])
+
+    def test_whynot_renders_recent_failed_level_attempt(self):
+        failed_candle = 1_700_086_400_000
+        state = {
+            "BTC/USD": {
+                "failed_level_attempts": [
+                    {
+                        "direction": "breakdown",
+                        "level": 95.0,
+                        "first_close": 94.5,
+                        "first_candle": failed_candle - scanner.TIMEFRAME_MS,
+                        "failed_close": 96.0,
+                        "failed_candle": failed_candle,
+                    }
+                ]
+            }
+        }
+
+        with (
+            patch.object(scanner, "scan_symbol", return_value=self.whynot_scan_result()),
+            patch.object(scanner, "current_time_ms", return_value=failed_candle + scanner.TIMEFRAME_MS),
+        ):
+            message = scanner.build_whynot_command_message(object(), "BTC/USD", state=state)
+
+        self.assertIn("Last attempt: BTC/USD closed below the 95.00 zone", message)
+        self.assertIn("then failed to confirm the next day", message)
+        self.assertIn("Two consecutive closes is confirmation", message)
+
+    def test_whynot_omits_old_failed_level_attempt(self):
+        failed_candle = 1_700_086_400_000
+        state = {
+            "BTC/USD": {
+                "failed_level_attempts": [
+                    {
+                        "direction": "breakdown",
+                        "level": 95.0,
+                        "first_close": 94.5,
+                        "first_candle": failed_candle - scanner.TIMEFRAME_MS,
+                        "failed_close": 96.0,
+                        "failed_candle": failed_candle,
+                    }
+                ]
+            }
+        }
+
+        with (
+            patch.object(scanner, "scan_symbol", return_value=self.whynot_scan_result()),
+            patch.object(scanner, "current_time_ms", return_value=failed_candle + scanner.FAILED_LEVEL_ATTEMPT_TTL_MS + 1),
+        ):
+            message = scanner.build_whynot_command_message(object(), "BTC/USD", state=state)
+
+        self.assertNotIn("Last attempt:", message)
+
     def test_telegram_sends_html_parse_mode_for_messages_and_photos(self):
         class FakeResponse:
             status_code = 200
