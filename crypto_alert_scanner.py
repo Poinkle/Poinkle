@@ -8532,20 +8532,21 @@ def evaluate_lightweight_signal_state(previous_closed_candles, closed_candles):
         "reason": f"{volume_multiple:.2f}x recent average; below 2.00x spike threshold",
     }
     if volume_average > 0 and current_volume >= volume_average * 2:
-        close = latest_closed[4]
-        bullish_confirmation = close > current_ema_21 and current_rsi > 50
-        bearish_confirmation = close < current_ema_21 and current_rsi < 50
+        candle_open = latest_closed[1]
+        candle_close = latest_closed[4]
+        bullish_confirmation = candle_close > candle_open
+        bearish_confirmation = candle_close < candle_open
 
         if bullish_confirmation:
-            volume_label = "Bullish Volume Spike"
+            volume_label = "Volume Spike on an Up Candle"
             volume_emoji = "🟢"
             volume_direction = "bullish"
         elif bearish_confirmation:
-            volume_label = "Bearish Volume Spike"
+            volume_label = "Volume Spike on a Down Candle"
             volume_emoji = "🔴"
             volume_direction = "bearish"
         else:
-            volume_label = "High Volume Alert"
+            volume_label = "Volume Spike — Indecision Candle"
             volume_emoji = "⚪"
             volume_direction = "neutral"
 

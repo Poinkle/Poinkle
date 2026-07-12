@@ -936,6 +936,26 @@ class ScannerLogicTests(unittest.TestCase):
             message,
         )
 
+    def test_volume_spike_direction_comes_from_candle_body_not_indicators(self):
+        candles = make_ohlcv_series([100 for _ in range(80)], volume=100)
+        candles[-1] = candle(candles[-1][0], 98.5, 100.0, 98.0, 99.5, 250)
+
+        signal_state = scanner.evaluate_lightweight_signal_state(candles[:-1], candles)
+        volume_alert = next(alert for alert in signal_state["alerts"] if alert["type"] == "volume_spike")
+
+        self.assertEqual(volume_alert["direction"], "bullish")
+        self.assertEqual(volume_alert["label"], "Volume Spike on an Up Candle")
+
+    def test_volume_spike_doji_is_neutral(self):
+        candles = make_ohlcv_series([100 for _ in range(80)], volume=100)
+        candles[-1] = candle(candles[-1][0], 99.0, 100.0, 98.0, 99.0, 250)
+
+        signal_state = scanner.evaluate_lightweight_signal_state(candles[:-1], candles)
+        volume_alert = next(alert for alert in signal_state["alerts"] if alert["type"] == "volume_spike")
+
+        self.assertEqual(volume_alert["direction"], "neutral")
+        self.assertEqual(volume_alert["label"], "Volume Spike — Indecision Candle")
+
     def test_telegram_sends_html_parse_mode_for_messages_and_photos(self):
         class FakeResponse:
             status_code = 200
