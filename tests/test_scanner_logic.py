@@ -1202,6 +1202,200 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertNotIn("Last attempt:", message)
 
+    def confirmed_level_alert(self, direction="breakdown", level=95.0):
+        label = "Breakdown Confirmation" if direction == "breakdown" else "Breakout Confirmation"
+        return {
+            "type": f"live:{direction}:{level}:confirmation",
+            "label": label,
+            "level": level,
+        }
+
+    def test_confirmed_breakdown_records_level_break_followup(self):
+        state = {}
+        current_candle = candle(2_000, 96.0, 97.0, 94.0, 94.0, 100)
+
+        followup = scanner.record_level_break_followup(
+            state,
+            "BTC/USD",
+            current_candle,
+            self.confirmed_level_alert("breakdown", 95.0),
+            "999",
+            now=int(scanner.time.time()),
+        )
+
+        self.assertIsNotNone(followup)
+        self.assertEqual(followup["kind"], "level_break")
+        self.assertEqual(followup["direction"], "breakdown")
+        self.assertEqual(followup["level"], 95.0)
+        self.assertEqual(followup["destination_chat_id"], "999")
+
+    def test_confirmed_breakout_records_level_break_followup(self):
+        state = {}
+        current_candle = candle(2_000, 104.0, 107.0, 103.0, 106.0, 100)
+
+        followup = scanner.record_level_break_followup(
+            state,
+            "BTC/USD",
+            current_candle,
+            self.confirmed_level_alert("breakout", 105.0),
+            "999",
+            now=int(scanner.time.time()),
+        )
+
+        self.assertIsNotNone(followup)
+        self.assertEqual(followup["kind"], "level_break")
+        self.assertEqual(followup["direction"], "breakout")
+        self.assertEqual(followup["level"], 105.0)
+
+    def test_mixed_group_records_lightweight_and_level_break_followups(self):
+        state = {}
+        current_candle = candle(2_000, 96.0, 97.0, 94.0, 94.0, 100)
+        signal_state = {
+            "ema_21": 101.0,
+            "ema_55": 103.0,
+            "rsi": 52.0,
+            "volume_multiple": 2.4,
+        }
+        alert_group = [
+            {"type": "volume_spike", "label": "Volume Spike", "direction": "bearish"},
+            self.confirmed_level_alert("breakdown", 95.0),
+        ]
+
+        recorded = scanner.record_post_send_followups(
+            state,
+            "BTC/USD",
+            current_candle,
+            alert_group,
+            ["999"],
+            signal_state,
+            sent_at=int(scanner.time.time()),
+        )
+
+        self.assertTrue(recorded)
+        followups = scanner.signal_followups(state)
+        self.assertEqual(len(followups), 2)
+        self.assertEqual(
+            sorted(followup.get("kind", "lightweight") for followup in followups.values()),
+            ["level_break", "lightweight"],
+        )
+
+    def test_level_break_breakdown_that_holds_stays_open_and_sends_nothing(self):
+        state = {}
+        sent_messages = []
+        scanner.record_level_break_followup(
+            state,
+            "BTC/USD",
+            candle(2_000, 96.0, 97.0, 94.0, 94.0, 100),
+            self.confirmed_level_alert("breakdown", 95.0),
+            "999",
+            now=int(scanner.time.time()),
+        )
+
+        with patch.object(scanner, "send_telegram_message", side_effect=lambda *args: sent_messages.append(args)):
+            changed = scanner.process_signal_followups_for_symbol(
+                state,
+                "TOKEN",
+                "BTC/USD",
+                "3_000",
+                {},
+                candle=candle(3_000, 94.0, 95.0, 93.0, 94.5, 100),
+            )
+
+        self.assertFalse(changed)
+        self.assertEqual(sent_messages, [])
+        self.assertEqual(len(scanner.signal_followups(state)), 1)
+
+    def test_level_break_breakdown_reclaim_sends_fade_note(self):
+        state = {}
+        sent_messages = []
+        scanner.record_level_break_followup(
+            state,
+            "BTC/USD",
+            candle(2_000, 96.0, 97.0, 94.0, 94.0, 100),
+            self.confirmed_level_alert("breakdown", 95.0),
+            "999",
+            now=int(scanner.time.time()),
+        )
+
+        with patch.object(scanner, "send_telegram_message", side_effect=lambda token, chat_id, text: sent_messages.append((chat_id, text))):
+            changed = scanner.process_signal_followups_for_symbol(
+                state,
+                "TOKEN",
+                "BTC/USD",
+                "3_000",
+                {},
+                candle=candle(3_000, 94.0, 96.5, 93.5, 96.0, 100),
+            )
+
+        self.assertTrue(changed)
+        self.assertEqual(len(scanner.signal_followups(state)), 0)
+        self.assertEqual(sent_messages[0][0], "999")
+        self.assertIn("price closed back ABOVE the 95.00 zone", sent_messages[0][1])
+        self.assertIn("The breakdown was reclaimed", sent_messages[0][1])
+
+    def test_level_break_breakout_reclaim_sends_fade_note(self):
+        state = {}
+        sent_messages = []
+        scanner.record_level_break_followup(
+            state,
+            "BTC/USD",
+            candle(2_000, 104.0, 107.0, 103.0, 106.0, 100),
+            self.confirmed_level_alert("breakout", 105.0),
+            "999",
+            now=int(scanner.time.time()),
+        )
+
+        with patch.object(scanner, "send_telegram_message", side_effect=lambda token, chat_id, text: sent_messages.append((chat_id, text))):
+            changed = scanner.process_signal_followups_for_symbol(
+                state,
+                "TOKEN",
+                "BTC/USD",
+                "3_000",
+                {},
+                candle=candle(3_000, 106.0, 106.5, 103.5, 104.0, 100),
+            )
+
+        self.assertTrue(changed)
+        self.assertEqual(len(scanner.signal_followups(state)), 0)
+        self.assertIn("price closed back BELOW the 105.00 zone", sent_messages[0][1])
+        self.assertIn("The breakout was reclaimed", sent_messages[0][1])
+
+    def test_lightweight_only_followups_keep_one_check_behavior(self):
+        state = {}
+        sent_messages = []
+        current_candle = candle(2_000, 100.0, 102.0, 99.0, 101.0, 100)
+        signal_state = {
+            "ema_21": 101.0,
+            "ema_55": 103.0,
+            "rsi": 52.0,
+            "volume_multiple": 2.4,
+        }
+        alert_group = [{"type": "volume_spike", "label": "Volume Spike", "direction": "bullish"}]
+
+        scanner.record_post_send_followups(
+            state,
+            "BTC/USD",
+            current_candle,
+            alert_group,
+            ["999"],
+            signal_state,
+            sent_at=int(scanner.time.time()),
+        )
+
+        with patch.object(scanner, "send_telegram_message", side_effect=lambda *args: sent_messages.append(args)):
+            changed = scanner.process_signal_followups_for_symbol(
+                state,
+                "TOKEN",
+                "BTC/USD",
+                "3_000",
+                {"volume_multiple": 2.5},
+                candle=candle(3_000, 101.0, 103.0, 100.0, 102.0, 100),
+            )
+
+        self.assertTrue(changed)
+        self.assertEqual(sent_messages, [])
+        self.assertEqual(scanner.signal_followups(state), {})
+
     def test_telegram_sends_html_parse_mode_for_messages_and_photos(self):
         class FakeResponse:
             status_code = 200

@@ -4418,6 +4418,75 @@ def record_signal_followup(
     return followups[followup_key]
 
 
+def level_break_direction_from_alert(alert):
+    parts = str(alert.get("type", "")).split(":")
+    if len(parts) >= 2 and parts[1] in {"breakdown", "breakout"}:
+        return parts[1]
+    return ""
+
+
+def is_confirmed_level_break_alert(alert):
+    return is_level_break_alert(alert) and str(alert.get("type", "")).endswith(":confirmation")
+
+
+def record_level_break_followup(state, symbol, candle, alert, destination_chat_id, now=None):
+    if not is_confirmed_level_break_alert(alert):
+        return None
+
+    alert_type = alert.get("type")
+    level = alert.get("level")
+    direction = level_break_direction_from_alert(alert)
+    if not alert_type or not is_real_number(level) or direction not in {"breakdown", "breakout"}:
+        return None
+
+    now = int(time.time()) if now is None else int(now)
+    followups = trim_signal_followups(state, now)
+    candle_id = str(candle[0])
+    followup_key = signal_followup_key(symbol, candle_id, destination_chat_id, [alert_type])
+    followups[followup_key] = {
+        "symbol": symbol,
+        "kind": "level_break",
+        "level": level,
+        "direction": direction,
+        "destination_chat_id": str(destination_chat_id),
+        "timestamp": now,
+        "created_at": iso_utc_now(),
+        "candle_id": candle_id,
+        "checked": False,
+    }
+    return followups[followup_key]
+
+
+def record_post_send_followups(state, symbol, candle, alert_group, followup_destinations, signal_state, sent_at):
+    recorded_followup = False
+    if any(is_lightweight_alert(alert) for alert in alert_group):
+        for followup_destination in followup_destinations:
+            if record_signal_followup(
+                state,
+                symbol,
+                candle,
+                alert_group,
+                followup_destination,
+                signal_state,
+                now=int(sent_at),
+            ):
+                recorded_followup = True
+    for level_alert in alert_group:
+        if not is_confirmed_level_break_alert(level_alert):
+            continue
+        for followup_destination in followup_destinations:
+            if record_level_break_followup(
+                state,
+                symbol,
+                candle,
+                level_alert,
+                followup_destination,
+                now=int(sent_at),
+            ):
+                recorded_followup = True
+    return recorded_followup
+
+
 def signal_followup_fade_note(symbol, alert_type, signal_state):
     ticker = base_symbol(symbol)
     volume_multiple = signal_state.get("volume_multiple", 0)
@@ -4466,6 +4535,33 @@ def signal_followup_fade_note(symbol, alert_type, signal_state):
     return None
 
 
+def level_break_followup_fade_note(symbol, followup, current_close):
+    level = followup.get("level")
+    direction = followup.get("direction")
+    if not is_real_number(level) or not is_real_number(current_close):
+        return None
+
+    ticker = base_symbol(symbol)
+    level_text = format_zone_price(level)
+    if direction == "breakdown":
+        if current_close <= level:
+            return None
+        return (
+            f"{ticker} — price closed back ABOVE the {level_text} zone. The breakdown was "
+            "reclaimed. A confirmed break can still fail; this is what that looks like. "
+            "The zone is back in play."
+        )
+    if direction == "breakout":
+        if current_close >= level:
+            return None
+        return (
+            f"{ticker} — price closed back BELOW the {level_text} zone. The breakout was "
+            "reclaimed. A confirmed break can still fail; this is what that looks like. "
+            "The zone is back in play."
+        )
+    return None
+
+
 def build_signal_followup_message(symbol, faded_notes):
     if not faded_notes:
         return ""
@@ -4483,7 +4579,7 @@ def build_signal_followup_message(symbol, faded_notes):
     return "\n".join(lines)
 
 
-def process_signal_followups_for_symbol(state, telegram_token, symbol, candle_id, signal_state):
+def process_signal_followups_for_symbol(state, telegram_token, symbol, candle_id, signal_state, candle=None):
     followups = trim_signal_followups(state)
     changed = False
     for followup_key, followup in list(followups.items()):
@@ -4496,14 +4592,21 @@ def process_signal_followups_for_symbol(state, telegram_token, symbol, candle_id
         if str(followup.get("candle_id")) == str(candle_id):
             continue
 
-        faded_notes = [
-            note
-            for note in (
-                signal_followup_fade_note(symbol, alert_type, signal_state)
-                for alert_type in followup.get("alert_types", [])
-            )
-            if note
-        ]
+        if followup.get("kind") == "level_break":
+            current_close = candle[4] if candle and len(candle) > 4 else None
+            faded_note = level_break_followup_fade_note(symbol, followup, current_close)
+            if not faded_note:
+                continue
+            faded_notes = [faded_note]
+        else:
+            faded_notes = [
+                note
+                for note in (
+                    signal_followup_fade_note(symbol, alert_type, signal_state)
+                    for alert_type in followup.get("alert_types", [])
+                )
+                if note
+            ]
         if faded_notes:
             destination_chat_id = followup.get("destination_chat_id")
             if destination_chat_id:
@@ -9704,7 +9807,7 @@ def run_once(exchange, telegram_token, telegram_chat_id, state, poll_telegram_du
             if symbol_state.get("last_checked_candle") == candle_id:
                 continue
 
-            process_signal_followups_for_symbol(state, telegram_token, symbol, candle_id, signal_state)
+            process_signal_followups_for_symbol(state, telegram_token, symbol, candle_id, signal_state, candle=candle)
 
             pending_before_scan = bool(symbol_state.get("pending_setups"))
             tracking_is_active = symbol in state.setdefault("__active_trades", {})
@@ -9961,17 +10064,15 @@ def run_once(exchange, telegram_token, telegram_chat_id, state, poll_telegram_du
                             resistances=resistance_levels,
                         )
                     )
-                if all(is_lightweight_alert(alert) for alert in alert_group):
-                    for followup_destination in followup_destinations:
-                        record_signal_followup(
-                            state,
-                            symbol,
-                            candle,
-                            alert_group,
-                            followup_destination,
-                            signal_state,
-                            now=int(sent_at),
-                        )
+                if record_post_send_followups(
+                    state,
+                    symbol,
+                    candle,
+                    alert_group,
+                    followup_destinations,
+                    signal_state,
+                    sent_at,
+                ):
                     save_state(state)
 
             for alert in pending_alerts:
