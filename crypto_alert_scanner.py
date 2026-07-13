@@ -1324,6 +1324,28 @@ def clear_telegram_message_keyboard(token, chat_id, message_id):
         return False
 
 
+def edit_telegram_message_reply_markup(token, chat_id, message_id, reply_markup):
+    if not chat_id or not message_id:
+        return False
+    url = f"https://api.telegram.org/bot{token}/editMessageReplyMarkup"
+    try:
+        payload = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "reply_markup": json.dumps(reply_markup or {"inline_keyboard": []}),
+        }
+        response = telegram_http_session().post(url, json=payload, timeout=10)
+        if response.status_code != 200:
+            if response.status_code == 400 and "message is not modified" in response.text.lower():
+                return True
+            log_warn(f"Telegram keyboard edit failed: {response.status_code} {response.text}")
+            return False
+        return True
+    except Exception as error:
+        log_warn(f"Telegram keyboard edit exception: {error}")
+        return False
+
+
 def clear_callback_message_keyboard(telegram_token, callback_query):
     message = (callback_query or {}).get("message") or {}
     chat = message.get("chat") or {}
@@ -1331,6 +1353,17 @@ def clear_callback_message_keyboard(telegram_token, callback_query):
         telegram_token,
         str(chat.get("id") or ""),
         message.get("message_id"),
+    )
+
+
+def edit_callback_message_reply_markup(telegram_token, callback_query, reply_markup):
+    message = (callback_query or {}).get("message") or {}
+    chat = message.get("chat") or {}
+    return edit_telegram_message_reply_markup(
+        telegram_token,
+        str(chat.get("id") or ""),
+        message.get("message_id"),
+        reply_markup,
     )
 
 
@@ -1539,11 +1572,13 @@ def handled_telegram_callback_message_keys(command_state):
 
 def telegram_callback_message_dedupe_key(callback_query):
     callback_query = callback_query or {}
+    callback_data = callback_query.get("data")
+    if str(callback_data or "").startswith(f"{WATCH_TOGGLE_CALLBACK_PREFIX}:"):
+        return None
     message = callback_query.get("message") or {}
     chat = message.get("chat") or {}
     chat_id = chat.get("id")
     message_id = message.get("message_id")
-    callback_data = callback_query.get("data")
     if chat_id is None or message_id is None or not callback_data:
         return None
     return f"{chat_id}:{message_id}:{callback_data}"
@@ -5356,6 +5391,8 @@ START_ORIENTATION_CALLBACK_PREFIX = "start"
 ONBOARD_CALLBACK_PREFIX = "onboard"
 COIN_PICK_CALLBACK_PREFIX = "coinpick"
 PANEL_CALLBACK_PREFIX = "panel"
+WATCH_TOGGLE_CALLBACK_PREFIX = "watchtoggle"
+WATCH_LETTER_CALLBACK_PREFIX = "watchletter"
 COIN_PICKER_BUTTONS_PER_ROW = 3
 COIN_PICK_TYPE_DIFFERENT_SYMBOL = "__type__"
 COMMAND_PANEL_ACTIONS = (
@@ -5868,6 +5905,75 @@ def target_coin_picker_text(target):
         "chart": "Which coin should I chart?",
     }
     return labels.get(str(target or "").strip().lower(), "Pick a coin.")
+
+
+def watch_picker_tip_text():
+    return "Tip: type @Poinkle_Bot followed by a coin in any chat to search all 140."
+
+
+def watch_toggle_picker_text():
+    return (
+        "Your watchlist — tap to add or remove.\n\n"
+        f"{watch_picker_tip_text()}"
+    )
+
+
+def watch_toggle_button(symbol, watched_symbols):
+    ticker = base_symbol(symbol)
+    marker = "✅ " if symbol in watched_symbols else "  "
+    return {
+        "text": f"{marker}{ticker}",
+        "callback_data": f"{WATCH_TOGGLE_CALLBACK_PREFIX}:{symbol}",
+    }
+
+
+def watch_toggle_keyboard(user_id, symbols=None):
+    watched_symbols = set(user_watchlist_symbols(user_id))
+    picker_symbols = list(symbols) if symbols is not None else top_coin_picker_symbols(user_id)
+    rows = coin_picker_button_rows(
+        [watch_toggle_button(symbol, watched_symbols) for symbol in picker_symbols]
+    )
+    rows.append([{"text": "🔤 More coins (A–Z)", "callback_data": f"{WATCH_LETTER_CALLBACK_PREFIX}:open"}])
+    rows.append([{"text": "⬅️ Back", "callback_data": f"{PANEL_CALLBACK_PREFIX}:open"}])
+    return {"inline_keyboard": rows}
+
+
+def watch_letters():
+    return sorted({base_symbol(symbol)[0] for symbol in WATCHLIST if base_symbol(symbol)})
+
+
+def watch_letter_keyboard():
+    buttons = [
+        {
+            "text": letter,
+            "callback_data": f"{WATCH_LETTER_CALLBACK_PREFIX}:{letter}",
+        }
+        for letter in watch_letters()
+    ]
+    rows = coin_picker_button_rows(buttons, buttons_per_row=6)
+    rows.append([{"text": "⬅️ Back", "callback_data": f"{PANEL_CALLBACK_PREFIX}:watch"}])
+    return {"inline_keyboard": rows}
+
+
+def watch_letter_symbols(letter):
+    letter = str(letter or "").strip().upper()[:1]
+    if not letter:
+        return []
+    return [symbol for symbol in WATCHLIST if base_symbol(symbol).startswith(letter)]
+
+
+def watch_letter_coin_keyboard(user_id, letter):
+    watched_symbols = set(user_watchlist_symbols(user_id))
+    rows = coin_picker_button_rows(
+        [watch_toggle_button(symbol, watched_symbols) for symbol in watch_letter_symbols(letter)]
+    )
+    rows.append([{"text": "⬅️ Back", "callback_data": f"{WATCH_LETTER_CALLBACK_PREFIX}:open"}])
+    return {"inline_keyboard": rows}
+
+
+def watch_letter_prompt(letter):
+    letter = str(letter or "").strip().upper()[:1]
+    return f"Coins starting with {letter}." if letter else "Pick a coin."
 
 
 def creator_registered_accounts_lines(creators):
@@ -7289,6 +7395,7 @@ def poinkle_onboarding_text(kind):
             "WATCH\n"
             "/watch, /unwatch — manage your personal watchlist\n"
             "/mywatch, /watching — open your watchlist panel\n"
+            "Tip: type @Poinkle_Bot followed by a coin in any chat to search all 140.\n"
             "/clearwatch — remove watched coins by number\n"
             "/alerts — set a personal price-zone alert\n"
             "/myalerts — view your active alerts\n"
@@ -8432,6 +8539,117 @@ def send_target_coin_picker(telegram_token, chat_id, target, user_id=None):
     )
 
 
+def send_watch_toggle_picker(telegram_token, chat_id, user_id):
+    send_telegram_message(
+        telegram_token,
+        chat_id,
+        watch_toggle_picker_text(),
+        reply_markup=watch_toggle_keyboard(user_id),
+    )
+
+
+def callback_chat_id(callback_query):
+    message = (callback_query or {}).get("message") or {}
+    chat = message.get("chat") or {}
+    return str(chat.get("id") or "")
+
+
+def callback_user_id(callback_query):
+    return str(((callback_query or {}).get("from") or {}).get("id") or "")
+
+
+def callback_reply_markup_contains(callback_query, callback_data):
+    reply_markup = ((callback_query or {}).get("message") or {}).get("reply_markup") or {}
+    for row in reply_markup.get("inline_keyboard") or []:
+        for button in row or []:
+            if button.get("callback_data") == callback_data:
+                return True
+    return False
+
+
+def update_watch_toggle_keyboard(telegram_token, callback_query, user_id, symbol):
+    if callback_reply_markup_contains(callback_query, f"{PANEL_CALLBACK_PREFIX}:open"):
+        return edit_callback_message_reply_markup(
+            telegram_token,
+            callback_query,
+            watch_toggle_keyboard(user_id),
+        )
+    letter = base_symbol(symbol)[:1]
+    return edit_callback_message_reply_markup(
+        telegram_token,
+        callback_query,
+        watch_letter_coin_keyboard(user_id, letter),
+    )
+
+
+def toggle_user_watch_symbol(user_id, symbol):
+    watchlists = load_user_watchlists()
+    user_symbols = list(watchlists.get(str(user_id), []))
+    if symbol in user_symbols:
+        user_symbols = [existing_symbol for existing_symbol in user_symbols if existing_symbol != symbol]
+        if user_symbols:
+            watchlists[str(user_id)] = user_symbols
+        else:
+            watchlists.pop(str(user_id), None)
+        save_user_watchlists(watchlists)
+        return "removed"
+    if len(user_symbols) >= MAX_USER_WATCHLIST:
+        return "full"
+    user_symbols.append(symbol)
+    watchlists[str(user_id)] = sorted(user_symbols, key=base_symbol)
+    save_user_watchlists(watchlists)
+    return "added"
+
+
+def handle_watch_toggle_callback(telegram_token, callback_query, payload, exchange=None):
+    callback_query_id = (callback_query or {}).get("id")
+    user_id = callback_user_id(callback_query)
+    symbol = normalize_trade_symbol_input(payload)
+    if not user_id or not symbol or symbol not in WATCHLIST:
+        if callback_query_id:
+            answer_telegram_callback(telegram_token, callback_query_id, "Coin unavailable.")
+        return True
+
+    result = toggle_user_watch_symbol(user_id, symbol)
+    if callback_query_id:
+        if result == "full":
+            answer_telegram_callback(telegram_token, callback_query_id, f"Watchlist full ({MAX_USER_WATCHLIST} max).")
+        else:
+            answer_telegram_callback(telegram_token, callback_query_id)
+    update_watch_toggle_keyboard(telegram_token, callback_query, user_id, symbol)
+    return True
+
+
+def handle_watch_letter_callback(telegram_token, callback_query, payload, exchange=None):
+    callback_query_id = (callback_query or {}).get("id")
+    if callback_query_id:
+        answer_telegram_callback(telegram_token, callback_query_id)
+
+    chat_id = callback_chat_id(callback_query)
+    user_id = callback_user_id(callback_query) or chat_id
+    if not chat_id:
+        return False
+
+    letter = str(payload or "").strip().upper()[:1]
+    if str(payload or "").strip().lower() == "open":
+        send_telegram_message(
+            telegram_token,
+            chat_id,
+            "Pick a letter.",
+            reply_markup=watch_letter_keyboard(),
+        )
+        return True
+    if not letter or letter not in watch_letters():
+        return False
+    send_telegram_message(
+        telegram_token,
+        chat_id,
+        watch_letter_prompt(letter),
+        reply_markup=watch_letter_coin_keyboard(user_id, letter),
+    )
+    return True
+
+
 def handle_start_orientation_callback(telegram_token, callback_query, payload, exchange=None):
     callback_query_id = (callback_query or {}).get("id")
     if callback_query_id:
@@ -8524,7 +8742,11 @@ def handle_panel_callback(telegram_token, callback_query, payload, exchange=None
             from_user=from_user,
         )
         return True
-    if action in {"whynot", "watch", "snapshot", "research", "levels", "chart"}:
+    if action == "watch":
+        user_id = str(from_user.get("id") or chat_id)
+        send_watch_toggle_picker(telegram_token, chat_id, user_id)
+        return True
+    if action in {"whynot", "snapshot", "research", "levels", "chart"}:
         user_id = str(from_user.get("id") or chat_id)
         send_target_coin_picker(telegram_token, chat_id, action, user_id=user_id)
         return True
@@ -8633,6 +8855,8 @@ def handle_telegram_callback_query(exchange, telegram_token, callback_query):
         ONBOARD_CALLBACK_PREFIX: handle_onboard_callback,
         PANEL_CALLBACK_PREFIX: handle_panel_callback,
         COIN_PICK_CALLBACK_PREFIX: handle_coin_pick_callback,
+        WATCH_TOGGLE_CALLBACK_PREFIX: handle_watch_toggle_callback,
+        WATCH_LETTER_CALLBACK_PREFIX: handle_watch_letter_callback,
     }
     handler = callback_handlers.get(namespace)
     if handler is None:
@@ -8963,11 +9187,7 @@ def handle_watch_command(
     user_chat_id = alert_dm_chat_id(source_chat, from_user, telegram_chat_id)
 
     if len(parts) < 2:
-        send_telegram_message(
-            telegram_token,
-            response_chat_id,
-            "Use: /watch BTC\nI’ll add it to your personal Poinkle watchlist.",
-        )
+        send_watch_toggle_picker(telegram_token, response_chat_id, user_chat_id)
         return
 
     watchlists = load_user_watchlists()
@@ -9024,11 +9244,7 @@ def handle_unwatch_command(
     user_chat_id = alert_dm_chat_id(source_chat, from_user, telegram_chat_id)
 
     if len(parts) < 2:
-        send_telegram_message(
-            telegram_token,
-            response_chat_id,
-            "Use: /unwatch BTC\nI’ll remove it from your personal Poinkle watchlist.",
-        )
+        send_watch_toggle_picker(telegram_token, response_chat_id, user_chat_id)
         return
 
     watchlists = load_user_watchlists()

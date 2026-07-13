@@ -3091,7 +3091,255 @@ class ScannerLogicTests(unittest.TestCase):
 
             self.assertTrue(handled)
             self.assertEqual(sent_messages[0][0], "777")
-            self.assertEqual(sent_messages[0][2], scanner.target_coin_picker_keyboard(payload))
+            if payload == "watch":
+                self.assertEqual(sent_messages[0][1], scanner.watch_toggle_picker_text())
+                self.assertEqual(sent_messages[0][2], scanner.watch_toggle_keyboard("777"))
+            else:
+                self.assertEqual(sent_messages[0][2], scanner.target_coin_picker_keyboard(payload))
+
+    def test_bare_watch_opens_toggle_picker(self):
+        sent_messages = []
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            scanner, "USER_WATCHLISTS_FILE", Path(tmpdir) / "user_watchlists.json"
+        ), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                (str(chat_id), text, reply_markup)
+            ),
+        ):
+            scanner.handle_watch_command(
+                object(),
+                "TOKEN",
+                "777",
+                "/watch",
+                source_chat={"id": "777", "type": "private"},
+                from_user={"id": 777},
+            )
+            expected_keyboard = scanner.watch_toggle_keyboard("777")
+
+        self.assertEqual(sent_messages[0][0], "777")
+        self.assertEqual(sent_messages[0][1], scanner.watch_toggle_picker_text())
+        self.assertNotIn("Use: /watch BTC", sent_messages[0][1])
+        self.assertEqual(sent_messages[0][2], expected_keyboard)
+
+    def test_watch_toggle_adds_unchecked_coin_and_updates_keyboard(self):
+        edited_keyboards = []
+        callback_query = {
+            "id": "callback-1",
+            "data": "watchtoggle:BTC/USD",
+            "message": {
+                "chat": {"id": "777", "type": "private"},
+                "message_id": 44,
+                "reply_markup": scanner.watch_toggle_keyboard("777"),
+            },
+            "from": {"id": 777},
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            scanner, "USER_WATCHLISTS_FILE", Path(tmpdir) / "user_watchlists.json"
+        ), patch.object(scanner, "answer_telegram_callback"), patch.object(
+            scanner,
+            "edit_telegram_message_reply_markup",
+            side_effect=lambda token, chat_id, message_id, reply_markup: edited_keyboards.append(reply_markup) or True,
+        ):
+            handled = scanner.handle_watch_toggle_callback("TOKEN", callback_query, "BTC/USD")
+            watchlists = scanner.load_user_watchlists()
+
+        self.assertTrue(handled)
+        self.assertEqual(watchlists, {"777": ["BTC/USD"]})
+        button_texts = [
+            button["text"]
+            for row in edited_keyboards[-1]["inline_keyboard"]
+            for button in row
+        ]
+        self.assertIn("✅ BTC", button_texts)
+
+    def test_watch_toggle_removes_checked_coin_and_updates_keyboard(self):
+        edited_keyboards = []
+        with tempfile.TemporaryDirectory() as tmpdir:
+            watchlist_path = Path(tmpdir) / "user_watchlists.json"
+            watchlist_path.write_text(json.dumps({"777": ["BTC/USD"]}))
+            callback_query = {
+                "id": "callback-1",
+                "data": "watchtoggle:BTC/USD",
+                "message": {
+                    "chat": {"id": "777", "type": "private"},
+                    "message_id": 44,
+                    "reply_markup": scanner.watch_toggle_keyboard("777"),
+                },
+                "from": {"id": 777},
+            }
+            with patch.object(scanner, "USER_WATCHLISTS_FILE", watchlist_path), patch.object(
+                scanner, "answer_telegram_callback"
+            ), patch.object(
+                scanner,
+                "edit_telegram_message_reply_markup",
+                side_effect=lambda token, chat_id, message_id, reply_markup: edited_keyboards.append(reply_markup) or True,
+            ):
+                handled = scanner.handle_watch_toggle_callback("TOKEN", callback_query, "BTC/USD")
+                watchlists = scanner.load_user_watchlists()
+
+        self.assertTrue(handled)
+        self.assertEqual(watchlists, {})
+        button_texts = [
+            button["text"]
+            for row in edited_keyboards[-1]["inline_keyboard"]
+            for button in row
+        ]
+        self.assertIn("  BTC", button_texts)
+
+    def test_watch_toggle_keyboard_survives_multiple_adds(self):
+        edited_keyboards = []
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            scanner, "USER_WATCHLISTS_FILE", Path(tmpdir) / "user_watchlists.json"
+        ), patch.object(scanner, "answer_telegram_callback"), patch.object(
+            scanner,
+            "edit_telegram_message_reply_markup",
+            side_effect=lambda token, chat_id, message_id, reply_markup: edited_keyboards.append(reply_markup) or True,
+        ), patch.object(scanner, "send_telegram_message") as send_message:
+            for index, symbol in enumerate(("BTC/USD", "ETH/USD", "SOL/USD"), start=1):
+                callback_query = {
+                    "id": f"callback-{index}",
+                    "data": f"watchtoggle:{symbol}",
+                    "message": {
+                        "chat": {"id": "777", "type": "private"},
+                        "message_id": 44,
+                        "reply_markup": scanner.watch_toggle_keyboard("777"),
+                    },
+                    "from": {"id": 777},
+                }
+                self.assertTrue(scanner.handle_watch_toggle_callback("TOKEN", callback_query, symbol))
+            watchlists = scanner.load_user_watchlists()
+
+        self.assertEqual(watchlists, {"777": ["BTC/USD", "ETH/USD", "SOL/USD"]})
+        self.assertEqual(len(edited_keyboards), 3)
+        send_message.assert_not_called()
+
+    def test_watch_toggle_same_coin_off_then_on_is_not_message_deduped(self):
+        state = {}
+        edited_keyboards = []
+        updates = [
+            {
+                "update_id": 301,
+                "callback_query": {
+                    "id": "callback-1",
+                    "data": "watchtoggle:BTC/USD",
+                    "message": {
+                        "chat": {"id": "777", "type": "private"},
+                        "message_id": 44,
+                        "reply_markup": scanner.watch_toggle_keyboard("777"),
+                    },
+                    "from": {"id": 777},
+                },
+            },
+            {
+                "update_id": 302,
+                "callback_query": {
+                    "id": "callback-2",
+                    "data": "watchtoggle:BTC/USD",
+                    "message": {
+                        "chat": {"id": "777", "type": "private"},
+                        "message_id": 44,
+                        "reply_markup": scanner.watch_toggle_keyboard("777"),
+                    },
+                    "from": {"id": 777},
+                },
+            },
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            watchlist_path = Path(tmpdir) / "user_watchlists.json"
+            watchlist_path.write_text(json.dumps({"777": ["BTC/USD"]}))
+            with patch.object(
+                scanner, "USER_WATCHLISTS_FILE", watchlist_path
+            ), patch.object(scanner, "get_telegram_updates", return_value=updates), patch.object(
+                scanner, "answer_telegram_callback"
+            ), patch.object(
+                scanner,
+                "edit_telegram_message_reply_markup",
+                side_effect=lambda token, chat_id, message_id, reply_markup: edited_keyboards.append(reply_markup) or True,
+            ), patch.object(scanner, "save_state"):
+                scanner.process_telegram_commands(object(), "TOKEN", "999", state)
+                watchlists = scanner.load_user_watchlists()
+
+        self.assertEqual(watchlists, {"777": ["BTC/USD"]})
+        self.assertEqual(len(edited_keyboards), 2)
+        self.assertEqual(state["__telegram_commands"].get("handled_callback_message_keys", []), [])
+
+    def test_watch_letter_grid_only_shows_letters_with_coins(self):
+        original_watchlist = scanner.WATCHLIST[:]
+        try:
+            scanner.WATCHLIST = ["BTC/USD", "ETH/USD", "SOL/USD"]
+            callbacks = [
+                button["callback_data"]
+                for row in scanner.watch_letter_keyboard()["inline_keyboard"]
+                for button in row
+            ]
+        finally:
+            scanner.WATCHLIST = original_watchlist
+
+        self.assertEqual(callbacks[:-1], ["watchletter:B", "watchletter:E", "watchletter:S"])
+        self.assertEqual(callbacks[-1], "panel:watch")
+
+    def test_watch_letter_picker_shows_matching_coins_with_checked_state(self):
+        original_watchlist = scanner.WATCHLIST[:]
+        sent_messages = []
+        try:
+            scanner.WATCHLIST = ["BTC/USD", "BCH/USD", "ETH/USD"]
+            with tempfile.TemporaryDirectory() as tmpdir:
+                watchlist_path = Path(tmpdir) / "user_watchlists.json"
+                watchlist_path.write_text(json.dumps({"777": ["BCH/USD"]}))
+                callback_query = {
+                    "id": "callback-1",
+                    "data": "watchletter:B",
+                    "message": {"chat": {"id": "777", "type": "private"}, "message_id": 44},
+                    "from": {"id": 777},
+                }
+                with patch.object(scanner, "USER_WATCHLISTS_FILE", watchlist_path), patch.object(
+                    scanner, "answer_telegram_callback"
+                ), patch.object(
+                    scanner,
+                    "send_telegram_message",
+                    side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                        (str(chat_id), text, reply_markup)
+                    ),
+                ):
+                    handled = scanner.handle_watch_letter_callback("TOKEN", callback_query, "B")
+        finally:
+            scanner.WATCHLIST = original_watchlist
+
+        self.assertTrue(handled)
+        self.assertEqual(sent_messages[0][1], "Coins starting with B.")
+        button_texts = [
+            button["text"]
+            for row in sent_messages[0][2]["inline_keyboard"]
+            for button in row
+        ]
+        self.assertIn("  BTC", button_texts)
+        self.assertIn("✅ BCH", button_texts)
+        self.assertNotIn("  ETH", button_texts)
+
+    def test_typed_watch_single_coin_still_adds(self):
+        sent_messages = []
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            scanner, "USER_WATCHLISTS_FILE", Path(tmpdir) / "user_watchlists.json"
+        ), patch.object(scanner, "validate_tradeable_symbol", return_value="BTC/USD"), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append((str(chat_id), text)),
+        ):
+            scanner.handle_watch_command(
+                object(),
+                "TOKEN",
+                "777",
+                "/watch BTC",
+                source_chat={"id": "777", "type": "private"},
+                from_user={"id": 777},
+            )
+            watchlists = scanner.load_user_watchlists()
+
+        self.assertEqual(watchlists, {"777": ["BTC/USD"]})
+        self.assertEqual(sent_messages, [("777", "✅ Added to your watchlist: BTC")])
 
     def test_coin_picker_routes_to_correct_handler_per_target(self):
         callback_query = {
@@ -4097,7 +4345,7 @@ class ScannerLogicTests(unittest.TestCase):
             scanner.process_telegram_commands(object(), "TOKEN", "999", state)
 
         clear_keyboard.assert_not_called()
-        self.assertEqual(sent_messages[0][1], scanner.target_coin_picker_text("watch"))
+        self.assertEqual(sent_messages[0][1], scanner.watch_toggle_picker_text())
         self.assertEqual(sent_messages[0][2]["inline_keyboard"][-1][0]["callback_data"], "panel:open")
         self.assertEqual(sent_messages[1], ("777", scanner.command_panel_text(), scanner.command_panel_keyboard()))
         self.assertEqual(sent_messages[2][1], scanner.explain_group_prompt())
