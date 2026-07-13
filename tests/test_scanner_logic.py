@@ -2638,8 +2638,8 @@ class ScannerLogicTests(unittest.TestCase):
         beginner = scanner.explain_concept("relative strength", "beginner")
         experienced = scanner.explain_concept("RSI", "experienced")
 
-        self.assertIn("strength meter", beginner)
-        self.assertIn("momentum oscillator", experienced)
+        self.assertIn("reading, not a signal", beginner)
+        self.assertIn("momentum reading", experienced)
         self.assertEqual(scanner.normalize_concept_key("moving average"), "ema")
         self.assertIsNone(scanner.explain_concept("not-a-real-concept", "beginner"))
 
@@ -2650,7 +2650,7 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(scanner.normalize_concept_key(" ema "), "ema")
         self.assertEqual(scanner.normalize_concept_key("Support"), "support")
         self.assertEqual(scanner.normalize_concept_key("volume spike"), "volume_spike")
-        self.assertIn("strength meter", scanner.explain_concept(" RSI ", "beginner"))
+        self.assertIn("cannot fire an alert", scanner.explain_concept(" RSI ", "beginner"))
         self.assertIsNone(scanner.explain_concept("mystery term", "beginner"))
 
     def test_new_explanation_concepts_resolve_for_beginner_and_experienced(self):
@@ -2682,7 +2682,6 @@ class ScannerLogicTests(unittest.TestCase):
             "accumulation": ("quietly stepping in over time", "building a position gradually"),
             "retest": ("comes back to test that level again", "price returns to a broken level"),
             "follow_through": ("What happens after a move or a break", "continuation after an initial move/break"),
-            "trade_plan": ("decided-in-advance answer", "predefined entry, target(s), and stop"),
         }
 
         for concept, (beginner_phrase, experienced_phrase) in expected_phrases.items():
@@ -2696,8 +2695,8 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(scanner.normalize_concept_key("accumulation zone"), "accumulation")
         self.assertEqual(scanner.normalize_concept_key("re-test"), "retest")
         self.assertEqual(scanner.normalize_concept_key("follow through"), "follow_through")
-        self.assertEqual(scanner.normalize_concept_key("trade plan"), "trade_plan")
-        self.assertEqual(scanner.normalize_concept_key("stop loss"), "trade_plan")
+        self.assertIsNone(scanner.normalize_concept_key("trade plan"))
+        self.assertIsNone(scanner.normalize_concept_key("stop loss"))
 
     def test_explain_command_sends_beginner_explanation_from_profile(self):
         sent_messages = []
@@ -2722,7 +2721,7 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertEqual(sent_messages[0][0], "-100")
         self.assertIn("<b>RSI</b>", sent_messages[0][1])
-        self.assertIn("strength meter", sent_messages[0][1])
+        self.assertIn("reading, not a signal", sent_messages[0][1])
 
     def test_explain_command_defaults_to_experienced_when_skill_missing(self):
         sent_messages = []
@@ -2774,7 +2773,7 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(len(sent_photos), 1)
         self.assertEqual(sent_photos[0][0:2], ("-100", str(card_path)))
         self.assertIn("<b>RSI</b>", sent_photos[0][2])
-        self.assertIn("momentum oscillator", sent_photos[0][2])
+        self.assertIn("momentum reading", sent_photos[0][2])
         self.assertEqual(sent_messages, [])
 
     def test_explain_command_sends_image_then_text_when_caption_is_too_long(self):
@@ -2956,6 +2955,41 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertEqual(set(grouped_keys), set(scanner.available_concepts()))
         self.assertEqual(len(grouped_keys), len(set(grouped_keys)))
+
+    def test_deweaponized_concepts_are_removed_from_registry_and_groups(self):
+        grouped_keys = [
+            concept_key
+            for _group_label, concept_keys in scanner.CONCEPT_GROUPS
+            for concept_key in concept_keys
+        ]
+
+        self.assertEqual(len(scanner.available_concepts()), 21)
+        self.assertNotIn("trade_plan", scanner.available_concepts())
+        self.assertNotIn("market_score", scanner.available_concepts())
+        self.assertNotIn("trade_plan", grouped_keys)
+        self.assertNotIn("market_score", grouped_keys)
+
+    def test_all_explanation_concepts_include_honest_limit(self):
+        for concept_key in scanner.available_concepts():
+            for skill_level in ("beginner", "experienced"):
+                with self.subTest(concept_key=concept_key, skill_level=skill_level):
+                    self.assertIn(
+                        "Honest limit",
+                        scanner.explain_concept(concept_key, skill_level),
+                    )
+
+    def test_indicator_explanations_do_not_imply_they_trigger_alerts(self):
+        for concept_key in ("rsi", "ema", "volume_spike"):
+            combined_text = " ".join(
+                (
+                    scanner.explain_concept(concept_key, "beginner"),
+                    scanner.explain_concept(concept_key, "experienced"),
+                )
+            ).lower()
+            with self.subTest(concept_key=concept_key):
+                self.assertNotIn("trigger", combined_text)
+                self.assertNotIn("can fire an alert", combined_text)
+                self.assertIn("cannot fire an alert", combined_text)
 
     def test_typed_explain_concept_still_uses_existing_response_path(self):
         with patch.object(scanner, "send_explain_command_response") as send_response:

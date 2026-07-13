@@ -85,7 +85,6 @@ CONCEPT_TEACHING_CARD_FILES = {
     "accumulation": "accumulation.png",
     "retest": "retest.png",
     "follow_through": "followthrough.png",
-    "trade_plan": "tradeplan.png",
 }
 
 try:
@@ -5248,8 +5247,8 @@ CONCEPT_GROUPS = (
     ("📊 Price & Structure", ("candle", "support", "resistance", "range", "key_level", "trend", "market_structure")),
     ("⚡ The Event", ("breakout", "breakdown", "confirmation", "retest", "follow_through")),
     ("📈 The Indicators", ("rsi", "ema", "volume_spike", "confluence", "liquidity")),
-    ("🎯 Your Plan", ("accumulation", "trade_plan", "patience_grade")),
-    ("🔢 Poinkle's Labels", ("setup_quality", "break_strength_score", "market_score")),
+    ("🎯 Your Plan", ("accumulation", "patience_grade")),
+    ("🔢 Poinkle's Labels", ("setup_quality", "break_strength_score")),
 )
 
 

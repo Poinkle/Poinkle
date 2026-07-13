@@ -1,46 +1,48 @@
 EXPLANATION_REGISTRY = {
     "rsi": {
         "beginner": (
-            "A strength meter for recent price moves, scored 0 to 100. It compares "
-            "how big the recent gains have been versus the recent losses. Above 70 "
-            "means buyers have been in control (overbought — the price may be "
-            "stretched and could slow down). Below 30 means sellers have been in "
-            "control (oversold — the price may be beaten down and could bounce). "
-            "Critical truth: RSI measures strength — it does NOT predict what happens "
-            "next. In a strong trend it can stay high or low for a long time — so it's "
-            "one clue, not a crystal ball."
+            "RSI is a reading, not a signal. It shows whether recent candles have "
+            "been stretched toward buyers or sellers. Above 70 means price is "
+            "extended; for a patient buyer, that is a caution reading, not a buy "
+            "signal. Below 30 means price is stretched lower and worth looking at "
+            "in context. RSI cannot fire an alert in Poinkle — structure fires, "
+            "indicators confirm. Honest limit: RSI can stay high or low for a long "
+            "time, so it never tells you what price will do next."
         ),
         "experienced": (
-            "RSI (14) — momentum oscillator, 0-100. >70 overbought, <30 oversold. "
-            "Watch for divergences and cross-backs, not just absolute levels."
+            "RSI (14) — momentum reading, 0-100. >70 is extended, <30 is oversold. "
+            "It cannot fire an alert; it only adds context after structure is in "
+            "play. Honest limit: extremes can persist during strong trends."
         ),
     },
     "ema": {
         "beginner": (
             "A line that tracks the average price over a recent period, but pays more "
             "attention to recent prices — so it reacts faster than a plain average. "
-            "Poinkle uses the EMA 21 (shorter-term) and EMA 55 (medium-term). When "
-            "price is above them the trend's leaning up; below, it's leaning down. "
-            "Honest: it helps make the trend easier to see — it doesn't predict the "
-            "future."
+            "Poinkle uses EMAs to read trend context after price has reached a zone. "
+            "EMA cannot fire an alert. It can only confirm or question what price "
+            "already showed. Honest limit: a moving average smooths the past; it "
+            "doesn't predict the next candle."
         ),
         "experienced": (
-            "EMA — exponentially weighted moving average (recent prices weighted "
-            "heavier). 21/55 cross used as a momentum/trend signal. Above = bullish "
-            "lean, below = bearish lean."
+            "EMA — exponentially weighted moving average with recent prices weighted "
+            "heavier. Poinkle uses it as trend context, not as the reason an alert "
+            "sends. Honest limit: EMAs lag price and can whipsaw in chop."
         ),
     },
     "volume_spike": {
         "beginner": (
             "How many people are buying and selling in a given period — the activity "
-            "behind a price move. Think a few people whispering vs. a packed stadium "
-            "cheering. Higher volume means more people and money are behind the move, "
-            "so it tends to matter more. A move with strong volume is usually more "
-            "believable than the same move with weak volume."
+            "behind a price move. Volume is neutral by nature: it shows participation, "
+            "not direction. A spike on an up candle and a spike on a down candle mean "
+            "different things because price gives the direction. Volume cannot fire "
+            "an alert in Poinkle; it confirms what price is already doing. Honest "
+            "limit: one loud candle can be a single large order, not lasting interest."
         ),
         "experienced": (
-            "Volume spike — current volume well above its average (e.g. >=2x). "
-            "Confirms conviction behind a move; low-volume moves are less reliable."
+            "Volume spike — current volume well above its average, used as "
+            "participation context only. Direction comes from price, not volume "
+            "itself. Honest limit: volume confirms activity, not outcome."
         ),
     },
     "support": {
@@ -52,7 +54,8 @@ EXPLANATION_REGISTRY = {
         ),
         "experienced": (
             "Support — price level where demand has previously absorbed selling. "
-            "Watch for holds vs breaks and retests."
+            "Watch for holds vs breaks and retests. Honest limit: support is a zone "
+            "of prior reaction, not a guaranteed floor."
         ),
     },
     "resistance": {
@@ -64,46 +67,50 @@ EXPLANATION_REGISTRY = {
         ),
         "experienced": (
             "Resistance — price level where supply has previously capped advances. "
-            "Break-and-hold above flips it to support."
+            "Break-and-hold above can flip it to support. Honest limit: resistance "
+            "is a zone, not a ceiling price must obey."
         ),
     },
     "breakout": {
         "beginner": (
             "When price moves above a resistance level and stays there — often with "
             "more people buying. Like finally breaking through the ceiling. It can "
-            "signal a stronger move up. Caution: sometimes it looks like a breakout, "
-            "then quickly falls back below the level. A breakout that stays above "
-            "means more than one that quickly falls back — patience compounds."
+            "tell you price entered a new zone. Caution: sometimes it looks like a "
+            "breakout, then quickly falls back below the zone. Honest limit: Poinkle "
+            "waits for confirmation because one close can still fake out."
         ),
         "experienced": (
             "Breakout — price closes beyond a defined level. Quality depends on "
-            "volume, follow-through, and confirmation (hold) rather than the initial "
-            "poke."
+            "confirmation, volume, and follow-through rather than the initial poke. "
+            "Honest limit: a confirmed breakout can still be reclaimed."
         ),
     },
     "breakdown": {
         "beginner": (
             "When price falls below a support level and stays below it — like the "
-            "floor giving way. It can signal a stronger move down. Caution: same as "
-            "breakouts — wait to see if it stays below the level before trusting it."
+            "floor giving way. It tells you price entered a lower zone. Caution: same "
+            "as breakouts — wait to see if it stays below the zone before trusting "
+            "it. Honest limit: a breakdown can still be reclaimed."
         ),
         "experienced": (
             "Breakdown — price closes below a support level. Confirm with "
-            "follow-through/volume; watch for failed breakdowns (reclaim)."
+            "follow-through/volume; watch for failed breakdowns (reclaim). Honest "
+            "limit: one close below a zone is an attempt, not confirmation."
         ),
     },
     "confluence": {
         "beginner": (
-            "When several things line up and point the same way — like a few friends "
-            "all agreeing on the best route. Example: price sitting at support, plus "
-            "the EMA pointing the same direction, plus RSI pointing the same way. "
-            "More agreement gives you a better chance of being right — though still "
-            "never a guarantee. Confluence is what turns separate observations into a "
-            "clearer picture."
+            "Confluence means structure fired first, then the readings agreed with "
+            "it. In Poinkle, that means a confirmed zone break — two daily closes "
+            "beyond a zone — plus context like 6h structure, EMA trend, or volume "
+            "participation lining up. Indicators do not lead. Price is truth. "
+            "Honest limit: agreement means there is more to inspect, not that the "
+            "move will continue."
         ),
         "experienced": (
-            "Confluence — multiple independent signals aligning (e.g. RSI + volume + "
-            "EMA + level). Higher confluence = higher-conviction setup."
+            "Confluence — confirmed structure plus confirming context. Post-inversion, "
+            "2+ indicators agreeing is not enough to send an alert. Honest limit: "
+            "confluence is noise control, not probability."
         ),
     },
     "trend": {
@@ -112,11 +119,13 @@ EXPLANATION_REGISTRY = {
             "can go up (generally climbing), down (generally falling), or sideways "
             "(drifting with no clear direction). It doesn't tell you what WILL happen "
             "next — it just shows what the market is doing right now. Most decisions "
-            "start here: is the river flowing up, down, or nowhere?"
+            "start here: is the river flowing up, down, or nowhere? Honest limit: "
+            "trend is a read of the current path, not a promise it continues."
         ),
         "experienced": (
             "Trend — prevailing directional bias (via structure and EMAs). Trade with "
-            "it unless there's a clear, confirmed reversal."
+            "it unless there's a clear, confirmed reversal. Honest limit: trend is "
+            "descriptive; it can change."
         ),
     },
     "confirmation": {
@@ -128,13 +137,13 @@ EXPLANATION_REGISTRY = {
             "the full period to finish above the level before trusting it. Poinkle "
             "only uses confirmed breaks for this reason — patience compounds. The "
             "tradeoff: you get in at a slightly worse price, but with a better chance "
-            "the move is real."
+            "the move is real. Honest limit: even confirmed breaks can fail."
         ),
         "experienced": (
             "Confirmation — a candle CLOSE beyond a level (not an intraday wick). "
             "Filters fakeouts by requiring the period to finish past the level. "
-            "Trades off entry price for higher reliability; optional retest adds "
-            "further validation."
+            "Poinkle uses two consecutive daily closes beyond the zone. Honest limit: "
+            "confirmation reduces fakeouts; it does not remove them."
         ),
     },
     "candle": {
@@ -146,13 +155,13 @@ EXPLANATION_REGISTRY = {
             "range. The thin lines above and below it (called wicks) show the highest "
             "and lowest points reached. Green usually means price finished higher "
             "than it started; red means it finished lower. A candle is just a simple "
-            "picture of what happened in that time period."
+            "picture of what happened in that time period. Honest limit: one candle "
+            "never tells the whole story."
         ),
         "experienced": (
             "Candlestick — OHLC for one period. Body = open-to-close range; "
             "wicks/shadows = the high and low extremes. Color shows close vs open "
-            "(green up, red down). Body size and wick length convey conviction and "
-            "rejection."
+            "(green up, red down). Honest limit: one candle is context, not a verdict."
         ),
     },
     "range": {
@@ -162,12 +171,14 @@ EXPLANATION_REGISTRY = {
             "and a ceiling (resistance) with no clear direction, it's moving sideways "
             "in that box. Poinkle shows you where price sits in its box — near the "
             "top, middle, or bottom. This helps you see if there's room to move, or "
-            "if price is bumping against an edge."
+            "if price is bumping against an edge. Honest limit: a range is current "
+            "context; price can leave it."
         ),
         "experienced": (
             "Range — price bounded between horizontal support and resistance, no "
             "directional trend. Range position (top/mid/bottom) frames risk/reward; "
-            "edges are where breaks or rejections tend to occur."
+            "edges are where breaks or rejections tend to occur. Honest limit: ranges "
+            "shift as new candles print."
         ),
     },
     "key_level": {
@@ -183,7 +194,8 @@ EXPLANATION_REGISTRY = {
         "experienced": (
             "Key level — a price with a history of reaction (support/resistance, "
             "prior swing high/low, range edge). Zones, not exact lines. Watch for "
-            "holds, breaks, and retests rather than assuming a bounce."
+            "holds, breaks, and retests rather than assuming a bounce. Honest limit: "
+            "wicks fake out."
         ),
     },
     "liquidity": {
@@ -194,12 +206,14 @@ EXPLANATION_REGISTRY = {
             "jump around more on smaller trades. Think a busy marketplace (easy to "
             "buy and sell at fair prices) versus a quiet one (harder to buy or sell "
             "without changing the price). Coins with lower liquidity tend to have "
-            "bigger, faster price swings."
+            "bigger, faster price swings. Honest limit: liquidity changes by venue "
+            "and by time of day, so it is never a permanent label."
         ),
         "experienced": (
             "Liquidity — depth of available buy/sell orders. High liquidity = tight "
             "spreads, low slippage, smoother fills. Low liquidity = wider spreads, "
-            "more slippage, sharper moves on smaller size."
+            "more slippage, sharper moves on smaller size. Honest limit: liquidity "
+            "is observed context, not a quality score."
         ),
     },
     "market_structure": {
@@ -216,7 +230,7 @@ EXPLANATION_REGISTRY = {
             "Market structure — the sequence of swing highs/lows. Higher highs + "
             "higher lows = uptrend; lower highs + lower lows = downtrend; otherwise "
             "ranging. Structure breaks (a failed HH/HL sequence) flag potential "
-            "regime change."
+            "regime change. Honest limit: structure is confirmed after price prints."
         ),
     },
     "accumulation": {
@@ -233,7 +247,8 @@ EXPLANATION_REGISTRY = {
             "Accumulation — building a position gradually over time/levels rather "
             "than a single entry. Often occurs during sideways/basing action. Scaling "
             "in manages timing risk; size discipline matters since price can extend "
-            "lower."
+            "lower. Honest limit: accumulation is a plan, not proof price is done "
+            "falling."
         ),
     },
     "retest": {
@@ -249,8 +264,8 @@ EXPLANATION_REGISTRY = {
         "experienced": (
             "Retest — price returns to a broken level to test it as new "
             "support/resistance (role reversal). A holding retest strengthens the "
-            "break and offers a cleaner entry with defined risk; a failed retest "
-            "signals a weak/false break."
+            "read; a failed retest shows the break did not hold. Honest limit: a "
+            "retest is information, not permission."
         ),
     },
     "follow_through": {
@@ -264,80 +279,48 @@ EXPLANATION_REGISTRY = {
         ),
         "experienced": (
             "Follow-through — continuation after an initial move/break, ideally with "
-            "sustained volume. Strong follow-through validates the move; weak/absent "
-            "follow-through warns of a failed or exhausted push."
-        ),
-    },
-    "trade_plan": {
-        "beginner": (
-            "Your decided-in-advance answer to three questions before you ever buy: "
-            "where you'll buy (your entry), where you'll sell if things go well (your "
-            "target), and where you'll get out if they don't (your stop). Having a "
-            "plan before you act keeps emotion out of the decision. Honest limit: a "
-            "plan doesn't make you right — it makes you disciplined. The point isn't "
-            "to win every time; it's to never be caught without a decision."
-        ),
-        "experienced": (
-            "Trade plan — predefined entry, target(s), and stop (invalidation), with "
-            "position size set by the risk between entry and stop. Removes "
-            "in-the-moment emotion; enforces consistent risk/reward and discipline."
-        ),
-    },
-    "market_score": {
-        "beginner": (
-            "A single 0-100 rating of how strong a coin's overall setup looks "
-            "right now, shown as a score out of 10. Higher means more of the "
-            "signals are lining up favorably — a quick way to compare coins at a "
-            "glance. Honest limit: it describes the moment, not the future. A high "
-            "score is a starting point for a closer look, never a reason to buy on "
-            "its own."
-        ),
-        "experienced": (
-            "Market Score — 0-100 overall technical confidence from market "
-            "structure inputs, displayed as X.X/10. A ranking aid, not a trigger."
+            "sustained volume. Weak/absent follow-through flags a failed or exhausted "
+            "push. Honest limit: follow-through is read after the move starts."
         ),
     },
     "setup_quality": {
         "beginner": (
-            "A simple letter grade — A+ down to F — for how clean a trade setup "
-            "looks. It's just the Break Strength Score written as a letter instead "
-            "of a number: an A means the signs are strong, an F means steer clear. "
-            "Honest limit: a high grade means a better-looking setup — nothing "
-            "more. The cleanest-looking setups still lose sometimes."
+            "A setup grade describes the structure the bot is seeing, not the coin "
+            "and not a trade. It helps explain why a confirmed zone break was worth "
+            "mentioning or why a weaker break stayed quiet. Honest limit: a grade is "
+            "a label for the setup, never a reason to act."
         ),
         "experienced": (
-            "Setup Quality — the A+-F letter grade mapped directly from the "
-            "(adjusted) Break Strength Score. Not a separate model."
+            "Setup Quality — internal structure grade derived from break quality "
+            "checks. It grades the setup, not direction or outcome. Honest limit: it "
+            "is context, not conviction."
         ),
     },
     "break_strength_score": {
         "beginner": (
-            "A 0-100 score for how convincing a breakout or breakdown really is. "
-            "It looks at things like volume, momentum, and how firmly price closed "
-            "past the level. Higher means more signs the move is real instead of a "
-            "quick fake-out. Honest limit: a high score tilts the odds in your "
-            "favor — it can't remove the risk. Convincing breaks fail all the time."
+            "An internal quality check the bot uses before it mentions a break. It "
+            "looks at mechanical details like close strength, volume, and location. "
+            "It is not shown on cards and it is not something to trade. Honest limit: "
+            "it is a filter for the bot, not a promise about price."
         ),
         "experienced": (
-            "Break Strength Score — 0-100 from volume, RSI/EMA alignment, close "
-            "strength beyond level, retest quality, and room to target; capped "
-            "down for poor location or weak momentum."
+            "Break Strength Score — internal gating input for break quality. It can "
+            "suppress weak structure before a user sees it. Honest limit: mechanical "
+            "filters reduce noise; they do not forecast follow-through."
         ),
     },
     "patience_grade": {
         "beginner": (
-            "A letter grade — A to F — for how well a coin fits patiently "
-            "building up a position right now, a little at a time, instead of "
-            "buying all at once. It weighs things like how close price is to "
-            "support, the overall trend, and volume. An A means conditions favor "
-            "waiting and adding slowly; an F means sit on your hands. Honest "
-            "limit: it grades the conditions, not what happens next — and even an "
-            "A is never a reason to go all in. Only ever swing a portion."
+            "A calm label for how much to look, not how much to act. In the current "
+            "alert model, the structure has to come first: a confirmed zone break. "
+            "Then Poinkle checks whether context agrees, such as 6h structure, EMA "
+            "trend, and volume participation. Honest limit: a higher label means "
+            "less noise, not a better trade."
         ),
         "experienced": (
-            "Patience Grade — A-F accumulation-fit grade (support proximity, trend "
-            "bias, RSI zone, volume, market structure). Distinct from the "
-            "patience_score proximity metric."
+            "Patience Grade — user-facing noise-control read: confirmed structure "
+            "plus agreement from context inputs. Honest limit: it describes how much "
+            "is worth inspecting, not probability or action strength."
         ),
     },
 }
@@ -408,17 +391,6 @@ EXPLANATION_ALIASES = {
     "follow through": "follow_through",
     "followthrough": "follow_through",
     "follow-through": "follow_through",
-    "trade_plan": "trade_plan",
-    "trade plan": "trade_plan",
-    "tradeplan": "trade_plan",
-    "plan": "trade_plan",
-    "entry": "trade_plan",
-    "target": "trade_plan",
-    "stop": "trade_plan",
-    "stop loss": "trade_plan",
-    "exit": "trade_plan",
-    "market score": "market_score",
-    "marketscore": "market_score",
     "setup quality": "setup_quality",
     "setupquality": "setup_quality",
     "quality": "setup_quality",
@@ -451,8 +423,6 @@ CONCEPT_DISPLAY_NAMES = {
     "accumulation": "Accumulation",
     "retest": "Retest",
     "follow_through": "Follow-Through",
-    "trade_plan": "Trade Plan",
-    "market_score": "Market Score",
     "setup_quality": "Setup Quality",
     "break_strength_score": "Break Strength Score",
     "patience_grade": "Patience Grade",
