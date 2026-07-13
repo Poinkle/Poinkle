@@ -7244,7 +7244,14 @@ def send_explain_command_response(telegram_token, response_chat_id, message, con
         send_telegram_message(telegram_token, response_chat_id, message)
         return
 
+    if len(message) <= TELEGRAM_PHOTO_CAPTION_LIMIT:
+        if send_telegram_photo(telegram_token, response_chat_id, str(card_path), caption=message):
+            return
+        send_telegram_message(telegram_token, response_chat_id, message)
+        return
+
     if send_telegram_photo(telegram_token, response_chat_id, str(card_path)):
+        send_telegram_message(telegram_token, response_chat_id, message)
         return
 
     send_telegram_message(telegram_token, response_chat_id, message)
