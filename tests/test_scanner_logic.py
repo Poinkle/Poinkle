@@ -87,6 +87,49 @@ def confirmed_break_alert(direction="breakout", level=100):
     }
 
 
+def severity_confirmed_break_alert(direction="breakout", level=100, ema_trend=None, volume_multiple=1.0):
+    alert = confirmed_break_alert(direction=direction, level=level)
+    trade_direction = "LONG" if direction == "breakout" else "SHORT"
+    alert["trade_plan"] = {
+        "direction": trade_direction,
+        "classification": "Confirmed zone break",
+        "confidence_score": 80,
+        "break_strength_score": 80,
+        "setup_quality": "B",
+        "setup_status": "Building",
+        "trade_quality": "Watchlist",
+        "level": level,
+        "first_close": level + 1 if direction == "breakout" else level - 1,
+        "confirmation_close": level + 2 if direction == "breakout" else level - 2,
+        "ema_trend": ema_trend or "Neutral EMA trend, not aligned",
+        "ema_21": 101 if direction == "breakout" else 99,
+        "ema_55": 99 if direction == "breakout" else 101,
+        "volume_multiple": volume_multiple,
+        "volume_status": "Elevated volume" if volume_multiple >= 2 else "Normal volume",
+        "rsi": 58 if direction == "breakout" else 42,
+        "rsi_trend": "Aligned bullish" if direction == "breakout" else "Aligned bearish",
+        "retest_quality": "Needs follow-through",
+    }
+    alert["location_filter"] = {
+        "label": "Middle Range",
+        "range_low": 90,
+        "range_high": 110,
+        "room_to_target": "Good",
+        "location_quality": "B",
+        "next_target": 110 if direction == "breakout" else 90,
+        "distance_to_target_pct": 5.0,
+    }
+    return alert
+
+
+def secondary_timeframe_context_for_bias(bias):
+    if bias == "bullish":
+        return {scanner.MIDDLE_TIMEFRAME: {"latest_close": 105, "ema_21": 103, "ema_55": 100, "rsi_14": 55}}
+    if bias == "bearish":
+        return {scanner.MIDDLE_TIMEFRAME: {"latest_close": 95, "ema_21": 97, "ema_55": 100, "rsi_14": 45}}
+    return {scanner.MIDDLE_TIMEFRAME: {"latest_close": 100, "ema_21": 100, "ema_55": 100, "rsi_14": 50}}
+
+
 class FakeExchange:
     def __init__(self, candles_by_timeframe, ticker_price, failing_timeframes=None):
         self.candles_by_timeframe = candles_by_timeframe
@@ -3865,7 +3908,7 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(sent_photos[0][1], "/tmp/confluence.png")
         self.assertEqual(
             sent_photos[0][2],
-            "Developing · 2 signals\n"
+            "Developing\n"
             "<b>BTC/USD Confluence Alert</b> — "
             "Bullish Volume Spike (2.50x) + EMA 21 crossed above EMA 55\n"
             "Learn more: https://bitcoin.org",
@@ -3876,7 +3919,7 @@ class ScannerLogicTests(unittest.TestCase):
         )
         self.assertEqual(sent_messages, [])
 
-    def test_severity_label_for_alerts_counts_distinct_signal_types(self):
+    def test_severity_label_for_alerts_uses_confirmed_zone_agreement(self):
         self.assertEqual(
             scanner.severity_label_for_alerts(
                 [
@@ -3884,55 +3927,71 @@ class ScannerLogicTests(unittest.TestCase):
                     {"type": "ema_cross_above"},
                 ]
             ),
-            "Developing · 2 signals",
+            "Developing",
+        )
+
+        bare_break = severity_confirmed_break_alert(
+            ema_trend="Neutral EMA trend, not aligned",
+            volume_multiple=1.0,
         )
         self.assertEqual(
-            scanner.severity_label_for_alerts(
-                [
-                    {"type": "volume_spike"},
-                    {"type": "volume_spike"},
-                    {"type": "ema_cross_above"},
-                ]
-            ),
-            "Developing · 2 signals",
+            scanner.alert_severity_tier([bare_break]),
+            scanner.ALERT_SEVERITY_BUILDING,
         )
         self.assertEqual(
-            scanner.severity_label_for_alerts(
-                [
-                    {"type": "volume_spike"},
-                    {"type": "ema_cross_above"},
-                    {"type": "rsi_cross_above_70"},
-                ]
-            ),
-            "Building · 3 signals",
+            scanner.severity_label_for_alerts([bare_break]),
+            "Worth a look · zone confirmed",
+        )
+
+        full_agreement = severity_confirmed_break_alert(
+            direction="breakout",
+            ema_trend="Bullish EMA trend",
+            volume_multiple=2.5,
+        )
+        full_agreement["secondary_timeframe_context"] = secondary_timeframe_context_for_bias("bullish")
+        self.assertEqual(
+            scanner.level_break_agreement_score([full_agreement]),
+            3,
         )
         self.assertEqual(
-            scanner.severity_label_for_alerts(
-                [
-                    {"type": "volume_spike"},
-                    {"type": "ema_cross_above"},
-                    {"type": "rsi_cross_above_70"},
-                    {"type": "live:breakout:100:early_warning"},
-                ]
-            ),
-            "Strong confluence · 4 signals",
+            scanner.severity_label_for_alerts([full_agreement]),
+            "Worth a close look · zone confirmed, 3 of 3 agree",
         )
+
+    def test_confirmed_break_with_two_agreements_is_strong(self):
+        alert = severity_confirmed_break_alert(
+            direction="breakdown",
+            ema_trend="Bearish EMA trend",
+            volume_multiple=2.1,
+        )
+
+        self.assertEqual(scanner.level_break_agreement_score([alert]), 2)
+        self.assertEqual(scanner.alert_severity_tier([alert]), scanner.ALERT_SEVERITY_STRONG)
+
+    def test_confirmed_break_contradiction_lowers_score_but_stays_building(self):
+        alert = severity_confirmed_break_alert(
+            direction="breakdown",
+            ema_trend="Bearish EMA trend",
+            volume_multiple=2.1,
+        )
+        contradictory_lightweight = {"type": "ema_cross_above", "label": "EMA 21 crossed above EMA 55"}
+
+        self.assertEqual(scanner.level_break_agreement_score([alert, contradictory_lightweight]), 1)
         self.assertEqual(
-            scanner.severity_label_for_alerts(
-                [
-                    {"type": "volume_spike"},
-                    {"type": "ema_cross_above"},
-                    {"type": "rsi_cross_above_70"},
-                    {"type": "live:breakout:100:early_warning"},
-                    {"type": "live:breakdown:90:early_warning"},
-                ]
-            ),
-            "Strong confluence · 5 signals",
+            scanner.alert_severity_tier([alert, contradictory_lightweight]),
+            scanner.ALERT_SEVERITY_BUILDING,
         )
 
     def test_confluence_caption_adds_severity_for_three_or_more_signals(self):
         sent_photos = []
+        level_break = severity_confirmed_break_alert(
+            direction="breakout",
+            ema_trend="Bullish EMA trend",
+            volume_multiple=2.5,
+        )
+        level_break["secondary_timeframe_context"] = secondary_timeframe_context_for_bias("bullish")
         alerts = [
+            level_break,
             {
                 "type": "volume_spike",
                 "label": "Bullish Volume Spike",
@@ -3975,7 +4034,50 @@ class ScannerLogicTests(unittest.TestCase):
                 ],
             )
 
-        self.assertTrue(sent_photos[0][2].startswith("Building · 3 signals\n<b>BTC/USD Confluence Alert</b> — "))
+        self.assertTrue(
+            sent_photos[0][2].startswith(
+                "Worth a close look · zone confirmed, 3 of 3 agree\n"
+                "<b>BTC/USD Confluence Alert</b> — "
+            )
+        )
+
+    def test_bare_confirmed_level_break_renders_severity_label(self):
+        sent_photos = []
+        alert = severity_confirmed_break_alert(
+            direction="breakout",
+            ema_trend="Neutral EMA trend, not aligned",
+            volume_multiple=1.0,
+        )
+
+        with patch.object(scanner, "render_alert_snapshot_chart", return_value="/tmp/level.png"), patch.object(
+            scanner,
+            "send_telegram_photo",
+            side_effect=lambda token, chat_id, path, caption="", reply_markup=None: sent_photos.append(
+                (str(chat_id), path, caption, reply_markup)
+            )
+            or True,
+        ), patch.object(scanner, "send_telegram_message"):
+            scanner.send_alert_group_to_chat(
+                "TOKEN",
+                "999",
+                "BTC/USD",
+                candle(0, 100, 105, 99, 104, 250),
+                [alert],
+                ema_21=101,
+                ema_55=99,
+                current_rsi=58,
+                volume_avg=100,
+                alert_candles=[
+                    candle(0, 100, 105, 99, 104, 100),
+                    candle(scanner.TIMEFRAME_MS, 104, 108, 103, 107, 250),
+                ],
+            )
+
+        self.assertTrue(
+            sent_photos[0][2].startswith(
+                "Worth a look · zone confirmed\n<b>BTC/USD Confluence Alert</b> — "
+            )
+        )
 
     def test_alert_research_button_reuses_wact_without_clearing_alert_keyboard(self):
         callback_query = {
@@ -4051,12 +4153,13 @@ class ScannerLogicTests(unittest.TestCase):
 
     def test_personal_watchlist_alerts_send_when_group_meets_user_severity_preference(self):
         sent_alert_groups = []
-        alerts = [
-            confirmed_break_alert(),
-            {"type": "volume_spike", "label": "Bullish Volume Spike", "volume_multiple": 2.5},
-            {"type": "ema_cross_above", "label": "EMA 21 crossed above EMA 55"},
-            {"type": "rsi_cross_above_70", "label": "RSI crossed above 70"},
-        ]
+        alert = severity_confirmed_break_alert(
+            direction="breakout",
+            ema_trend="Bullish EMA trend",
+            volume_multiple=2.5,
+        )
+        alert["secondary_timeframe_context"] = secondary_timeframe_context_for_bias("bullish")
+        alerts = [alert]
 
         with patch.object(scanner, "users_watching_symbol", return_value=["222"]), patch.object(
             scanner,

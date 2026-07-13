@@ -2082,11 +2082,89 @@ def alert_severity_signal_count(alerts):
     return len({alert.get("type") for alert in alerts if alert.get("type")})
 
 
+def level_break_expected_direction(alert):
+    direction = level_break_direction_from_alert(alert)
+    if direction == "breakout":
+        return "bullish"
+    if direction == "breakdown":
+        return "bearish"
+    return ""
+
+
+def level_break_ema_agrees(alert, expected_direction):
+    trade_plan = alert.get("trade_plan") or {}
+    ema_trend = str(trade_plan.get("ema_trend") or "").lower()
+    if ema_trend:
+        if expected_direction == "bullish":
+            return ema_trend.startswith("bullish")
+        if expected_direction == "bearish":
+            return ema_trend.startswith("bearish")
+
+    ema_21 = trade_plan.get("ema_21")
+    ema_55 = trade_plan.get("ema_55")
+    if ema_21 is None or ema_55 is None:
+        return False
+    if expected_direction == "bullish":
+        return ema_21 > ema_55
+    if expected_direction == "bearish":
+        return ema_21 < ema_55
+    return False
+
+
+def level_break_volume_confirms(alert):
+    trade_plan = alert.get("trade_plan") or {}
+    volume_multiple = trade_plan.get("volume_multiple")
+    if volume_multiple is None:
+        volume_multiple = alert.get("volume_multiple")
+    try:
+        return float(volume_multiple) >= 2.0
+    except (TypeError, ValueError):
+        return False
+
+
+def level_break_secondary_context_agrees(alerts, expected_direction):
+    context = secondary_timeframe_context_from_alerts(alerts)
+    if not context:
+        return False
+    timeframe_context = context.get(MIDDLE_TIMEFRAME)
+    if not timeframe_context:
+        return False
+    return secondary_timeframe_bias(timeframe_context) == expected_direction
+
+
+def level_break_agreement_score(alert_group):
+    confirmed_break = next(
+        (alert for alert in alert_group if is_confirmed_level_break_alert(alert)),
+        None,
+    )
+    if not confirmed_break:
+        return 0
+
+    expected_direction = level_break_expected_direction(confirmed_break)
+    if not expected_direction:
+        return 0
+
+    score = 0
+    if level_break_secondary_context_agrees(alert_group, expected_direction):
+        score += 1
+    if level_break_ema_agrees(confirmed_break, expected_direction):
+        score += 1
+    if level_break_volume_confirms(confirmed_break):
+        score += 1
+
+    opposite_direction = "bearish" if expected_direction == "bullish" else "bullish"
+    for alert in alert_group:
+        if lightweight_alert_direction(alert) == opposite_direction:
+            score -= 1
+
+    return max(0, min(score, 3))
+
+
 def alert_severity_tier(alerts):
-    count = alert_severity_signal_count(alerts)
-    if count >= 4:
-        return ALERT_SEVERITY_STRONG
-    if count == 3:
+    if any(is_confirmed_level_break_alert(alert) for alert in alerts):
+        score = level_break_agreement_score(alerts)
+        if score >= 2:
+            return ALERT_SEVERITY_STRONG
         return ALERT_SEVERITY_BUILDING
     return ALERT_SEVERITY_DEVELOPING
 
@@ -4690,13 +4768,12 @@ def alert_signal_summary(alert):
 
 
 def severity_label_for_alerts(alerts):
-    count = alert_severity_signal_count(alerts)
     tier = alert_severity_tier(alerts)
     if tier == ALERT_SEVERITY_DEVELOPING:
-        return f"Developing · {count} signals"
+        return "Developing"
     if tier == ALERT_SEVERITY_BUILDING:
-        return "Building · 3 signals"
-    return f"Strong confluence · {count} signals"
+        return "Worth a look · zone confirmed"
+    return f"Worth a close look · zone confirmed, {level_break_agreement_score(alerts)} of 3 agree"
 
 
 def alert_card_data(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, skill_level=None):
@@ -4895,7 +4972,7 @@ def send_alert_group_to_chat(
             resistances=resistances,
         )
 
-    severity_label = severity_label_for_alerts(alerts) if len(alerts) >= 2 else ""
+    severity_label = severity_label_for_alerts(alerts)
     fallback_message = build_combined_alert_message(symbol, candle, alerts, ema_21, ema_55, current_rsi, volume_avg)
     if severity_label:
         fallback_message = f"{severity_label}\n{fallback_message}"
