@@ -5236,12 +5236,41 @@ SNAPSHOT_LOOK_ORDER_CALLBACK_PREFIX = "look_order"
 WATCHLIST_COIN_CALLBACK_PREFIX = "wcoin"
 WATCHLIST_ACTION_CALLBACK_PREFIX = "wact"
 ALERT_SEVERITY_CALLBACK_PREFIX = "sev"
+EXPLAIN_GROUP_CALLBACK_PREFIX = "xgroup"
+EXPLAIN_CONCEPT_CALLBACK_PREFIX = "xconcept"
 COIN_PICKER_BUTTONS_PER_ROW = 3
 WATCHLIST_ACTIONS = {
     "snapshot": "Snapshot",
     "research": "Research",
     "whynot": "Why not?",
 }
+CONCEPT_GROUPS = (
+    ("📊 Price & Structure", ("candle", "support", "resistance", "range", "key_level", "trend", "market_structure")),
+    ("⚡ The Event", ("breakout", "breakdown", "confirmation", "retest", "follow_through")),
+    ("📈 The Indicators", ("rsi", "ema", "volume_spike", "confluence", "liquidity")),
+    ("🎯 Your Plan", ("accumulation", "trade_plan", "patience_grade")),
+    ("🔢 Poinkle's Labels", ("setup_quality", "break_strength_score", "market_score")),
+)
+
+
+def validate_concept_groups():
+    grouped_keys = []
+    for _group_label, concept_keys in CONCEPT_GROUPS:
+        grouped_keys.extend(concept_keys)
+
+    registry_keys = set(available_concepts())
+    grouped_key_set = set(grouped_keys)
+    if grouped_key_set != registry_keys or len(grouped_keys) != len(grouped_key_set):
+        missing = sorted(registry_keys - grouped_key_set)
+        unknown = sorted(grouped_key_set - registry_keys)
+        duplicates = sorted(key for key in grouped_key_set if grouped_keys.count(key) > 1)
+        raise RuntimeError(
+            "CONCEPT_GROUPS must contain every explanation concept exactly once "
+            f"(missing={missing}, unknown={unknown}, duplicates={duplicates})."
+        )
+
+
+validate_concept_groups()
 
 
 def snapshot_look_order_keyboard():
@@ -5354,6 +5383,47 @@ def callback_query_has_alert_research_keyboard(callback_query, symbol):
             if button.get("callback_data") == expected_data and str(button.get("text", "")).startswith("📊 Research"):
                 return True
     return False
+
+
+def explain_group_keyboard():
+    return {
+        "inline_keyboard": [
+            [
+                {
+                    "text": group_label,
+                    "callback_data": f"{EXPLAIN_GROUP_CALLBACK_PREFIX}:{index}",
+                }
+            ]
+            for index, (group_label, _concept_keys) in enumerate(CONCEPT_GROUPS)
+        ]
+    }
+
+
+def concept_button_label(concept_key):
+    return str(concept_key).replace("_", " ").title()
+
+
+def explain_concept_keyboard(group_index):
+    try:
+        _group_label, concept_keys = CONCEPT_GROUPS[int(group_index)]
+    except (TypeError, ValueError, IndexError):
+        return None
+
+    buttons = [
+        {
+            "text": concept_button_label(concept_key),
+            "callback_data": f"{EXPLAIN_CONCEPT_CALLBACK_PREFIX}:{concept_key}",
+        }
+        for concept_key in concept_keys
+    ]
+    return {"inline_keyboard": coin_picker_button_rows(buttons)}
+
+
+def explain_group_prompt():
+    return (
+        "What do you want to understand?\n\n"
+        "Poinkle looks at price first. Indicators only reinforce what price already shows you."
+    )
 
 
 def alert_severity_panel_message(current_tier):
@@ -7292,6 +7362,59 @@ def handle_snapshot_look_order_callback(telegram_token, callback_query):
     return True
 
 
+def handle_explain_group_callback(telegram_token, callback_query, payload, exchange=None):
+    callback_query_id = (callback_query or {}).get("id")
+    if callback_query_id:
+        answer_telegram_callback(telegram_token, callback_query_id)
+
+    keyboard = explain_concept_keyboard(payload)
+    if keyboard is None:
+        return False
+
+    message = (callback_query or {}).get("message") or {}
+    chat = message.get("chat") or {}
+    chat_id = str(chat.get("id") or "")
+    if not chat_id:
+        return False
+
+    group_label, _concept_keys = CONCEPT_GROUPS[int(payload)]
+    send_telegram_message(
+        telegram_token,
+        chat_id,
+        f"{group_label}\nPick a concept.",
+        reply_markup=keyboard,
+    )
+    clear_callback_message_keyboard(telegram_token, callback_query)
+    return True
+
+
+def handle_explain_concept_callback(telegram_token, callback_query, payload, exchange=None):
+    callback_query_id = (callback_query or {}).get("id")
+    if callback_query_id:
+        answer_telegram_callback(telegram_token, callback_query_id)
+
+    concept_key = normalize_concept_key(payload)
+    if not concept_key:
+        return False
+
+    message = (callback_query or {}).get("message") or {}
+    chat = message.get("chat") or {}
+    chat_id = str(chat.get("id") or "")
+    if not chat_id:
+        return False
+
+    user_id = str(((callback_query or {}).get("from") or {}).get("id") or "")
+    skill_level = user_skill_level(user_id) if user_id else None
+    send_explain_command_response(
+        telegram_token,
+        chat_id,
+        build_explain_command_message(f"/explain {concept_key}", skill_level=skill_level),
+        concept_key=concept_key,
+    )
+    clear_callback_message_keyboard(telegram_token, callback_query)
+    return True
+
+
 def handle_watchlist_coin_callback(telegram_token, callback_query, payload, exchange=None):
     callback_query_id = (callback_query or {}).get("id")
     if callback_query_id:
@@ -7425,6 +7548,8 @@ def handle_telegram_callback_query(exchange, telegram_token, callback_query):
         WATCHLIST_COIN_CALLBACK_PREFIX: handle_watchlist_coin_callback,
         WATCHLIST_ACTION_CALLBACK_PREFIX: handle_watchlist_action_callback,
         ALERT_SEVERITY_CALLBACK_PREFIX: handle_alert_severity_callback,
+        EXPLAIN_GROUP_CALLBACK_PREFIX: handle_explain_group_callback,
+        EXPLAIN_CONCEPT_CALLBACK_PREFIX: handle_explain_concept_callback,
     }
     handler = callback_handlers.get(namespace)
     if handler is None:
@@ -7452,6 +7577,16 @@ def handle_explain_command(telegram_token, telegram_chat_id, message_text, sourc
     source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
     from_user = from_user or {}
     response_chat_id = str(source_chat.get("id", telegram_chat_id))
+    parts = message_text.strip().split(maxsplit=1)
+    if len(parts) < 2 or not parts[1].strip():
+        send_telegram_message(
+            telegram_token,
+            response_chat_id,
+            explain_group_prompt(),
+            reply_markup=explain_group_keyboard(),
+        )
+        return
+
     is_private = is_private_chat(source_chat)
     user_id = str(from_user.get("id") or response_chat_id if is_private else from_user.get("id") or "")
     skill_level = user_skill_level(user_id) if user_id else None

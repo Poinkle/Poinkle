@@ -2855,6 +2855,121 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("I don't have that one yet", unknown)
         self.assertIn("breakout", unknown)
 
+    def test_bare_explain_command_sends_group_picker(self):
+        sent_messages = []
+
+        with patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                (str(chat_id), text, reply_markup)
+            ),
+        ):
+            scanner.handle_explain_command(
+                "TOKEN",
+                "777",
+                "/explain",
+                source_chat={"id": "777", "type": "private"},
+                from_user={"id": 777},
+            )
+
+        self.assertEqual(sent_messages[0][0], "777")
+        self.assertIn("What do you want to understand?", sent_messages[0][1])
+        rows = sent_messages[0][2]["inline_keyboard"]
+        self.assertEqual(len(rows), 5)
+        self.assertEqual([len(row) for row in rows], [1, 1, 1, 1, 1])
+        self.assertEqual(rows[0][0]["callback_data"], "xgroup:0")
+        self.assertEqual(rows[-1][0]["callback_data"], "xgroup:4")
+
+    def test_bare_learn_command_sends_group_picker(self):
+        sent_messages = []
+
+        with patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                (str(chat_id), text, reply_markup)
+            ),
+        ):
+            scanner.handle_explain_command(
+                "TOKEN",
+                "777",
+                "/learn",
+                source_chat={"id": "777", "type": "private"},
+                from_user={"id": 777},
+            )
+
+        self.assertIn("What do you want to understand?", sent_messages[0][1])
+        self.assertEqual(len(sent_messages[0][2]["inline_keyboard"]), 5)
+
+    def test_explain_group_callback_sends_concepts_three_per_row(self):
+        sent_messages = []
+        callback_query = {
+            "id": "callback-1",
+            "message": {"chat": {"id": "777"}, "message_id": 44},
+            "from": {"id": 777},
+        }
+
+        with patch.object(scanner, "answer_telegram_callback") as answer_callback, patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                (str(chat_id), text, reply_markup)
+            ),
+        ), patch.object(scanner, "clear_callback_message_keyboard") as clear_keyboard:
+            handled = scanner.handle_explain_group_callback("TOKEN", callback_query, "0")
+
+        self.assertTrue(handled)
+        answer_callback.assert_called_once_with("TOKEN", "callback-1")
+        clear_keyboard.assert_called_once_with("TOKEN", callback_query)
+        rows = sent_messages[0][2]["inline_keyboard"]
+        self.assertEqual([len(row) for row in rows], [3, 3, 1])
+        self.assertEqual(rows[0][0]["text"], "Candle")
+        self.assertEqual(rows[0][0]["callback_data"], "xconcept:candle")
+        self.assertEqual(rows[-1][0]["callback_data"], "xconcept:market_structure")
+
+    def test_explain_concept_callback_sends_existing_concept_response(self):
+        callback_query = {
+            "id": "callback-1",
+            "message": {"chat": {"id": "777"}, "message_id": 44},
+            "from": {"id": 777},
+        }
+
+        with patch.object(scanner, "answer_telegram_callback") as answer_callback, patch.object(
+            scanner, "send_explain_command_response"
+        ) as send_response, patch.object(scanner, "clear_callback_message_keyboard") as clear_keyboard:
+            handled = scanner.handle_explain_concept_callback("TOKEN", callback_query, "volume_spike")
+
+        self.assertTrue(handled)
+        answer_callback.assert_called_once_with("TOKEN", "callback-1")
+        clear_keyboard.assert_called_once_with("TOKEN", callback_query)
+        self.assertEqual(send_response.call_args.args[0:2], ("TOKEN", "777"))
+        self.assertIn("<b>Volume Spike</b>", send_response.call_args.args[2])
+        self.assertEqual(send_response.call_args.kwargs["concept_key"], "volume_spike")
+
+    def test_every_explanation_registry_key_is_grouped_exactly_once(self):
+        grouped_keys = [
+            concept_key
+            for _group_label, concept_keys in scanner.CONCEPT_GROUPS
+            for concept_key in concept_keys
+        ]
+
+        self.assertEqual(set(grouped_keys), set(scanner.available_concepts()))
+        self.assertEqual(len(grouped_keys), len(set(grouped_keys)))
+
+    def test_typed_explain_concept_still_uses_existing_response_path(self):
+        with patch.object(scanner, "send_explain_command_response") as send_response:
+            scanner.handle_explain_command(
+                "TOKEN",
+                "777",
+                "/explain rsi",
+                source_chat={"id": "777", "type": "private"},
+                from_user={"id": 777},
+            )
+
+        self.assertIn("<b>RSI</b>", send_response.call_args.args[2])
+        self.assertEqual(send_response.call_args.kwargs["concept_key"], "rsi")
+
     def test_process_telegram_commands_routes_learn_command(self):
         state = {}
         sent_messages = []
