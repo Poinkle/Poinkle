@@ -7,6 +7,7 @@ import html
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import NamedTuple
 from zoneinfo import ZoneInfo
 
 try:
@@ -38,6 +39,22 @@ LAST_RESEARCH_CARD_DATA = {}
 TELEGRAM_COMMAND_JOB_QUEUE = deque()
 TELEGRAM_HTTP_SESSION = None
 COINGECKO_COIN_METADATA_CACHE = {}
+
+
+class ScanSymbolResult(NamedTuple):
+    previous_candle: list
+    candle: list
+    alerts: list
+    ema_21: float
+    ema_55: float
+    current_rsi: float
+    current_atr_14: float
+    volume_avg: float
+    range_low: float
+    range_high: float
+    closed_candles: list
+    key_levels: dict
+    signal_state: dict
 
 PROJECT_DIR = Path(__file__).resolve().parent
 if str(PROJECT_DIR) not in sys.path:
@@ -8989,21 +9006,20 @@ def render_whynot_failed_attempt_line(symbol, attempt):
 
 
 def evaluate_whynot_scorecard(exchange, symbol, state=None):
-    (
-        _previous_candle,
-        candle,
-        alerts,
-        ema_21,
-        ema_55,
-        current_rsi,
-        current_atr_14,
-        volume_avg,
-        range_low,
-        range_high,
-        closed_candles,
-        key_levels,
-        signal_state,
-    ) = scan_symbol(exchange, symbol)
+    scan_result = scan_symbol(exchange, symbol)
+    _previous_candle = scan_result.previous_candle
+    candle = scan_result.candle
+    alerts = scan_result.alerts
+    ema_21 = scan_result.ema_21
+    ema_55 = scan_result.ema_55
+    current_rsi = scan_result.current_rsi
+    current_atr_14 = scan_result.current_atr_14
+    volume_avg = scan_result.volume_avg
+    range_low = scan_result.range_low
+    range_high = scan_result.range_high
+    closed_candles = scan_result.closed_candles
+    key_levels = scan_result.key_levels
+    signal_state = scan_result.signal_state
 
     directional_group = strongest_directional_lightweight_group(alerts)
     range_location, range_position = get_range_location(candle[4], range_low, range_high)
@@ -9813,20 +9829,20 @@ def scan_symbol(exchange, symbol):
     volume_average = signal_state["volume_average"]
     alerts = signal_state["alerts"]
 
-    return (
-        previous_closed,
-        latest_closed,
-        alerts,
-        current_ema_21,
-        current_ema_55,
-        current_rsi,
-        current_atr_14,
-        volume_average,
-        range_low,
-        range_high,
-        closed_candles,
-        key_levels,
-        signal_state,
+    return ScanSymbolResult(
+        previous_candle=previous_closed,
+        candle=latest_closed,
+        alerts=alerts,
+        ema_21=current_ema_21,
+        ema_55=current_ema_55,
+        current_rsi=current_rsi,
+        current_atr_14=current_atr_14,
+        volume_avg=volume_average,
+        range_low=range_low,
+        range_high=range_high,
+        closed_candles=closed_candles,
+        key_levels=key_levels,
+        signal_state=signal_state,
     )
 
 
@@ -9872,29 +9888,19 @@ def run_once(exchange, telegram_token, telegram_chat_id, state, poll_telegram_du
             scanned_symbols += 1
             symbol_state = state.setdefault(symbol, {})
             scan_result = scan_symbol(exchange, symbol)
-            (
-                previous_candle,
-                candle,
-                alerts,
-                ema_21,
-                ema_55,
-                current_rsi,
-                current_atr_14,
-                volume_avg,
-                range_low,
-                range_high,
-            ) = scan_result[:10]
-            alert_candles = scan_result[10] if len(scan_result) > 10 else [previous_candle, candle]
-            key_levels = (
-                scan_result[11]
-                if len(scan_result) > 11
-                else {"support": [range_low], "resistance": [range_high]}
-            )
-            signal_state = (
-                scan_result[12]
-                if len(scan_result) > 12
-                else evaluate_lightweight_signal_state(alert_candles[:-2], alert_candles)
-            )
+            previous_candle = scan_result.previous_candle
+            candle = scan_result.candle
+            alerts = scan_result.alerts
+            ema_21 = scan_result.ema_21
+            ema_55 = scan_result.ema_55
+            current_rsi = scan_result.current_rsi
+            current_atr_14 = scan_result.current_atr_14
+            volume_avg = scan_result.volume_avg
+            range_low = scan_result.range_low
+            range_high = scan_result.range_high
+            alert_candles = scan_result.closed_candles
+            key_levels = scan_result.key_levels
+            signal_state = scan_result.signal_state
             support_levels = key_levels.get("support", [])
             resistance_levels = key_levels.get("resistance", [])
             candle_id = str(candle[0])

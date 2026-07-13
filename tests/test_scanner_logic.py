@@ -61,20 +61,20 @@ def scan_result_for_alerts(alerts=None, current_close=101, current_volume=250, c
         "volume_average": 100,
         "volume_multiple": current_volume / 100,
     }
-    return (
-        previous_candle,
-        current_candle,
-        alerts,
-        101,
-        99,
-        55,
-        1,
-        100,
-        90,
-        110,
-        [previous_candle, current_candle],
-        {"support": [90], "resistance": [110]},
-        signal_state,
+    return scanner.ScanSymbolResult(
+        previous_candle=previous_candle,
+        candle=current_candle,
+        alerts=alerts,
+        ema_21=101,
+        ema_55=99,
+        current_rsi=55,
+        current_atr_14=1,
+        volume_avg=100,
+        range_low=90,
+        range_high=110,
+        closed_candles=[previous_candle, current_candle],
+        key_levels={"support": [90], "resistance": [110]},
+        signal_state=signal_state,
     )
 
 
@@ -506,6 +506,30 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertEqual(exchange.calls, [("BTC/USD", scanner.TIMEFRAME, scanner.CANDLE_LIMIT)])
         self.assertEqual(result[1], candles[-2])
+
+    def test_scan_symbol_result_fields_are_accessible_by_name(self):
+        candles = make_ohlcv_series([100 + index for index in range(120)])
+
+        class RecordingCoinbase:
+            def fetch_ohlcv(self, symbol, timeframe, limit):
+                return candles[-limit:]
+
+        result = scanner.scan_symbol(RecordingCoinbase(), "BTC/USD")
+
+        self.assertIsInstance(result, scanner.ScanSymbolResult)
+        self.assertEqual(result.previous_candle, result[0])
+        self.assertEqual(result.candle, result[1])
+        self.assertEqual(result.alerts, result[2])
+        self.assertEqual(result.ema_21, result[3])
+        self.assertEqual(result.ema_55, result[4])
+        self.assertEqual(result.current_rsi, result[5])
+        self.assertEqual(result.current_atr_14, result[6])
+        self.assertEqual(result.volume_avg, result[7])
+        self.assertEqual(result.range_low, result[8])
+        self.assertEqual(result.range_high, result[9])
+        self.assertEqual(result.closed_candles, result[10])
+        self.assertEqual(result.key_levels, result[11])
+        self.assertEqual(result.signal_state, result[12])
 
     def test_get_current_market_price_uses_kraken_ticker_for_resolved_kraken_symbol(self):
         class FailingCoinbase:
@@ -1050,20 +1074,20 @@ class ScannerLogicTests(unittest.TestCase):
         candles[-1] = candle(candles[-1][0], 98.5, 100.0, 98.0, 99.5, 250)
         signal_state = scanner.evaluate_lightweight_signal_state(candles[:-1], candles)
 
-        scan_result = (
-            candles[-2],
-            candles[-1],
-            signal_state["alerts"],
-            signal_state["ema_21"],
-            signal_state["ema_55"],
-            signal_state["rsi"],
-            1.0,
-            signal_state["volume_average"],
-            90.0,
-            110.0,
-            candles,
-            {"support": [90.0], "resistance": [110.0]},
-            signal_state,
+        scan_result = scanner.ScanSymbolResult(
+            previous_candle=candles[-2],
+            candle=candles[-1],
+            alerts=signal_state["alerts"],
+            ema_21=signal_state["ema_21"],
+            ema_55=signal_state["ema_55"],
+            current_rsi=signal_state["rsi"],
+            current_atr_14=1.0,
+            volume_avg=signal_state["volume_average"],
+            range_low=90.0,
+            range_high=110.0,
+            closed_candles=candles,
+            key_levels={"support": [90.0], "resistance": [110.0]},
+            signal_state=signal_state,
         )
 
         with patch.object(scanner, "scan_symbol", return_value=scan_result):
@@ -1086,21 +1110,55 @@ class ScannerLogicTests(unittest.TestCase):
         }
         previous_candle = candle(1_700_000_000_000, 99.0, 101.0, 98.0, 99.0, 100)
         current_candle = candle(1_700_086_400_000, 99.0, 102.0, 94.0, current_price, 100)
-        return (
-            previous_candle,
-            current_candle,
-            signal_state["alerts"],
-            101.0,
-            103.0,
-            52.0,
-            1.0,
-            100.0,
-            80.0,
-            120.0,
-            [previous_candle, current_candle],
-            {"support": [95.0], "resistance": [110.0]},
-            signal_state,
+        return scanner.ScanSymbolResult(
+            previous_candle=previous_candle,
+            candle=current_candle,
+            alerts=signal_state["alerts"],
+            ema_21=101.0,
+            ema_55=103.0,
+            current_rsi=52.0,
+            current_atr_14=1.0,
+            volume_avg=100.0,
+            range_low=80.0,
+            range_high=120.0,
+            closed_candles=[previous_candle, current_candle],
+            key_levels={"support": [95.0], "resistance": [110.0]},
+            signal_state=signal_state,
         )
+
+    def test_whynot_and_run_once_use_named_scan_result_access(self):
+        scan_result = self.whynot_scan_result()
+
+        with patch.object(scanner, "scan_symbol", return_value=scan_result):
+            scorecard = scanner.evaluate_whynot_scorecard(object(), "BTC/USD", state={})
+
+        self.assertEqual(scorecard["candle"], scan_result.candle)
+        self.assertEqual(scorecard["scorecard"], scan_result.signal_state["scorecard"])
+
+        class NamedOnlyScanResult:
+            def __init__(self, result):
+                self.__dict__.update(result._asdict())
+
+            def __getitem__(self, key):
+                raise AssertionError("run_once should use named scan result fields")
+
+            def __len__(self):
+                raise AssertionError("run_once should not inspect scan result length")
+
+            def __iter__(self):
+                raise AssertionError("run_once should not unpack scan result positionally")
+
+        original_watchlist = scanner.WATCHLIST[:]
+        scanner.WATCHLIST = ["BTC/USD"]
+        try:
+            with patch.object(scanner, "scan_symbol", return_value=NamedOnlyScanResult(scan_result)), patch.object(
+                scanner, "get_current_market_price", return_value=scan_result.candle[4]
+            ), patch.object(scanner, "build_level_alerts", return_value=[]), patch.object(
+                scanner, "load_bot_config", return_value={"live_alerts_enabled": True}
+            ), patch.object(scanner, "save_state"):
+                scanner.run_once(object(), "TOKEN", "MAIN_CHAT", {})
+        finally:
+            scanner.WATCHLIST = original_watchlist
 
     def test_whynot_zone_state_renders_pending_setup_direction(self):
         state = {
@@ -1140,16 +1198,17 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("Price isn't at a zone. There's nothing to confirm yet.", message)
 
     def test_whynot_still_renders_rsi_extreme_reading(self):
-        scan_result = list(self.whynot_scan_result())
-        scan_result[12]["scorecard"] = [
+        signal_state = self.whynot_scan_result().signal_state.copy()
+        signal_state["scorecard"] = [
             {"type": "volume_spike", "state": "fail", "reason": "0.8x, no spike"},
             {"type": "ema_cross_above", "state": "fail", "reason": "EMA 21 below EMA 55; no fresh bullish cross"},
             {"type": "ema_cross_below", "state": "fail", "reason": "EMA 21 below EMA 55; no fresh bearish cross"},
             {"type": "rsi_cross_above_70", "state": "pass", "reason": "RSI 72.0"},
             {"type": "rsi_cross_below_30", "state": "fail", "reason": "RSI 72.0; no cross below 30"},
         ]
+        scan_result = self.whynot_scan_result()._replace(signal_state=signal_state)
 
-        with patch.object(scanner, "scan_symbol", return_value=tuple(scan_result)):
+        with patch.object(scanner, "scan_symbol", return_value=scan_result):
             message = scanner.build_whynot_command_message(object(), "BTC/USD", state={})
 
         self.assertIn("RSI extreme", message)
