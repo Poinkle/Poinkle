@@ -5767,6 +5767,12 @@ def start_orientation_keyboard():
                     "callback_data": f"{ONBOARD_CALLBACK_PREFIX}:browsing",
                 }
             ],
+            [
+                {
+                    "text": "🔍 Verify a creator's account",
+                    "callback_data": f"{PANEL_CALLBACK_PREFIX}:verify",
+                }
+            ],
         ]
     }
 
@@ -7509,7 +7515,73 @@ def upsert_start_user_profile(user_id, from_user=None):
     return profile
 
 
-def handle_start_command(telegram_token, telegram_chat_id, from_user=None):
+def send_verify_creator_picker(telegram_token, chat_id, intro_line=None):
+    creators = load_creators()
+    if not creators:
+        send_telegram_message(telegram_token, chat_id, "No creators are registered with Poinkle yet.")
+        return
+    prompt = "Which creator's accounts do you want to check?"
+    if intro_line:
+        prompt = f"{intro_line}\n\n{prompt}"
+    send_telegram_message(
+        telegram_token,
+        chat_id,
+        prompt,
+        reply_markup=creator_picker_keyboard(creators),
+    )
+
+
+def handle_start_payload(telegram_token, destination_chat_id, payload):
+    payload = str(payload or "").strip()
+    if not payload:
+        send_start_orientation_card(telegram_token, destination_chat_id)
+        return
+
+    normalized_payload = payload.lower()
+    if normalized_payload == "verify":
+        send_verify_creator_picker(
+            telegram_token,
+            destination_chat_id,
+            intro_line="Checking whether an account is really who it says it is? Tap a creator.",
+        )
+        return
+    if normalized_payload.startswith("verify_"):
+        creator_key = payload[len("verify_") :].strip()
+        creators = load_creators()
+        creator = creators.get(creator_key)
+        if creator:
+            send_telegram_message(
+                telegram_token,
+                destination_chat_id,
+                render_creator_handle_list_message(creator),
+                reply_markup=creator_account_keyboard(creator_key, creator),
+            )
+            return
+        send_verify_creator_picker(telegram_token, destination_chat_id)
+        return
+    if normalized_payload == "learn":
+        handle_explain_command(
+            telegram_token,
+            destination_chat_id,
+            "/explain",
+            source_chat={"id": destination_chat_id, "type": "private"},
+        )
+        return
+    if normalized_payload == "commands":
+        send_command_panel(telegram_token, destination_chat_id)
+        return
+
+    send_start_orientation_card(telegram_token, destination_chat_id)
+
+
+def start_payload_from_message_text(message_text):
+    parts = str(message_text or "").strip().split(maxsplit=1)
+    if len(parts) < 2:
+        return ""
+    return parts[1].strip().split()[0]
+
+
+def handle_start_command(telegram_token, telegram_chat_id, message_text="/start", from_user=None):
     destination_chat_id = telegram_user_id(
         {"id": telegram_chat_id, "type": "private"},
         from_user,
@@ -7520,7 +7592,7 @@ def handle_start_command(telegram_token, telegram_chat_id, from_user=None):
     except Exception as error:
         log_warn(f"Could not update /start profile for {telegram_chat_id}: {error}")
 
-    send_start_orientation_card(telegram_token, destination_chat_id)
+    handle_start_payload(telegram_token, destination_chat_id, start_payload_from_message_text(message_text))
 
 
 def should_send_non_command_orientation(user_id, now=None):
@@ -9882,7 +9954,7 @@ def process_telegram_commands(
         elif handle_skill_level_reply(telegram_token, chat, text, from_user):
             pass
         elif lower_text.startswith("/start"):
-            handle_start_command(telegram_token, chat_id, from_user=from_user)
+            handle_start_command(telegram_token, chat_id, text, from_user=from_user)
         elif lower_text.startswith("/help"):
             handle_help_command(telegram_token, chat_id)
         elif not text.startswith("/"):

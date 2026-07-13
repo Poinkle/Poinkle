@@ -3011,9 +3011,13 @@ class ScannerLogicTests(unittest.TestCase):
                 "📈 I know the basics, I want to read charts better",
                 "🎯 I trade already, I want a second set of eyes",
                 "🤷 Just looking around",
+                "🔍 Verify a creator's account",
             ],
         )
-        self.assertEqual(callbacks, ["onboard:beginner", "onboard:basics", "onboard:trader", "onboard:browsing"])
+        self.assertEqual(
+            callbacks,
+            ["onboard:beginner", "onboard:basics", "onboard:trader", "onboard:browsing", "panel:verify"],
+        )
 
     def test_command_panel_opens_from_callback_and_commands_command(self):
         callback_query = {
@@ -5266,6 +5270,141 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(profiles["777"]["first_seen"], "2026-07-08T12:00:00+00:00")
         self.assertEqual(profiles["777"]["last_start"], "2026-07-08T12:00:00+00:00")
         self.assertTrue(profiles["777"]["onboarded"])
+
+    def test_start_verify_payload_opens_creator_picker_not_orientation(self):
+        sent_messages = []
+        creators = {
+            "mike_knows": {
+                "display_name": "Mike Knows",
+                "community": "The Inner Circle",
+                "accounts": [{"platform": "telegram", "handle": "@MikeKnows_Official"}],
+                "registered_at": "2026-07-13",
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            creators_path = Path(tmpdir) / "creators.json"
+            creators_path.write_text(json.dumps(creators))
+            with patch.object(scanner, "CREATORS_FILE", creators_path), patch.object(
+                scanner, "USER_PROFILES_FILE", Path(tmpdir) / "user_profiles.json"
+            ), patch.object(
+                scanner,
+                "send_telegram_message",
+                side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                    (str(chat_id), text, reply_markup)
+                ),
+            ):
+                scanner.handle_start_command("TOKEN", "999", "/start verify", from_user={"id": 777})
+
+        self.assertEqual(sent_messages[0][0], "777")
+        self.assertIn("Checking whether an account is really who it says it is? Tap a creator.", sent_messages[0][1])
+        self.assertIn("Which creator's accounts do you want to check?", sent_messages[0][1])
+        self.assertEqual(sent_messages[0][2], scanner.creator_picker_keyboard(creators))
+        self.assertNotEqual(sent_messages[0][1], scanner.start_orientation_text())
+
+    def test_start_verify_creator_payload_opens_creator_account_list(self):
+        sent_messages = []
+        creators = {
+            "mike_knows": {
+                "display_name": "Mike Knows",
+                "community": "The Inner Circle",
+                "accounts": [
+                    {"platform": "telegram", "handle": "@MikeKnows_Official"},
+                    {"platform": "tiktok", "handle": "@mikeknows"},
+                ],
+                "registered_at": "2026-07-13",
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            creators_path = Path(tmpdir) / "creators.json"
+            creators_path.write_text(json.dumps(creators))
+            with patch.object(scanner, "CREATORS_FILE", creators_path), patch.object(
+                scanner, "USER_PROFILES_FILE", Path(tmpdir) / "user_profiles.json"
+            ), patch.object(
+                scanner,
+                "send_telegram_message",
+                side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                    (str(chat_id), text, reply_markup)
+                ),
+            ):
+                scanner.handle_start_command("TOKEN", "999", "/start verify_mike_knows", from_user={"id": 777})
+
+        self.assertEqual(sent_messages[0][1], scanner.render_creator_handle_list_message(creators["mike_knows"]))
+        self.assertEqual(sent_messages[0][2], scanner.creator_account_keyboard("mike_knows", creators["mike_knows"]))
+
+    def test_start_verify_unknown_creator_falls_back_to_picker(self):
+        sent_messages = []
+        creators = {
+            "mike_knows": {
+                "display_name": "Mike Knows",
+                "community": "The Inner Circle",
+                "accounts": [{"platform": "telegram", "handle": "@MikeKnows_Official"}],
+                "registered_at": "2026-07-13",
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            creators_path = Path(tmpdir) / "creators.json"
+            creators_path.write_text(json.dumps(creators))
+            with patch.object(scanner, "CREATORS_FILE", creators_path), patch.object(
+                scanner, "USER_PROFILES_FILE", Path(tmpdir) / "user_profiles.json"
+            ), patch.object(
+                scanner,
+                "send_telegram_message",
+                side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                    (str(chat_id), text, reply_markup)
+                ),
+            ):
+                scanner.handle_start_command("TOKEN", "999", "/start verify_nonexistent", from_user={"id": 777})
+
+        self.assertEqual(sent_messages[0][1], "Which creator's accounts do you want to check?")
+        self.assertEqual(sent_messages[0][2], scanner.creator_picker_keyboard(creators))
+
+    def test_start_learn_payload_opens_explain_picker(self):
+        sent_messages = []
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            scanner, "USER_PROFILES_FILE", Path(tmpdir) / "user_profiles.json"
+        ), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                (str(chat_id), text, reply_markup)
+            ),
+        ):
+            scanner.handle_start_command("TOKEN", "999", "/start learn", from_user={"id": 777})
+
+        self.assertEqual(sent_messages[0], ("777", scanner.explain_group_prompt(), scanner.explain_group_keyboard()))
+
+    def test_start_commands_payload_opens_command_panel(self):
+        sent_messages = []
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            scanner, "USER_PROFILES_FILE", Path(tmpdir) / "user_profiles.json"
+        ), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                (str(chat_id), text, reply_markup)
+            ),
+        ):
+            scanner.handle_start_command("TOKEN", "999", "/start commands", from_user={"id": 777})
+
+        self.assertEqual(sent_messages[0], ("777", scanner.command_panel_text(), scanner.command_panel_keyboard()))
+
+    def test_start_unknown_payload_shows_orientation_card(self):
+        sent_messages = []
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            scanner, "USER_PROFILES_FILE", Path(tmpdir) / "user_profiles.json"
+        ), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                (str(chat_id), text, reply_markup)
+            ),
+        ):
+            scanner.handle_start_command("TOKEN", "999", "/start nonsense", from_user={"id": 777})
+
+        self.assertEqual(sent_messages, [("777", scanner.start_orientation_text(), scanner.start_orientation_keyboard())])
 
     def test_start_command_sends_orientation_card_without_banner(self):
         sent_messages = []
