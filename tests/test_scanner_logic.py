@@ -16,6 +16,20 @@ spec.loader.exec_module(scanner)
 import prb_card_renderer
 
 
+class FakeTelegramResponse:
+    status_code = 200
+    text = "OK"
+
+
+class FakeTelegramSession:
+    def __init__(self, posted):
+        self.posted = posted
+
+    def post(self, url, **kwargs):
+        self.posted.append((url, kwargs))
+        return FakeTelegramResponse()
+
+
 def candle(timestamp, open_price, high, low, close, volume):
     return [timestamp, open_price, high, low, close, volume]
 
@@ -1561,19 +1575,10 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(scanner.signal_followups(state), {})
 
     def test_telegram_sends_html_parse_mode_for_messages_and_photos(self):
-        class FakeResponse:
-            status_code = 200
-            text = "OK"
-
         posted = []
-
-        class FakeRequests:
-            @staticmethod
-            def post(url, **kwargs):
-                posted.append((url, kwargs))
-                return FakeResponse()
-
-        with tempfile.NamedTemporaryFile() as photo, patch.object(scanner, "requests", FakeRequests):
+        with tempfile.NamedTemporaryFile() as photo, patch.object(
+            scanner, "TELEGRAM_HTTP_SESSION", FakeTelegramSession(posted)
+        ):
             scanner.send_telegram_message("TOKEN", "999", "<b>Hello</b>")
             self.assertTrue(scanner.send_telegram_photo("TOKEN", "999", photo.name, caption="<b>Card</b>"))
 
@@ -1582,19 +1587,10 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(posted[1][1]["data"]["parse_mode"], "HTML")
 
     def test_telegram_media_group_uses_multipart_attachments(self):
-        class FakeResponse:
-            status_code = 200
-            text = "OK"
-
         posted = []
-
-        class FakeRequests:
-            @staticmethod
-            def post(url, **kwargs):
-                posted.append((url, kwargs))
-                return FakeResponse()
-
-        with tempfile.TemporaryDirectory() as tmpdir, patch.object(scanner, "requests", FakeRequests):
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            scanner, "TELEGRAM_HTTP_SESSION", FakeTelegramSession(posted)
+        ):
             first = Path(tmpdir) / "first.png"
             second = Path(tmpdir) / "second.png"
             first.write_bytes(b"one")
@@ -1616,19 +1612,8 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(sorted(kwargs["files"].keys()), ["photo0", "photo1"])
 
     def test_register_bot_commands_posts_public_command_list(self):
-        class FakeResponse:
-            status_code = 200
-            text = "OK"
-
         posted = []
-
-        class FakeRequests:
-            @staticmethod
-            def post(url, **kwargs):
-                posted.append((url, kwargs))
-                return FakeResponse()
-
-        with patch.object(scanner, "requests", FakeRequests):
+        with patch.object(scanner, "TELEGRAM_HTTP_SESSION", FakeTelegramSession(posted)):
             self.assertTrue(scanner.register_bot_commands("TOKEN"))
 
         url, kwargs = posted[0]
@@ -1640,9 +1625,17 @@ class ScannerLogicTests(unittest.TestCase):
                 "snapshot",
                 "snap",
                 "research",
+                "whynot",
+                "why",
                 "levels",
                 "alerts",
+                "alertlevel",
                 "myalerts",
+                "watch",
+                "unwatch",
+                "clearwatch",
+                "mywatch",
+                "watching",
                 "mike",
                 "guide",
                 "explain",
@@ -1833,7 +1826,7 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(status, "Trade Confirmed")
         self.assertGreaterEqual(metrics["break_strength_score"], 70)
 
-    def test_monitor_active_trades_mutes_telegram_but_updates_state_when_live(self):
+    def test_monitor_active_trades_stays_disabled_when_tracking_telegram_is_off(self):
         class TrackingExchange:
             def __init__(self, candles):
                 self.candles = candles
@@ -1865,17 +1858,19 @@ class ScannerLogicTests(unittest.TestCase):
             }
         }
 
-        with patch.object(scanner, "load_bot_config", return_value={"live_alerts_enabled": True}), patch.object(
+        with patch.object(scanner, "TRADE_TRACKING_TELEGRAM_ENABLED", False), patch.object(
+            scanner, "load_bot_config", return_value={"live_alerts_enabled": True}
+        ), patch.object(
             scanner, "send_telegram_message", side_effect=AssertionError("tracking send should be muted")
         ), patch.object(scanner, "save_state") as save_state:
             scanner.monitor_active_trades(TrackingExchange(candles), "TOKEN", "MAIN_CHAT", state)
 
         trade = state["__active_trades"]["BTC/USD"]
-        self.assertEqual(trade["last_status"], "Weakening")
-        self.assertGreater(trade["last_monitor_at"], 0)
-        self.assertIsNotNone(trade["last_rsi"])
+        self.assertIsNone(trade["last_status"])
+        self.assertEqual(trade["last_monitor_at"], 0)
+        self.assertEqual(trade["last_rsi"], 50)
         self.assertEqual(trade["last_volume"], 100)
-        save_state.assert_called()
+        save_state.assert_not_called()
 
     def test_levels_command_returns_market_levels_not_exact_key_levels(self):
         scanner.TEST_MODE = True
@@ -2558,7 +2553,7 @@ class ScannerLogicTests(unittest.TestCase):
             }
         ]
 
-        def fake_handle(exchange, token, chat_id, text, source_chat=None):
+        def fake_handle(exchange, token, chat_id, text, source_chat=None, from_user=None):
             sent_messages.append(
                 (
                     chat_id,
@@ -3287,7 +3282,7 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertTrue(message.startswith("🐷 POINKLE RESEARCH BRIEF\n━━━━━━━━━━━━━━━━━━"))
         self.assertIn("PRB: PRB-0002", message)
         self.assertIn("Title: ETH Market-Structure Research Brief", message)
-        self.assertIn("Status: Market-Structure Brief — Full Research Pending", message)
+        self.assertIn("Status: Market-Structure Brief", message)
         self.assertIn("Overall Rating:", message)
         self.assertIn("Long-Term Thesis:", message)
         self.assertIn("Short-Term Thesis:", message)
@@ -3301,7 +3296,7 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("📊 POINKLE SCORECARD", message)
         self.assertIn("📌 RESEARCH CONCLUSION", message)
         self.assertIn("━━━━━━━━━━━━━━━━━━", message)
-        self.assertIn("Full Research Pending", message)
+        self.assertNotIn("Full Research Pending", message)
         self.assertIn("⚠️ Not Financial Advice", message)
         self.assertIn("🐷 Poinkle did the research.", message)
         self.assertIn("🎓 The decision is yours.", message)
@@ -3905,12 +3900,14 @@ class ScannerLogicTests(unittest.TestCase):
                 volume_avg=100,
             )
 
-        with patch.object(scanner, "render_prb_cards", return_value=["/tmp/prb.png"]) as prb_render, patch.object(
+        with patch.dict(scanner.LAST_RESEARCH_CARD_DATA, {"BTC/USD": [{"title": "The Read"}]}), patch.object(
+            scanner, "render_research_cards", return_value=["/tmp/prb.png"]
+        ) as prb_render, patch.object(
             scanner,
             "send_telegram_photo",
             side_effect=lambda token, chat_id, path: sent_photos.append((str(chat_id), path)) or True,
         ):
-            scanner.send_research_cards("TOKEN", "999", "BTC PRB")
+            scanner.send_research_cards("TOKEN", "999", "BTC PRB", symbol="BTC/USD")
 
         with patch.object(scanner, "render_reference_card", return_value="/tmp/reference.png") as reference_render, patch.object(
             scanner,
@@ -4574,25 +4571,24 @@ class ScannerLogicTests(unittest.TestCase):
         )
         send_ack.assert_called_once_with("TOKEN", "111", "research", "/research BTC")
 
-    def test_personal_watchlist_alerts_respect_user_severity_preference(self):
+    def test_personal_watchlist_alert_respects_alertlevel_building(self):
         sent_alert_groups = []
-        alerts = [
-            confirmed_break_alert(),
-            {"type": "ema_cross_above", "label": "EMA 21 crossed above EMA 55"},
-        ]
+        alert = severity_confirmed_break_alert(
+            direction="breakout",
+            ema_trend="Neutral EMA trend, not aligned",
+            volume_multiple=1.0,
+        )
+        alerts = [alert]
 
-        with patch.object(scanner, "users_watching_symbol", return_value=["111", "222"]), patch.object(
+        with patch.object(scanner, "users_watching_symbol", return_value=["111"]), patch.object(
             scanner,
             "user_preference",
-            side_effect=lambda user_id, key, default=None: {
-                "111": scanner.ALERT_SEVERITY_DEVELOPING,
-                "222": scanner.ALERT_SEVERITY_STRONG,
-            }.get(str(user_id), default),
+            return_value=scanner.ALERT_SEVERITY_BUILDING,
         ), patch.object(
             scanner,
             "send_alert_group_to_chat",
             side_effect=lambda token, chat_id, symbol, candle_arg, alert_group, *args, **kwargs: sent_alert_groups.append(
-                (str(chat_id), symbol, [alert["type"] for alert in alert_group])
+                (str(chat_id), symbol, scanner.alert_severity_tier(alert_group), scanner.level_break_agreement_score(alert_group))
             )
             or True,
         ), patch.object(scanner, "save_state"):
@@ -4609,9 +4605,9 @@ class ScannerLogicTests(unittest.TestCase):
             )
 
         self.assertEqual(delivered, ["111"])
-        self.assertEqual(sent_alert_groups, [("111", "BTC/USD", ["live:breakout:100:confirmation", "ema_cross_above"])])
+        self.assertEqual(sent_alert_groups, [("111", "BTC/USD", scanner.ALERT_SEVERITY_BUILDING, 0)])
 
-    def test_personal_watchlist_alerts_send_when_group_meets_user_severity_preference(self):
+    def test_personal_watchlist_alert_respects_alertlevel_strong(self):
         sent_alert_groups = []
         alert = severity_confirmed_break_alert(
             direction="breakout",
@@ -4648,11 +4644,92 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(delivered, ["222"])
         self.assertEqual(sent_alert_groups, [("222", "BTC/USD", scanner.ALERT_SEVERITY_STRONG)])
 
+    def test_alertlevel_strong_user_does_not_receive_low_agreement_break(self):
+        sent_alert_groups = []
+        alert = severity_confirmed_break_alert(
+            direction="breakout",
+            ema_trend="Neutral EMA trend, not aligned",
+            volume_multiple=1.0,
+        )
+        alerts = [alert]
+
+        with patch.object(scanner, "users_watching_symbol", return_value=["222"]), patch.object(
+            scanner,
+            "user_preference",
+            return_value=scanner.ALERT_SEVERITY_STRONG,
+        ), patch.object(
+            scanner,
+            "send_alert_group_to_chat",
+            side_effect=lambda *args, **kwargs: sent_alert_groups.append(args) or True,
+        ), patch.object(scanner, "save_state"):
+            delivered = scanner.deliver_personal_watchlist_alerts(
+                {},
+                "TOKEN",
+                "BTC/USD",
+                candle(0, 100, 105, 99, 104, 250),
+                alerts,
+                ema_21=101,
+                ema_55=99,
+                current_rsi=58,
+                volume_avg=100,
+            )
+
+        self.assertEqual(delivered, [])
+        self.assertEqual(sent_alert_groups, [])
+
+    def test_alertlevel_strong_user_receives_clean_high_agreement_break(self):
+        sent_alert_groups = []
+        alert = severity_confirmed_break_alert(
+            direction="breakout",
+            ema_trend="Bullish EMA trend",
+            volume_multiple=2.5,
+        )
+        alert["secondary_timeframe_context"] = secondary_timeframe_context_for_bias("bullish")
+        alerts = [alert]
+
+        with patch.object(scanner, "users_watching_symbol", return_value=["222"]), patch.object(
+            scanner,
+            "user_preference",
+            return_value=scanner.ALERT_SEVERITY_STRONG,
+        ), patch.object(
+            scanner,
+            "send_alert_group_to_chat",
+            side_effect=lambda token, chat_id, symbol, candle_arg, alert_group, *args, **kwargs: sent_alert_groups.append(
+                (
+                    str(chat_id),
+                    symbol,
+                    scanner.alert_severity_tier(alert_group),
+                    [alert_item["type"] for alert_item in alert_group],
+                )
+            )
+            or True,
+        ), patch.object(scanner, "save_state"):
+            delivered = scanner.deliver_personal_watchlist_alerts(
+                {},
+                "TOKEN",
+                "BTC/USD",
+                candle(0, 100, 105, 99, 104, 250),
+                alerts,
+                ema_21=101,
+                ema_55=99,
+                current_rsi=58,
+                volume_avg=100,
+            )
+
+        self.assertEqual(delivered, ["222"])
+        self.assertEqual(
+            sent_alert_groups,
+            [("222", "BTC/USD", scanner.ALERT_SEVERITY_STRONG, ["live:breakout:100:confirmation"])],
+        )
+
     def test_research_command_sends_image_cards_when_renderer_succeeds(self):
         sent_groups = []
 
-        with patch.object(scanner, "build_research_command_message", return_value="AAVE PRB"), patch.object(
-            scanner, "render_prb_cards", return_value=["/tmp/prb-card-1.png", "/tmp/prb-card-2.png"]
+        with patch.object(scanner, "build_research_command_message", return_value="AAVE PRB"), patch.dict(
+            scanner.LAST_RESEARCH_CARD_DATA,
+            {"AAVE/USD": [{"title": "The Read"}]},
+        ), patch.object(
+            scanner, "render_research_cards", return_value=["/tmp/prb-card-1.png", "/tmp/prb-card-2.png"]
         ), patch.object(
             scanner,
             "send_telegram_media_group",
@@ -4674,6 +4751,7 @@ class ScannerLogicTests(unittest.TestCase):
 
     def test_research_cards_pass_snapshot_chart_to_prb_renderer(self):
         sent_groups = []
+        sent_photos = []
         captured = {}
         chart_data = {
             "candles": [
@@ -4687,20 +4765,24 @@ class ScannerLogicTests(unittest.TestCase):
             "ema55": [99, 100],
         }
 
-        def fake_render_prb_cards(prb_text, logo_path=None, output_dir=None, chart_path=None):
-            captured["prb_text"] = prb_text
+        def fake_render_research_cards(card_data, logo_path=None, output_dir=None):
+            captured["card_data"] = card_data
             captured["logo_path"] = logo_path
-            captured["chart_path"] = chart_path
             return ["/tmp/prb-card-with-chart.png"]
 
-        with patch.object(scanner, "generate_levels_chart", return_value="/tmp/prb-snapshot.png") as generate_chart, patch.object(
-            scanner, "render_prb_cards", side_effect=fake_render_prb_cards
+        with patch.object(scanner, "generate_levels_chart", return_value="/tmp/prb-snapshot.png") as generate_chart, patch.dict(
+            scanner.LAST_RESEARCH_CARD_DATA,
+            {"BTC/USD": [{"title": "The Read"}]},
+        ), patch.object(
+            scanner, "render_research_cards", side_effect=fake_render_research_cards
         ), patch.object(
             scanner,
             "send_telegram_media_group",
             side_effect=lambda token, chat_id, paths: sent_groups.append((str(chat_id), list(paths))) or True,
         ), patch.object(
-            scanner, "send_telegram_photo", side_effect=AssertionError("individual photos should not be sent")
+            scanner,
+            "send_telegram_photo",
+            side_effect=lambda token, chat_id, path: sent_photos.append((str(chat_id), path)) or True,
         ):
             self.assertTrue(
                 scanner.send_research_cards(
@@ -4713,21 +4795,24 @@ class ScannerLogicTests(unittest.TestCase):
             )
 
         generate_chart.assert_called_once()
+        self.assertEqual(sent_photos, [("999", "/tmp/prb-snapshot.png")])
+        self.assertEqual(captured["card_data"], [{"title": "The Read"}])
         self.assertEqual(captured["logo_path"], scanner.POINKLE_RESEARCH_EMBLEM_PATH)
-        self.assertEqual(captured["chart_path"], "/tmp/prb-snapshot.png")
         self.assertEqual(sent_groups, [("999", ["/tmp/prb-card-with-chart.png"])])
 
     def test_research_cards_fall_back_to_individual_photos_when_media_group_fails(self):
         sent_photos = []
 
-        with patch.object(scanner, "render_prb_cards", return_value=["/tmp/prb-card-1.png", "/tmp/prb-card-2.png"]), patch.object(
+        with patch.dict(scanner.LAST_RESEARCH_CARD_DATA, {"AAVE/USD": [{"title": "The Read"}]}), patch.object(
+            scanner, "render_research_cards", return_value=["/tmp/prb-card-1.png", "/tmp/prb-card-2.png"]
+        ), patch.object(
             scanner, "send_telegram_media_group", return_value=False
         ), patch.object(
             scanner,
             "send_telegram_photo",
             side_effect=lambda token, chat_id, path: sent_photos.append((str(chat_id), path)) or True,
         ):
-            self.assertTrue(scanner.send_research_cards("TOKEN", "999", "AAVE PRB"))
+            self.assertTrue(scanner.send_research_cards("TOKEN", "999", "AAVE PRB", symbol="AAVE/USD"))
 
         self.assertEqual(
             sent_photos,
@@ -4740,8 +4825,11 @@ class ScannerLogicTests(unittest.TestCase):
     def test_research_command_falls_back_to_text_when_renderer_fails(self):
         sent_messages = []
 
-        with patch.object(scanner, "build_research_command_message", return_value="AAVE PRB"), patch.object(
-            scanner, "render_prb_cards", side_effect=RuntimeError("render failed")
+        with patch.object(scanner, "build_research_command_message", return_value="AAVE PRB"), patch.dict(
+            scanner.LAST_RESEARCH_CARD_DATA,
+            {"AAVE/USD": [{"title": "The Read"}]},
+        ), patch.object(
+            scanner, "render_research_cards", side_effect=RuntimeError("render failed")
         ), patch.object(
             scanner, "send_telegram_photo", side_effect=AssertionError("no card should be sent")
         ), patch.object(
@@ -4861,9 +4949,9 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(scanner.normalize_symbol("ZEC"), "ZEC/USD")
         self.assertEqual(scanner.normalize_symbol("XMR"), "XMR/USD")
         self.assertEqual(scanner.normalize_symbol("LTC"), "LTC/USD")
-        self.assertEqual(scanner.normalize_symbol("XAU"), "XAU/USD")
-        self.assertEqual(scanner.normalize_symbol("XAO"), "XAU/USD")
-        self.assertEqual(scanner.normalize_symbol("GOLD"), "XAU/USD")
+        self.assertIsNone(scanner.normalize_symbol("XAU"))
+        self.assertIsNone(scanner.normalize_symbol("XAO"))
+        self.assertIsNone(scanner.normalize_symbol("GOLD"))
         self.assertIsNone(scanner.normalize_symbol("dogfi"))
         self.assertIsNone(scanner.normalize_symbol("NOTREAL"))
 
@@ -4879,7 +4967,7 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertFalse(hasattr(scanner, "LEVELS_SYMBOLS"))
         self.assertEqual(set(self.original_key_levels), set(scanner.WATCHLIST))
 
-    def test_expanded_watchlist_contains_144_enabled_unique_symbols_after_cleanup(self):
+    def test_expanded_watchlist_contains_140_enabled_unique_symbols_after_cleanup(self):
         watchlist_data = __import__("json").loads((PROJECT_DIR / "watchlist.json").read_text())
         enabled_symbols = [
             item["symbol"].upper()
@@ -4892,18 +4980,19 @@ class ScannerLogicTests(unittest.TestCase):
             if not item.get("enabled", True)
         ]
 
-        self.assertEqual(len(enabled_symbols), 144)
-        self.assertEqual(len(set(enabled_symbols)), 144)
+        self.assertEqual(len(enabled_symbols), 140)
+        self.assertEqual(len(set(enabled_symbols)), 140)
         self.assertTrue(all(symbol.endswith("/USD") for symbol in enabled_symbols))
         self.assertIn("BTC/USD", enabled_symbols)
         self.assertIn("BRETT/USD", enabled_symbols)
-        self.assertIn("XAU/USD", enabled_symbols)
         self.assertIn("POL/USD", enabled_symbols)
         self.assertNotIn("MATIC/USD", enabled_symbols)
         self.assertNotIn("USDC/USD", enabled_symbols)
         self.assertNotIn("WBTC/USD", enabled_symbols)
+        self.assertNotIn("XAU/USD", enabled_symbols)
         self.assertIn("USDC/USD", disabled_symbols)
         self.assertIn("WBTC/USD", disabled_symbols)
+        self.assertIn("XAU/USD", disabled_symbols)
         self.assertIn("EOS/USD", disabled_symbols)
         self.assertIn("HOT/USD", disabled_symbols)
         self.assertIn("NEXO/USD", disabled_symbols)
@@ -4964,23 +5053,25 @@ class ScannerLogicTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir, patch.object(
             scanner, "log_warn", side_effect=lambda message: warnings.append(message)
-        ):
-            scanner.DIAGNOSTICS_FILE = Path(tmpdir)
-
+        ), patch.object(scanner, "DIAGNOSTICS_FILE", Path(tmpdir)):
             scanner.append_diagnostic_record({"record_type": "delivery"})
 
         self.assertEqual(len(warnings), 1)
         self.assertIn("Could not write diagnostic record", warnings[0])
 
     def test_run_once_logs_scan_failure_diagnostic_record(self):
-        with patch.object(scanner, "WATCHLIST", ["FAIL/USD"]), patch.object(
-            scanner,
-            "scan_symbol",
-            side_effect=RuntimeError("timeout fetching candles"),
-        ), patch.object(scanner, "log_info"), patch.object(scanner, "throttled_log_warn"):
-            scanner.run_once(None, "token", "chat", {})
+        with tempfile.TemporaryDirectory() as tmpdir:
+            diagnostics_file = Path(tmpdir) / "diagnostics.jsonl"
+            with patch.object(scanner, "DIAGNOSTICS_FILE", diagnostics_file), patch.object(
+                scanner, "WATCHLIST", ["FAIL/USD"]
+            ), patch.object(scanner, "load_user_watchlists", return_value={}), patch.object(
+                scanner,
+                "scan_symbol",
+                side_effect=RuntimeError("timeout fetching candles"),
+            ), patch.object(scanner, "log_info"), patch.object(scanner, "throttled_log_warn"):
+                scanner.run_once(None, "token", "chat", {})
 
-        lines = scanner.DIAGNOSTICS_FILE.read_text().splitlines()
+            lines = diagnostics_file.read_text().splitlines()
         self.assertEqual(len(lines), 1)
         record = json.loads(lines[0])
         self.assertEqual(record["record_type"], "scan_failure")
@@ -5045,7 +5136,7 @@ class ScannerLogicTests(unittest.TestCase):
             "send_telegram_message",
             side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
         ):
-            for command in ["/levels ZEC", "/levels XMR", "/levels LTC", "/levels XAU", "/levels XAO"]:
+            for command in ["/levels ZEC", "/levels XMR", "/levels LTC"]:
                 scanner.handle_levels_command(
                     object(),
                     "TOKEN",
@@ -5057,9 +5148,9 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertEqual(
             accepted_symbols,
-            ["ZEC/USD", "XMR/USD", "LTC/USD", "XAU/USD", "XAU/USD"],
+            ["ZEC/USD", "XMR/USD", "LTC/USD"],
         )
-        self.assertEqual(sent_messages[-1], ("999", "XAU/USD report"))
+        self.assertEqual(sent_messages[-1], ("999", "LTC/USD report"))
 
     def test_research_command_accepts_watchlist_json_symbol_with_fallback_prb(self):
         sent_photos = []
@@ -5108,24 +5199,31 @@ class ScannerLogicTests(unittest.TestCase):
                 scanner,
                 "scan_symbol",
                 side_effect=lambda exchange, symbol: scanned_symbols.append(symbol)
-                or (
-                    candle(0, 99, 101, 98, 100, 100),
-                    candle(scanner.TIMEFRAME_MS, 100, 102, 99, 101, 100),
-                    [],
-                    100,
-                    99,
-                    50,
-                    1,
-                    100,
-                    90,
-                    110,
+                or scanner.ScanSymbolResult(
+                    previous_candle=candle(0, 99, 101, 98, 100, 100),
+                    candle=candle(scanner.TIMEFRAME_MS, 100, 102, 99, 101, 100),
+                    alerts=[],
+                    ema_21=100,
+                    ema_55=99,
+                    current_rsi=50,
+                    current_atr_14=1,
+                    volume_avg=100,
+                    range_low=90,
+                    range_high=110,
+                    closed_candles=[
+                        candle(0, 99, 101, 98, 100, 100),
+                        candle(scanner.TIMEFRAME_MS, 100, 102, 99, 101, 100),
+                    ],
+                    key_levels={"support": [90], "resistance": [110]},
+                    signal_state={"alerts": [], "volume_multiple": 1.0},
                 ),
             ), patch.object(scanner, "get_current_market_price", return_value=101), patch.object(
                 scanner, "print_compact_scan_summary"
-            ), patch.object(scanner, "save_state"):
+            ), patch.object(scanner, "load_user_watchlists", return_value={}), patch.object(scanner, "save_state"):
                 scanner.run_once(object(), "TOKEN", "999", {})
         finally:
             scanner.WATCHLIST = original_watchlist
+            scanner.UNSUPPORTED_SYMBOLS_THIS_SESSION.discard("XMR/USD")
 
         self.assertEqual(scanned_symbols, ["BTC/USD", "ZEC/USD"])
 
@@ -5182,7 +5280,9 @@ class ScannerLogicTests(unittest.TestCase):
                 }
             }
         }
-        with patch.object(scanner, "load_bot_config", return_value={"live_alerts_enabled": True}), patch.object(
+        with patch.object(scanner, "TRADE_TRACKING_TELEGRAM_ENABLED", True), patch.object(
+            scanner, "load_bot_config", return_value={"live_alerts_enabled": True}
+        ), patch.object(
             scanner, "throttled_log_warn"
         ) as warn:
             scanner.monitor_active_trades(FailingTradeExchange(), "TOKEN", "999", state)
