@@ -2958,6 +2958,49 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertLessEqual(len(callback_data.encode("utf-8")), 64)
 
+    def test_start_orientation_buttons_route_to_existing_handlers(self):
+        callback_query = {
+            "id": "callback-1",
+            "message": {"chat": {"id": "777", "type": "private"}, "message_id": 44},
+            "from": {"id": 777},
+        }
+
+        cases = [
+            ("verify", "handle_verify_command"),
+            ("explain", "handle_explain_command"),
+            ("whynot", "handle_whynot_command"),
+            ("help", "handle_help_command"),
+        ]
+        for payload, handler_name in cases:
+            with self.subTest(payload=payload), patch.object(
+                scanner, "answer_telegram_callback"
+            ) as answer_callback, patch.object(
+                scanner, "clear_callback_message_keyboard"
+            ) as clear_keyboard, patch.object(
+                scanner, "handle_verify_command"
+            ) as verify_handler, patch.object(
+                scanner, "handle_explain_command"
+            ) as explain_handler, patch.object(
+                scanner, "handle_whynot_command"
+            ) as whynot_handler, patch.object(
+                scanner, "handle_help_command"
+            ) as help_handler:
+                handled = scanner.handle_start_orientation_callback("TOKEN", callback_query, payload, exchange=object())
+
+            self.assertTrue(handled)
+            answer_callback.assert_called_once_with("TOKEN", "callback-1")
+            clear_keyboard.assert_called_once_with("TOKEN", callback_query)
+            handlers = {
+                "handle_verify_command": verify_handler,
+                "handle_explain_command": explain_handler,
+                "handle_whynot_command": whynot_handler,
+                "handle_help_command": help_handler,
+            }
+            handlers[handler_name].assert_called_once()
+            for other_name, handler in handlers.items():
+                if other_name != handler_name:
+                    handler.assert_not_called()
+
     def test_addcreator_rejects_non_owner_with_reply(self):
         sent_messages = []
 
@@ -3849,6 +3892,106 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(sent_messages[0][0:2], ("999", "/learn breakout"))
         self.assertEqual(state["__telegram_commands"]["last_update_id"], 126)
 
+    def test_non_command_private_message_sends_orientation_card(self):
+        state = {}
+        sent_messages = []
+        updates = [
+            {
+                "update_id": 127,
+                "message": {
+                    "chat": {"id": "777", "type": "private"},
+                    "from": {"id": 777},
+                    "text": "hi",
+                },
+            }
+        ]
+
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            scanner, "USER_PROFILES_FILE", Path(tmpdir) / "user_profiles.json"
+        ), patch.object(scanner, "get_telegram_updates", return_value=updates), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                (str(chat_id), text, reply_markup)
+            ),
+        ), patch.object(scanner, "save_state"):
+            scanner.process_telegram_commands(object(), "TOKEN", "999", state)
+
+        self.assertEqual(sent_messages, [("777", scanner.start_orientation_text(), scanner.start_orientation_keyboard())])
+
+    def test_non_command_group_message_sends_nothing(self):
+        state = {}
+        updates = [
+            {
+                "update_id": 128,
+                "message": {
+                    "chat": {"id": "-100", "type": "group"},
+                    "from": {"id": 777},
+                    "text": "hello poinkle",
+                },
+            }
+        ]
+
+        with patch.object(scanner, "get_telegram_updates", return_value=updates), patch.object(
+            scanner, "send_telegram_message"
+        ) as send_message, patch.object(scanner, "save_state"):
+            scanner.process_telegram_commands(object(), "TOKEN", "999", state)
+
+        send_message.assert_not_called()
+
+    def test_non_command_private_message_orientation_is_rate_limited(self):
+        state = {}
+        sent_messages = []
+        updates = [
+            {
+                "update_id": 129 + index,
+                "message": {
+                    "chat": {"id": "777", "type": "private"},
+                    "from": {"id": 777},
+                    "text": text,
+                },
+            }
+            for index, text in enumerate(["hi", "hello", "are you there"])
+        ]
+
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            scanner, "USER_PROFILES_FILE", Path(tmpdir) / "user_profiles.json"
+        ), patch.object(scanner.time, "time", return_value=1_000.0), patch.object(
+            scanner, "get_telegram_updates", return_value=updates
+        ), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                (str(chat_id), text, reply_markup)
+            ),
+        ), patch.object(scanner, "save_state"):
+            scanner.process_telegram_commands(object(), "TOKEN", "999", state)
+
+        self.assertEqual(sent_messages, [("777", scanner.start_orientation_text(), scanner.start_orientation_keyboard())])
+
+    def test_command_private_message_does_not_send_orientation_card(self):
+        state = {}
+        updates = [
+            {
+                "update_id": 132,
+                "message": {
+                    "chat": {"id": "777", "type": "private"},
+                    "from": {"id": 777},
+                    "text": "/help",
+                },
+            }
+        ]
+
+        with patch.object(scanner, "get_telegram_updates", return_value=updates), patch.object(
+            scanner, "handle_help_command"
+        ) as handle_help, patch.object(scanner, "send_start_orientation_card") as send_orientation, patch.object(
+            scanner, "save_state"
+        ):
+            scanner.process_telegram_commands(object(), "TOKEN", "999", state)
+
+        handle_help.assert_called_once_with("TOKEN", "777")
+        send_orientation.assert_not_called()
+
     def test_process_telegram_commands_ignores_edited_command_updates(self):
         state = {}
         sent_messages = []
@@ -4549,17 +4692,17 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(render_card.call_args.kwargs["logo_path"], scanner.POINKLE_RESEARCH_EMBLEM_PATH)
         self.assertEqual(sent_photos, [("999", "/tmp/reference.png")])
 
-    def test_start_command_sends_welcome_message_and_captures_new_profile(self):
+    def test_start_command_sends_orientation_card_and_captures_new_profile(self):
         sent_messages = []
 
         with tempfile.TemporaryDirectory() as tmpdir, patch.object(
             scanner, "USER_PROFILES_FILE", Path(tmpdir) / "user_profiles.json"
-        ), patch.object(
-            scanner, "WELCOME_BANNER_PATH", Path(tmpdir) / "missing-welcome-banner.jpg"
         ), patch.object(scanner, "iso_utc_now", return_value="2026-07-08T12:00:00+00:00"), patch.object(
             scanner,
             "send_telegram_message",
-            side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                (str(chat_id), text, reply_markup)
+            ),
         ):
             scanner.handle_start_command(
                 "TOKEN",
@@ -4569,10 +4712,10 @@ class ScannerLogicTests(unittest.TestCase):
             profiles = scanner.load_user_profiles()
 
         self.assertEqual(sent_messages[0][0], "777")
-        self.assertEqual(sent_messages[0][1], scanner.build_welcome_message())
-        self.assertEqual(sent_messages[1][0], "777")
-        self.assertEqual(sent_messages[1][1], scanner.skill_onboarding_message())
-        self.assertIn("🐷 <b>Welcome to Poinkle.</b>", sent_messages[0][1])
+        self.assertEqual(sent_messages[0][1], scanner.start_orientation_text())
+        self.assertEqual(sent_messages[0][2], scanner.start_orientation_keyboard())
+        self.assertIn("Hi — I'm Poinkle.", sent_messages[0][1])
+        self.assertEqual(len(sent_messages), 1)
         self.assertEqual(profiles["777"]["telegram_user_id"], "777")
         self.assertEqual(profiles["777"]["username"], "poinkle_user")
         self.assertEqual(profiles["777"]["first_name"], "Pat")
@@ -4580,10 +4723,8 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(profiles["777"]["first_seen"], "2026-07-08T12:00:00+00:00")
         self.assertEqual(profiles["777"]["last_start"], "2026-07-08T12:00:00+00:00")
         self.assertTrue(profiles["777"]["onboarded"])
-        self.assertTrue(profiles["777"]["skill_onboarding_prompted"])
 
-    def test_start_command_sends_welcome_banner_with_caption_before_skill_prompt(self):
-        sent_photos = []
+    def test_start_command_sends_orientation_card_without_banner(self):
         sent_messages = []
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -4595,16 +4736,17 @@ class ScannerLogicTests(unittest.TestCase):
             ), patch.object(scanner, "iso_utc_now", return_value="2026-07-08T12:00:00+00:00"), patch.object(
                 scanner,
                 "send_telegram_photo",
-                side_effect=lambda token, chat_id, path, caption="": sent_photos.append((str(chat_id), path, caption)) or True,
+                side_effect=AssertionError("/start should not send the old welcome banner"),
             ), patch.object(
                 scanner,
                 "send_telegram_message",
-                side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
+                side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                    (str(chat_id), text, reply_markup)
+                ),
             ):
                 scanner.handle_start_command("TOKEN", "999", from_user={"id": 777})
 
-        self.assertEqual(sent_photos, [("777", str(banner_path), scanner.build_welcome_message())])
-        self.assertEqual(sent_messages, [("777", scanner.skill_onboarding_message())])
+        self.assertEqual(sent_messages, [("777", scanner.start_orientation_text(), scanner.start_orientation_keyboard())])
 
     def test_start_welcome_falls_back_to_text_when_banner_missing(self):
         sent_messages = []
@@ -4643,37 +4785,38 @@ class ScannerLogicTests(unittest.TestCase):
             with patch.object(scanner, "USER_PROFILES_FILE", profile_path), patch.object(
                 scanner, "iso_utc_now", return_value="2026-07-08T12:00:00+00:00"
             ), patch.object(
-                scanner, "WELCOME_BANNER_PATH", Path(tmpdir) / "missing-welcome-banner.jpg"
-            ), patch.object(
                 scanner,
                 "send_telegram_message",
-                side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
+                side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                    (str(chat_id), text, reply_markup)
+                ),
             ):
                 scanner.handle_start_command("TOKEN", "999", from_user={"id": 777, "first_name": "Pat"})
                 profiles = scanner.load_user_profiles()
 
-        self.assertEqual(sent_messages, [("777", scanner.build_welcome_message())])
+        self.assertEqual(sent_messages, [("777", scanner.start_orientation_text(), scanner.start_orientation_keyboard())])
         self.assertEqual(profiles["777"]["first_seen"], "2026-07-01T12:00:00+00:00")
         self.assertEqual(profiles["777"]["last_start"], "2026-07-08T12:00:00+00:00")
         self.assertEqual(profiles["777"]["skill_level"], "beginner")
         self.assertEqual(profiles["777"]["first_name"], "Pat")
 
-    def test_start_command_still_welcomes_when_profile_write_fails(self):
+    def test_start_command_still_orients_when_profile_write_fails(self):
         sent_messages = []
 
-        with patch.object(scanner, "WELCOME_BANNER_PATH", Path("/private/tmp/missing-welcome-banner.jpg")), patch.object(
-            scanner, "save_user_profiles", side_effect=OSError("disk full")
-        ), patch.object(
+        with patch.object(scanner, "save_user_profiles", side_effect=OSError("disk full")), patch.object(
             scanner,
             "send_telegram_message",
-            side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                (str(chat_id), text, reply_markup)
+            ),
         ):
             scanner.handle_start_command("TOKEN", "999", from_user={"id": 777})
 
         self.assertEqual(sent_messages[0][0], "777")
-        self.assertEqual(sent_messages[0][1], scanner.build_welcome_message())
+        self.assertEqual(sent_messages[0][1], scanner.start_orientation_text())
+        self.assertEqual(sent_messages[0][2], scanner.start_orientation_keyboard())
 
-    def test_start_command_does_not_repeat_skill_prompt_when_already_prompted(self):
+    def test_start_command_does_not_send_skill_prompt_when_already_prompted(self):
         sent_messages = []
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -4692,15 +4835,15 @@ class ScannerLogicTests(unittest.TestCase):
             with patch.object(scanner, "USER_PROFILES_FILE", profile_path), patch.object(
                 scanner, "iso_utc_now", return_value="2026-07-08T12:00:00+00:00"
             ), patch.object(
-                scanner, "WELCOME_BANNER_PATH", Path(tmpdir) / "missing-welcome-banner.jpg"
-            ), patch.object(
                 scanner,
                 "send_telegram_message",
-                side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
+                side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                    (str(chat_id), text, reply_markup)
+                ),
             ):
                 scanner.handle_start_command("TOKEN", "999", from_user={"id": 777})
 
-        self.assertEqual(sent_messages, [("777", scanner.build_welcome_message())])
+        self.assertEqual(sent_messages, [("777", scanner.start_orientation_text(), scanner.start_orientation_keyboard())])
 
     def test_card_renderers_use_shared_emblem_path(self):
         volume_alert = {

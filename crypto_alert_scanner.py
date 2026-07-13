@@ -323,6 +323,7 @@ COINBASE_PUBLIC_REQUESTS_PER_SECOND = 10
 ACCURACY_AUDIT_SYMBOLS = {"BTC/USD", "ETH/USD", "SOL/USD", "AAVE/USD", "PEPE/USD"}
 ALERT_DELIVERY_METRIC_LIMIT = 100
 TELEGRAM_CALLBACK_DEDUPE_LIMIT = 200
+NON_COMMAND_ORIENTATION_RATE_LIMIT_SECONDS = 3600
 SIGNAL_FOLLOWUP_TTL_SECONDS = 3 * 86400
 SIGNAL_FOLLOWUP_LIMIT = 200
 FAILED_LEVEL_ATTEMPT_LIMIT = 3
@@ -5350,6 +5351,7 @@ EXPLAIN_GROUP_CALLBACK_PREFIX = "xgroup"
 EXPLAIN_CONCEPT_CALLBACK_PREFIX = "xconcept"
 VERIFY_CREATOR_CALLBACK_PREFIX = "verifycreator"
 VERIFY_HANDLE_CALLBACK_PREFIX = "verifyhandle"
+START_ORIENTATION_CALLBACK_PREFIX = "start"
 COIN_PICKER_BUTTONS_PER_ROW = 3
 SUPPORTED_CREATOR_PLATFORMS = ("telegram", "tiktok", "youtube", "x", "instagram", "discord", "website")
 WATCHLIST_ACTIONS = {
@@ -5678,6 +5680,37 @@ def creator_account_keyboard(creator_key, creator):
             ]
         )
     return {"inline_keyboard": rows} if rows else None
+
+
+def start_orientation_keyboard():
+    return {
+        "inline_keyboard": [
+            [
+                {
+                    "text": "🔍 Verify a creator's account",
+                    "callback_data": f"{START_ORIENTATION_CALLBACK_PREFIX}:verify",
+                }
+            ],
+            [
+                {
+                    "text": "📚 Learn a concept",
+                    "callback_data": f"{START_ORIENTATION_CALLBACK_PREFIX}:explain",
+                }
+            ],
+            [
+                {
+                    "text": "📊 Why isn't a coin alerting?",
+                    "callback_data": f"{START_ORIENTATION_CALLBACK_PREFIX}:whynot",
+                }
+            ],
+            [
+                {
+                    "text": "ℹ️ What is Poinkle?",
+                    "callback_data": f"{START_ORIENTATION_CALLBACK_PREFIX}:help",
+                }
+            ],
+        ]
+    }
 
 
 def creator_registered_accounts_lines(creators):
@@ -7141,6 +7174,25 @@ def build_welcome_message():
     )
 
 
+def start_orientation_text():
+    return (
+        "Hi — I'm Poinkle.\n\n"
+        "I watch the zones on a chart and tell you when one actually breaks — "
+        "confirmed by two daily closes, not one.\n\n"
+        "I never tell you what to do. No entries, no stops, no targets, no calls.\n\n"
+        "Here's where to start:"
+    )
+
+
+def send_start_orientation_card(telegram_token, destination_chat_id):
+    send_telegram_message(
+        telegram_token,
+        destination_chat_id,
+        start_orientation_text(),
+        reply_markup=start_orientation_keyboard(),
+    )
+
+
 def send_start_welcome(telegram_token, destination_chat_id, welcome_message):
     if not WELCOME_BANNER_PATH.exists():
         log_warn(f"Welcome banner image missing: {WELCOME_BANNER_PATH}")
@@ -7203,17 +7255,44 @@ def handle_start_command(telegram_token, telegram_chat_id, from_user=None):
     except Exception as error:
         log_warn(f"Could not update /start profile for {telegram_chat_id}: {error}")
 
-    welcome_message = build_welcome_message()
-    send_start_welcome(telegram_token, destination_chat_id, welcome_message)
+    send_start_orientation_card(telegram_token, destination_chat_id)
+
+
+def should_send_non_command_orientation(user_id, now=None):
+    user_id = str(user_id or "").strip()
+    if not user_id:
+        return True
+
+    now = float(now if now is not None else time.time())
+    profiles = load_user_profiles()
+    profile = profiles.setdefault(user_id, {})
+    last_sent = profile.get("last_non_command_orientation_at")
     try:
-        maybe_send_skill_onboarding(
-            telegram_token,
-            {"id": destination_chat_id, "type": "private"},
-            {"id": destination_chat_id, **(from_user or {})},
-            allow_private=True,
-        )
-    except Exception as error:
-        log_warn(f"Could not send /start skill onboarding for {destination_chat_id}: {error}")
+        last_sent = float(last_sent)
+    except (TypeError, ValueError):
+        last_sent = 0.0
+
+    if last_sent and now - last_sent < NON_COMMAND_ORIENTATION_RATE_LIMIT_SECONDS:
+        return False
+
+    profile["last_non_command_orientation_at"] = now
+    save_user_profiles(profiles)
+    return True
+
+
+def handle_private_non_command_message(telegram_token, chat, from_user=None):
+    chat = chat or {}
+    if not is_private_chat(chat):
+        return False
+
+    from_user = from_user or {}
+    chat_id = str(chat.get("id", ""))
+    user_id = str(from_user.get("id") or chat_id)
+    if not should_send_non_command_orientation(user_id):
+        return True
+
+    send_start_orientation_card(telegram_token, chat_id)
+    return True
 
 
 def handle_help_command(telegram_token, telegram_chat_id):
@@ -8164,6 +8243,45 @@ def handle_verify_handle_callback(telegram_token, callback_query, payload, excha
     return True
 
 
+def handle_start_orientation_callback(telegram_token, callback_query, payload, exchange=None):
+    callback_query_id = (callback_query or {}).get("id")
+    if callback_query_id:
+        answer_telegram_callback(telegram_token, callback_query_id)
+        clear_callback_message_keyboard(telegram_token, callback_query)
+
+    message = (callback_query or {}).get("message") or {}
+    source_chat = message.get("chat") or {}
+    chat_id = str(source_chat.get("id") or "")
+    from_user = (callback_query or {}).get("from") or {}
+
+    if payload == "verify":
+        handle_verify_command(telegram_token, chat_id, "/verify", source_chat=source_chat)
+        return True
+    if payload == "explain":
+        handle_explain_command(
+            telegram_token,
+            chat_id,
+            "/explain",
+            source_chat=source_chat,
+            from_user=from_user,
+        )
+        return True
+    if payload == "whynot":
+        handle_whynot_command(
+            exchange,
+            telegram_token,
+            chat_id,
+            "/whynot",
+            source_chat=source_chat,
+            from_user=from_user,
+        )
+        return True
+    if payload == "help":
+        handle_help_command(telegram_token, chat_id)
+        return True
+    return False
+
+
 def handle_telegram_callback_query(exchange, telegram_token, callback_query):
     callback_query = callback_query or {}
     callback_query_id = callback_query.get("id")
@@ -8186,6 +8304,7 @@ def handle_telegram_callback_query(exchange, telegram_token, callback_query):
         EXPLAIN_CONCEPT_CALLBACK_PREFIX: handle_explain_concept_callback,
         VERIFY_CREATOR_CALLBACK_PREFIX: handle_verify_creator_callback,
         VERIFY_HANDLE_CALLBACK_PREFIX: handle_verify_handle_callback,
+        START_ORIENTATION_CALLBACK_PREFIX: handle_start_orientation_callback,
     }
     handler = callback_handlers.get(namespace)
     if handler is None:
@@ -9223,7 +9342,7 @@ def process_telegram_commands(
         elif lower_text.startswith("/help"):
             handle_help_command(telegram_token, chat_id)
         elif not text.startswith("/"):
-            pass
+            handle_private_non_command_message(telegram_token, chat, from_user)
         elif (
             lower_text.startswith("/devmode")
             or lower_text.startswith("/maintenance")
