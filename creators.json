@@ -1,0 +1,10 @@
+{
+  "test_creator": {
+    "community": "Test Community",
+    "display_name": "Test Creator",
+    "handles": [
+      "@TestHandle"
+    ],
+    "registered_at": "2026-07-13"
+  }
+}

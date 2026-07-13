@@ -1622,30 +1622,9 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertTrue(url.endswith("/setMyCommands"))
         self.assertEqual(
             command_names,
-            [
-                "snapshot",
-                "snap",
-                "research",
-                "whynot",
-                "why",
-                "levels",
-                "alerts",
-                "alertlevel",
-                "myalerts",
-                "watch",
-                "unwatch",
-                "clearwatch",
-                "mywatch",
-                "watching",
-                "mike",
-                "guide",
-                "explain",
-                "learn",
-                "coins",
-                "help",
-                "start",
-            ],
+            [item["command"] for item in scanner.PUBLIC_BOT_COMMANDS],
         )
+        self.assertIn("verify", command_names)
         self.assertNotIn("devmode", command_names)
         self.assertNotIn("maintenance", command_names)
         self.assertNotIn("livealerts", command_names)
@@ -2501,6 +2480,7 @@ class ScannerLogicTests(unittest.TestCase):
 
         message = sent_messages[0][1]
         self.assertIn("Poinkle watches the zones", message)
+        self.assertIn("VERIFY\n/verify", message)
         self.assertIn("/explain, /learn", message)
         self.assertIn("/whynot, /why", message)
         self.assertIn("/guide, /reference", message)
@@ -2539,6 +2519,340 @@ class ScannerLogicTests(unittest.TestCase):
 
         for command in ("reference", "scan", "status"):
             self.assertIn(f"/{command}", message)
+
+    def test_verify_registered_handle_returns_verified(self):
+        sent_messages = []
+        creators = {
+            "mike_knows": {
+                "display_name": "Mike Knows",
+                "community": "The Inner Circle",
+                "handles": ["@MikeKnows_Official"],
+                "registered_at": "2026-07-13",
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            creators_path = Path(tmpdir) / "creators.json"
+            creators_path.write_text(json.dumps(creators))
+            with patch.object(scanner, "CREATORS_FILE", creators_path), patch.object(
+                scanner,
+                "send_telegram_message",
+                side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                    (str(chat_id), text, reply_markup)
+                ),
+            ):
+                scanner.handle_verify_command("TOKEN", "999", "/verify @MikeKnows_Official")
+
+        self.assertIn("✅ <b>VERIFIED</b>", sent_messages[0][1])
+        self.assertIn("@MikeKnows_Official is a registered account", sent_messages[0][1])
+        self.assertIn("<b>Mike Knows</b> · The Inner Circle", sent_messages[0][1])
+        self.assertIn("Registered with Poinkle on 13 Jul 2026.", sent_messages[0][1])
+
+    def test_verify_matching_is_case_insensitive_and_at_optional(self):
+        creators = {
+            "mike_knows": {
+                "display_name": "Mike Knows",
+                "community": "The Inner Circle",
+                "handles": ["@MikeKnows_Official"],
+                "registered_at": "2026-07-13",
+            }
+        }
+        self.assertEqual(scanner.find_creator_by_handle(creators, "mikeknows_official")[0], "mike_knows")
+        self.assertEqual(scanner.find_creator_by_handle(creators, "@MIKEKNOWS_OFFICIAL")[0], "mike_knows")
+
+    def test_verify_unregistered_handle_is_not_registered_and_never_accuses(self):
+        creators = {
+            "mike_knows": {
+                "display_name": "Mike Knows",
+                "community": "The Inner Circle",
+                "handles": ["@MikeKnows_Official"],
+                "registered_at": "2026-07-13",
+            }
+        }
+        message = scanner.render_not_registered_creator_message("@SomeHandle", creators)
+
+        self.assertIn("⚠️ <b>NOT REGISTERED</b>", message)
+        self.assertIn("This does NOT mean it's fake", message)
+        self.assertNotIn("is fake", message.replace("does NOT mean it's fake", ""))
+
+    def test_verify_response_never_asserts_account_is_fake(self):
+        creator = {
+            "display_name": "Mike Knows",
+            "community": "The Inner Circle",
+            "handles": ["@MikeKnows_Official"],
+            "registered_at": "2026-07-13",
+        }
+        responses = [
+            scanner.render_verified_creator_message("@MikeKnows_Official", creator),
+            scanner.render_not_registered_creator_message("@SomeHandle", {"mike_knows": creator}),
+            scanner.render_not_registered_creator_message("@SomeHandle", {}),
+        ]
+
+        for response in responses:
+            self.assertNotIn("is fake", response.replace("does NOT mean it's fake", ""))
+            self.assertNotIn("are fake", response)
+
+    def test_bare_verify_empty_registry_replies_without_keyboard(self):
+        sent_messages = []
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            creators_path = Path(tmpdir) / "creators.json"
+            creators_path.write_text("{}")
+            with patch.object(scanner, "CREATORS_FILE", creators_path), patch.object(
+                scanner,
+                "send_telegram_message",
+                side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                    (str(chat_id), text, reply_markup)
+                ),
+            ):
+                scanner.handle_verify_command("TOKEN", "999", "/verify")
+
+        self.assertEqual(sent_messages, [("999", "No creators are registered with Poinkle yet.", None)])
+
+    def test_bare_verify_with_creators_shows_picker(self):
+        sent_messages = []
+        creators = {
+            "mike_knows": {
+                "display_name": "Mike Knows",
+                "community": "The Inner Circle",
+                "handles": ["@MikeKnows_Official"],
+                "registered_at": "2026-07-13",
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            creators_path = Path(tmpdir) / "creators.json"
+            creators_path.write_text(json.dumps(creators))
+            with patch.object(scanner, "CREATORS_FILE", creators_path), patch.object(
+                scanner,
+                "send_telegram_message",
+                side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                    (str(chat_id), text, reply_markup)
+                ),
+            ):
+                scanner.handle_verify_command("TOKEN", "999", "/verify")
+
+        self.assertEqual(sent_messages[0][1], "Which creator's accounts do you want to check?")
+        self.assertEqual(
+            sent_messages[0][2],
+            {
+                "inline_keyboard": [
+                    [
+                        {
+                            "text": "Mike Knows · The Inner Circle",
+                            "callback_data": "verifycreator:mike_knows",
+                        }
+                    ]
+                ]
+            },
+        )
+
+    def test_addcreator_rejects_non_owner_with_reply(self):
+        sent_messages = []
+
+        with patch.object(scanner, "configured_owner_ids", return_value={"777"}), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append((str(chat_id), text)),
+        ):
+            scanner.handle_addcreator_command(
+                "TOKEN",
+                "999",
+                "/addcreator mike_knows | Mike Knows | The Inner Circle | @MikeKnows_Official",
+                from_user={"id": 123},
+            )
+
+        self.assertEqual(sent_messages, [("999", "That command isn't available.")])
+
+    def test_addcreator_without_args_replies_with_usage(self):
+        sent_messages = []
+
+        with patch.object(scanner, "configured_owner_ids", return_value={"777"}), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append((str(chat_id), text)),
+        ):
+            scanner.handle_addcreator_command("TOKEN", "999", "/addcreator", from_user={"id": 777})
+
+        self.assertEqual(sent_messages, [("999", scanner.addcreator_usage_text())])
+
+    def test_addcreator_too_few_pipe_fields_replies_with_usage_and_count(self):
+        sent_messages = []
+
+        with patch.object(scanner, "configured_owner_ids", return_value={"777"}), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append((str(chat_id), text)),
+        ):
+            scanner.handle_addcreator_command("TOKEN", "999", "/addcreator test_creator", from_user={"id": 777})
+
+        self.assertIn(scanner.addcreator_usage_text(), sent_messages[0][1])
+        self.assertIn("Received 1 field; expected 4.", sent_messages[0][1])
+
+    def test_addcreator_empty_field_replies_with_missing_field_name(self):
+        sent_messages = []
+
+        with patch.object(scanner, "configured_owner_ids", return_value={"777"}), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append((str(chat_id), text)),
+        ):
+            scanner.handle_addcreator_command(
+                "TOKEN",
+                "999",
+                "/addcreator mike_knows |  | The Inner Circle | @MikeKnows_Official",
+                from_user={"id": 777},
+            )
+
+        self.assertIn("Missing: display_name.", sent_messages[0][1])
+
+    def test_addcreator_bad_handle_replies_with_handle_error(self):
+        sent_messages = []
+
+        with patch.object(scanner, "configured_owner_ids", return_value={"777"}), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append((str(chat_id), text)),
+        ):
+            scanner.handle_addcreator_command(
+                "TOKEN",
+                "999",
+                "/addcreator mike_knows | Mike Knows | The Inner Circle | MikeKnows_Official",
+                from_user={"id": 777},
+            )
+
+        self.assertIn("Handles must start with @: MikeKnows_Official", sent_messages[0][1])
+
+    def test_addcreator_writes_creator_and_then_verifies(self):
+        sent_messages = []
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            creators_path = Path(tmpdir) / "creators.json"
+            with patch.object(scanner, "CREATORS_FILE", creators_path), patch.object(
+                scanner, "configured_owner_ids", return_value={"777"}
+            ), patch.object(scanner, "EASTERN_TIME", scanner.ZoneInfo("America/New_York")), patch.object(
+                scanner,
+                "send_telegram_message",
+                side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                    (str(chat_id), text, reply_markup)
+                ),
+            ):
+                scanner.handle_addcreator_command(
+                    "TOKEN",
+                    "999",
+                    "/addcreator mike_knows | Mike Knows | The Inner Circle | @MikeKnows_Official",
+                    from_user={"id": 777},
+                )
+                creators = scanner.load_creators()
+                scanner.handle_verify_command("TOKEN", "999", "/verify mikeknows_official")
+
+        self.assertEqual(creators["mike_knows"]["display_name"], "Mike Knows")
+        self.assertEqual(creators["mike_knows"]["community"], "The Inner Circle")
+        self.assertEqual(creators["mike_knows"]["handles"], ["@MikeKnows_Official"])
+        self.assertRegex(creators["mike_knows"]["registered_at"], r"^\d{4}-\d{2}-\d{2}$")
+        self.assertIn("Added Mike Knows in the creator registry.", sent_messages[0][1])
+        self.assertIn("✅ <b>VERIFIED</b>", sent_messages[1][1])
+
+    def test_removecreator_unknown_key_replies_with_registered_keys(self):
+        sent_messages = []
+        creators = {
+            "mike_knows": {
+                "display_name": "Mike Knows",
+                "community": "The Inner Circle",
+                "handles": ["@MikeKnows_Official"],
+                "registered_at": "2026-07-13",
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            creators_path = Path(tmpdir) / "creators.json"
+            creators_path.write_text(json.dumps(creators))
+            with patch.object(scanner, "CREATORS_FILE", creators_path), patch.object(
+                scanner, "configured_owner_ids", return_value={"777"}
+            ), patch.object(
+                scanner,
+                "send_telegram_message",
+                side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append((str(chat_id), text)),
+            ):
+                scanner.handle_removecreator_command("TOKEN", "999", "/removecreator missing", from_user={"id": 777})
+
+        self.assertIn("Unknown creator key: missing.", sent_messages[0][1])
+        self.assertIn("Registered keys: mike_knows", sent_messages[0][1])
+
+    def test_removecreator_success_removes_creator_and_confirms(self):
+        sent_messages = []
+        creators = {
+            "mike_knows": {
+                "display_name": "Mike Knows",
+                "community": "The Inner Circle",
+                "handles": ["@MikeKnows_Official"],
+                "registered_at": "2026-07-13",
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            creators_path = Path(tmpdir) / "creators.json"
+            creators_path.write_text(json.dumps(creators))
+            with patch.object(scanner, "CREATORS_FILE", creators_path), patch.object(
+                scanner, "configured_owner_ids", return_value={"777"}
+            ), patch.object(
+                scanner,
+                "send_telegram_message",
+                side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append((str(chat_id), text)),
+            ):
+                scanner.handle_removecreator_command("TOKEN", "999", "/removecreator mike_knows", from_user={"id": 777})
+                remaining_creators = scanner.load_creators()
+
+        self.assertEqual(remaining_creators, {})
+        self.assertEqual(sent_messages, [("999", "Removed Mike Knows from the creator registry.")])
+
+    def test_addcreator_and_removecreator_paths_all_reply(self):
+        creator_payload = "mike_knows | Mike Knows | The Inner Circle | @MikeKnows_Official"
+        add_commands = [
+            "/addcreator",
+            "/addcreator test_creator",
+            "/addcreator  | Mike Knows | The Inner Circle | @MikeKnows_Official",
+            "/addcreator mike_knows |  | The Inner Circle | @MikeKnows_Official",
+            "/addcreator mike_knows | Mike Knows |  | @MikeKnows_Official",
+            "/addcreator mike_knows | Mike Knows | The Inner Circle | ",
+            "/addcreator mike_knows | Mike Knows | The Inner Circle | MikeKnows_Official",
+            f"/addcreator {creator_payload}",
+        ]
+        remove_commands = [
+            "/removecreator",
+            "/removecreator missing",
+            "/removecreator mike_knows",
+        ]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            creators_path = Path(tmpdir) / "creators.json"
+            creators_path.write_text("{}")
+            with patch.object(scanner, "CREATORS_FILE", creators_path), patch.object(
+                scanner, "configured_owner_ids", return_value={"777"}
+            ):
+                for command in add_commands:
+                    sent_messages = []
+                    with patch.object(
+                        scanner,
+                        "send_telegram_message",
+                        side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                            (str(chat_id), text)
+                        ),
+                    ):
+                        scanner.handle_addcreator_command("TOKEN", "999", command, from_user={"id": 777})
+                    self.assertEqual(len(sent_messages), 1, command)
+
+                for command in remove_commands:
+                    sent_messages = []
+                    with patch.object(
+                        scanner,
+                        "send_telegram_message",
+                        side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                            (str(chat_id), text)
+                        ),
+                    ):
+                        scanner.handle_removecreator_command("TOKEN", "999", command, from_user={"id": 777})
+                    self.assertEqual(len(sent_messages), 1, command)
 
     def test_process_telegram_commands_replies_on_first_poll(self):
         state = {}

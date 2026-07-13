@@ -311,6 +311,7 @@ DIAGNOSTICS_FILE = PROJECT_DIR / "diagnostics" / "alert_diagnostics.jsonl"
 USER_ALERTS_FILE = PROJECT_DIR / "user_alerts.json"
 USER_WATCHLISTS_FILE = PROJECT_DIR / "user_watchlists.json"
 USER_PROFILES_FILE = PROJECT_DIR / "user_profiles.json"
+CREATORS_FILE = PROJECT_DIR / "creators.json"
 BOT_CONFIG_FILE = PROJECT_DIR / "bot_config.json"
 ERROR_COOLDOWN_SECONDS = 300
 ALERT_COOLDOWN_SECONDS = 3600
@@ -361,6 +362,7 @@ PUBLIC_BOT_COMMANDS = [
     {"command": "watching", "description": "View your watched coins"},
     {"command": "mike", "description": "Mike's curated watchlist"},
     {"command": "guide", "description": "Command and coin reference card"},
+    {"command": "verify", "description": "Verify a creator account"},
     {"command": "explain", "description": "Learn a market concept"},
     {"command": "learn", "description": "Learn a market concept"},
     {"command": "coins", "description": "See every coin I track"},
@@ -963,6 +965,21 @@ def load_user_profiles():
 
 def save_user_profiles(profiles):
     write_json_file_atomic(USER_PROFILES_FILE, profiles, "user profiles")
+
+
+def load_creators():
+    if not CREATORS_FILE.exists():
+        return {}
+
+    try:
+        return json.loads(CREATORS_FILE.read_text())
+    except (json.JSONDecodeError, OSError) as error:
+        log_warn(f"Could not load creators from {CREATORS_FILE}: {error}")
+        return {}
+
+
+def save_creators(creators):
+    write_json_file_atomic(CREATORS_FILE, creators, "creators")
 
 
 def iso_utc_now():
@@ -5286,6 +5303,7 @@ WATCHLIST_ACTION_CALLBACK_PREFIX = "wact"
 ALERT_SEVERITY_CALLBACK_PREFIX = "sev"
 EXPLAIN_GROUP_CALLBACK_PREFIX = "xgroup"
 EXPLAIN_CONCEPT_CALLBACK_PREFIX = "xconcept"
+VERIFY_CREATOR_CALLBACK_PREFIX = "verifycreator"
 COIN_PICKER_BUTTONS_PER_ROW = 3
 WATCHLIST_ACTIONS = {
     "snapshot": "Snapshot",
@@ -5472,6 +5490,151 @@ def explain_group_prompt():
         "What do you want to understand?\n\n"
         "Poinkle looks at price first. Indicators only reinforce what price already shows you."
     )
+
+
+def normalize_telegram_handle(handle):
+    clean_handle = str(handle or "").strip()
+    if clean_handle.startswith("@"):
+        clean_handle = clean_handle[1:]
+    return clean_handle.strip().lower()
+
+
+def creator_display_label(creator):
+    display_name = str((creator or {}).get("display_name") or "").strip()
+    community = str((creator or {}).get("community") or "").strip()
+    if display_name and community:
+        return f"{display_name} · {community}"
+    return display_name or community or "Registered creator"
+
+
+def creator_picker_keyboard(creators):
+    rows = []
+    for creator_key, creator in sorted((creators or {}).items(), key=lambda item: creator_display_label(item[1]).lower()):
+        rows.append(
+            [
+                {
+                    "text": creator_display_label(creator),
+                    "callback_data": f"{VERIFY_CREATOR_CALLBACK_PREFIX}:{creator_key}",
+                }
+            ]
+        )
+    return {"inline_keyboard": rows}
+
+
+def find_creator_by_handle(creators, handle):
+    normalized = normalize_telegram_handle(handle)
+    if not normalized:
+        return None, None, None
+
+    for creator_key, creator in (creators or {}).items():
+        for registered_handle in creator.get("handles", []):
+            if normalize_telegram_handle(registered_handle) == normalized:
+                return creator_key, creator, registered_handle
+    return None, None, None
+
+
+def format_registered_date(date_text):
+    try:
+        parsed = datetime.strptime(str(date_text or ""), "%Y-%m-%d")
+        return f"{parsed.day} {parsed.strftime('%b %Y')}"
+    except (TypeError, ValueError):
+        return str(date_text or "").strip() or "unknown date"
+
+
+def display_handle(handle):
+    clean_handle = str(handle or "").strip()
+    if not clean_handle:
+        return "@unknown"
+    return clean_handle if clean_handle.startswith("@") else f"@{clean_handle}"
+
+
+def creator_registered_handles_lines(creators):
+    lines = []
+    for _creator_key, creator in sorted((creators or {}).items(), key=lambda item: creator_display_label(item[1]).lower()):
+        display_name = html.escape(str(creator.get("display_name") or "Registered creator"))
+        lines.append(f"Registered accounts for <b>{display_name}</b>:")
+        for handle in creator.get("handles", []):
+            lines.append(f"  {html.escape(str(handle))}")
+        lines.append("")
+    return "\n".join(lines).strip()
+
+
+def render_verified_creator_message(handle, creator):
+    handle_text = html.escape(display_handle(handle))
+    display_name = html.escape(str(creator.get("display_name") or "Registered creator"))
+    community = html.escape(str(creator.get("community") or ""))
+    community_suffix = f" · {community}" if community else ""
+    registered_at = html.escape(format_registered_date(creator.get("registered_at")))
+    return (
+        "✅ <b>VERIFIED</b>\n\n"
+        f"{handle_text} is a registered account for\n"
+        f"<b>{display_name}</b>{community_suffix}.\n\n"
+        f"Registered with Poinkle on {registered_at}.\n\n"
+        "Run /verify yourself — never trust a screenshot of one."
+    )
+
+
+def render_not_registered_creator_message(handle, creators):
+    if not creators:
+        return "No creators are registered with Poinkle yet."
+
+    handle_text = html.escape(display_handle(handle))
+    registered_accounts = creator_registered_handles_lines(creators)
+    return (
+        "⚠️ <b>NOT REGISTERED</b>\n\n"
+        f"{handle_text} is not on any creator's registered list.\n\n"
+        "This does NOT mean it's fake. Poinkle only knows the accounts creators have "
+        "registered with it.\n\n"
+        f"{registered_accounts}\n\n"
+        "If someone is claiming to be a creator from an unregistered handle, be careful "
+        "and check with the creator directly.\n\n"
+        "Run /verify yourself — never trust a screenshot of one."
+    )
+
+
+def render_creator_handle_list_message(creator):
+    display_name = html.escape(str(creator.get("display_name") or "Registered creator"))
+    community = html.escape(str(creator.get("community") or ""))
+    community_suffix = f" · {community}" if community else ""
+    handles = [f"  {html.escape(str(handle))}" for handle in creator.get("handles", [])]
+    handle_block = "\n".join(handles) if handles else "  No handles registered."
+    return (
+        f"<b>{display_name}</b>{community_suffix}\n\n"
+        "Registered accounts:\n"
+        f"{handle_block}\n\n"
+        "Run /verify @handle to check a specific account.\n"
+        "Run it yourself — never trust a screenshot of one."
+    )
+
+
+def verify_usage_text():
+    return "Use: /verify @handle"
+
+
+def addcreator_usage_text():
+    return (
+        "Usage: /addcreator <key> | <Display Name> | <Community> | @handle1, @handle2\n\n"
+        "Example:\n"
+        "/addcreator mike_knows | Mike Knows | The Inner Circle | @MikeKnows_Official"
+    )
+
+
+def addcreator_field_count_message(received_count):
+    field_label = "field" if received_count == 1 else "fields"
+    return f"{addcreator_usage_text()}\n\nReceived {received_count} {field_label}; expected 4."
+
+
+def addcreator_missing_field_message(missing_fields):
+    return f"Missing: {', '.join(missing_fields)}.\n\n{addcreator_usage_text()}"
+
+
+def addcreator_bad_handles_message(handles):
+    return f"Handles must start with @: {', '.join(handles)}\n\n{addcreator_usage_text()}"
+
+
+def registered_creator_keys_text(creators):
+    keys = sorted(str(key) for key in (creators or {}).keys())
+    return ", ".join(keys) if keys else "none"
 
 
 def alert_severity_panel_message(current_tier):
@@ -6784,6 +6947,8 @@ def poinkle_onboarding_text(kind):
             "You already made your plan. Poinkle just tells you when you're at the "
             "place you said you'd be watching.\n\n"
             "Price is truth. Indicators only reinforce what price already shows you.\n\n"
+            "VERIFY\n"
+            "/verify — check whether an account really belongs to a creator\n\n"
             "LEARN\n"
             "/explain, /learn — tap through the concepts Poinkle teaches\n"
             "/whynot, /why — why a coin hasn't alerted: where it sits, what would confirm\n"
@@ -6912,6 +7077,151 @@ def handle_start_command(telegram_token, telegram_chat_id, from_user=None):
 
 def handle_help_command(telegram_token, telegram_chat_id):
     send_telegram_message(telegram_token, telegram_chat_id, poinkle_onboarding_text("help"))
+
+
+def handle_verify_command(telegram_token, telegram_chat_id, message_text, source_chat=None):
+    source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
+    response_chat_id = str(source_chat.get("id", telegram_chat_id))
+    parts = message_text.strip().split(maxsplit=1)
+    creators = load_creators()
+
+    if len(parts) < 2 or not parts[1].strip():
+        if not creators:
+            send_telegram_message(telegram_token, response_chat_id, "No creators are registered with Poinkle yet.")
+            return
+        send_telegram_message(
+            telegram_token,
+            response_chat_id,
+            "Which creator's accounts do you want to check?",
+            reply_markup=creator_picker_keyboard(creators),
+        )
+        return
+
+    handle = parts[1].strip().split()[0]
+    if not normalize_telegram_handle(handle):
+        send_telegram_message(telegram_token, response_chat_id, verify_usage_text())
+        return
+
+    _creator_key, creator, registered_handle = find_creator_by_handle(creators, handle)
+    if creator:
+        send_telegram_message(
+            telegram_token,
+            response_chat_id,
+            render_verified_creator_message(registered_handle, creator),
+        )
+        return
+
+    send_telegram_message(
+        telegram_token,
+        response_chat_id,
+        render_not_registered_creator_message(handle, creators),
+    )
+
+
+def creator_storage_handle(raw_handle):
+    if not normalize_telegram_handle(raw_handle):
+        return ""
+    return display_handle(str(raw_handle).strip())
+
+
+def handle_addcreator_command(telegram_token, telegram_chat_id, message_text, source_chat=None, from_user=None):
+    source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
+    response_chat_id = str(source_chat.get("id", telegram_chat_id))
+    user_id = telegram_user_id(source_chat, from_user, telegram_chat_id)
+    if not is_owner_user(user_id):
+        send_telegram_message(telegram_token, response_chat_id, "That command isn't available.")
+        return
+
+    raw_payload = message_text.strip().split(maxsplit=1)
+    if len(raw_payload) < 2:
+        send_telegram_message(telegram_token, response_chat_id, addcreator_usage_text())
+        return
+
+    fields = [field.strip() for field in raw_payload[1].split("|")]
+    if len(fields) != 4:
+        send_telegram_message(telegram_token, response_chat_id, addcreator_field_count_message(len(fields)))
+        return
+
+    field_names = ("key", "display_name", "community", "handles")
+    missing_fields = [field_name for field_name, field in zip(field_names, fields) if not field]
+    if missing_fields:
+        send_telegram_message(telegram_token, response_chat_id, addcreator_missing_field_message(missing_fields))
+        return
+
+    creator_key, display_name, community, handles_text = fields
+    handles = []
+    seen_handles = set()
+    bad_handles = []
+    for raw_handle in handles_text.split(","):
+        raw_handle = raw_handle.strip()
+        if not raw_handle:
+            continue
+        if not raw_handle.startswith("@"):
+            bad_handles.append(raw_handle)
+            continue
+        handle = creator_storage_handle(raw_handle)
+        normalized = normalize_telegram_handle(handle)
+        if not normalized or normalized in seen_handles:
+            continue
+        seen_handles.add(normalized)
+        handles.append(handle)
+
+    if bad_handles:
+        send_telegram_message(telegram_token, response_chat_id, addcreator_bad_handles_message(bad_handles))
+        return
+
+    if not creator_key or not handles:
+        send_telegram_message(telegram_token, response_chat_id, addcreator_missing_field_message(["handles"]))
+        return
+
+    creators = load_creators()
+    replaced = creator_key in creators
+    creators[creator_key] = {
+        "display_name": display_name,
+        "community": community,
+        "handles": handles,
+        "registered_at": datetime.now(EASTERN_TIME).date().isoformat(),
+    }
+    save_creators(creators)
+    action = "Updated" if replaced else "Added"
+    send_telegram_message(
+        telegram_token,
+        response_chat_id,
+        f"{action} {display_name} in the creator registry.",
+    )
+
+
+def handle_removecreator_command(telegram_token, telegram_chat_id, message_text, source_chat=None, from_user=None):
+    source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
+    response_chat_id = str(source_chat.get("id", telegram_chat_id))
+    user_id = telegram_user_id(source_chat, from_user, telegram_chat_id)
+    if not is_owner_user(user_id):
+        send_telegram_message(telegram_token, response_chat_id, "That command isn't available.")
+        return
+
+    parts = message_text.strip().split(maxsplit=1)
+    if len(parts) < 2 or not parts[1].strip():
+        send_telegram_message(telegram_token, response_chat_id, "Usage: /removecreator <key>")
+        return
+
+    creator_key = parts[1].strip().split()[0]
+    creators = load_creators()
+    if creator_key not in creators:
+        send_telegram_message(
+            telegram_token,
+            response_chat_id,
+            f"Unknown creator key: {html.escape(creator_key)}.\nRegistered keys: {registered_creator_keys_text(creators)}",
+        )
+        return
+
+    removed = creators.pop(creator_key)
+    save_creators(creators)
+    display_name = str(removed.get("display_name") or creator_key)
+    send_telegram_message(
+        telegram_token,
+        response_chat_id,
+        f"Removed {display_name} from the creator registry.",
+    )
 
 
 def handle_scan_command(
@@ -7604,6 +7914,33 @@ def handle_alert_severity_callback(telegram_token, callback_query, payload, exch
     return True
 
 
+def handle_verify_creator_callback(telegram_token, callback_query, payload, exchange=None):
+    callback_query_id = (callback_query or {}).get("id")
+    if callback_query_id:
+        answer_telegram_callback(telegram_token, callback_query_id)
+
+    message = (callback_query or {}).get("message") or {}
+    chat = message.get("chat") or {}
+    chat_id = str(chat.get("id") or "")
+    if not chat_id:
+        return False
+
+    creators = load_creators()
+    creator = creators.get(str(payload or "").strip())
+    if not creator:
+        send_telegram_message(telegram_token, chat_id, "No creators are registered with Poinkle yet.")
+        clear_callback_message_keyboard(telegram_token, callback_query)
+        return True
+
+    send_telegram_message(
+        telegram_token,
+        chat_id,
+        render_creator_handle_list_message(creator),
+    )
+    clear_callback_message_keyboard(telegram_token, callback_query)
+    return True
+
+
 def handle_telegram_callback_query(exchange, telegram_token, callback_query):
     callback_query = callback_query or {}
     callback_query_id = callback_query.get("id")
@@ -7624,6 +7961,7 @@ def handle_telegram_callback_query(exchange, telegram_token, callback_query):
         ALERT_SEVERITY_CALLBACK_PREFIX: handle_alert_severity_callback,
         EXPLAIN_GROUP_CALLBACK_PREFIX: handle_explain_group_callback,
         EXPLAIN_CONCEPT_CALLBACK_PREFIX: handle_explain_concept_callback,
+        VERIFY_CREATOR_CALLBACK_PREFIX: handle_verify_creator_callback,
     }
     handler = callback_handlers.get(namespace)
     if handler is None:
@@ -8671,6 +9009,22 @@ def process_telegram_commands(
                     source_chat=chat,
                     from_user=from_user,
                 )
+        elif lower_text.startswith("/addcreator"):
+            handle_addcreator_command(
+                telegram_token,
+                chat_id,
+                text,
+                source_chat=chat,
+                from_user=from_user,
+            )
+        elif lower_text.startswith("/removecreator"):
+            handle_removecreator_command(
+                telegram_token,
+                chat_id,
+                text,
+                source_chat=chat,
+                from_user=from_user,
+            )
         elif not command_allowed_by_active_mode(
             telegram_token,
             chat_id,
@@ -8678,6 +9032,13 @@ def process_telegram_commands(
             from_user=from_user,
         ):
             pass
+        elif lower_text.startswith("/verify"):
+            handle_verify_command(
+                telegram_token,
+                chat_id,
+                text,
+                source_chat=chat,
+            )
         elif lower_text.startswith("/status"):
             handle_status_command(
                 telegram_token,
