@@ -5349,6 +5349,7 @@ ALERT_SEVERITY_CALLBACK_PREFIX = "sev"
 EXPLAIN_GROUP_CALLBACK_PREFIX = "xgroup"
 EXPLAIN_CONCEPT_CALLBACK_PREFIX = "xconcept"
 VERIFY_CREATOR_CALLBACK_PREFIX = "verifycreator"
+VERIFY_HANDLE_CALLBACK_PREFIX = "verifyhandle"
 COIN_PICKER_BUTTONS_PER_ROW = 3
 SUPPORTED_CREATOR_PLATFORMS = ("telegram", "tiktok", "youtube", "x", "instagram", "discord", "website")
 WATCHLIST_ACTIONS = {
@@ -5660,6 +5661,25 @@ def creator_account_lines(creator):
     )
 
 
+def creator_account_button_label(account):
+    return f"{creator_platform_label(account.get('platform'))}  {account.get('handle')}"
+
+
+def creator_account_keyboard(creator_key, creator):
+    rows = []
+    for index, account in enumerate(creator_accounts(creator)):
+        callback_data = f"{VERIFY_HANDLE_CALLBACK_PREFIX}:{creator_key}:{index}"
+        rows.append(
+            [
+                {
+                    "text": creator_account_button_label(account),
+                    "callback_data": callback_data,
+                }
+            ]
+        )
+    return {"inline_keyboard": rows} if rows else None
+
+
 def creator_registered_accounts_lines(creators):
     lines = []
     for _creator_key, creator in sorted((creators or {}).items(), key=lambda item: creator_display_label(item[1]).lower()):
@@ -5720,8 +5740,7 @@ def render_creator_handle_list_message(creator):
         f"<b>{display_name}</b>{community_suffix}\n\n"
         "Registered accounts:\n"
         f"{creator_account_lines(creator)}\n\n"
-        "Run /verify @handle to check a specific account.\n"
-        "Run it yourself — never trust a screenshot of one."
+        "Or run /verify @handle yourself — never trust a screenshot of one."
     )
 
 
@@ -7201,6 +7220,31 @@ def handle_help_command(telegram_token, telegram_chat_id):
     send_telegram_message(telegram_token, telegram_chat_id, poinkle_onboarding_text("help"))
 
 
+def send_verify_handle_response(telegram_token, response_chat_id, handle, creators=None):
+    creators = creators if creators is not None else load_creators()
+    matches = find_creator_matches_by_handle(creators, handle)
+    if matches:
+        first_creator_key, creator, _first_account = matches[0]
+        matched_accounts = [
+            account
+            for creator_key, _creator, account in matches
+            if creator_key == first_creator_key
+        ]
+        send_telegram_message(
+            telegram_token,
+            response_chat_id,
+            render_verified_creator_message(handle, creator, matched_accounts=matched_accounts),
+        )
+        return True
+
+    send_telegram_message(
+        telegram_token,
+        response_chat_id,
+        render_not_registered_creator_message(handle, creators),
+    )
+    return False
+
+
 def handle_verify_command(telegram_token, telegram_chat_id, message_text, source_chat=None):
     source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
     response_chat_id = str(source_chat.get("id", telegram_chat_id))
@@ -7224,26 +7268,7 @@ def handle_verify_command(telegram_token, telegram_chat_id, message_text, source
         send_telegram_message(telegram_token, response_chat_id, verify_usage_text())
         return
 
-    matches = find_creator_matches_by_handle(creators, handle)
-    if matches:
-        first_creator_key, creator, _first_account = matches[0]
-        matched_accounts = [
-            account
-            for creator_key, _creator, account in matches
-            if creator_key == first_creator_key
-        ]
-        send_telegram_message(
-            telegram_token,
-            response_chat_id,
-            render_verified_creator_message(handle, creator, matched_accounts=matched_accounts),
-        )
-        return
-
-    send_telegram_message(
-        telegram_token,
-        response_chat_id,
-        render_not_registered_creator_message(handle, creators),
-    )
+    send_verify_handle_response(telegram_token, response_chat_id, handle, creators=creators)
 
 
 def creator_storage_handle(raw_handle):
@@ -8098,6 +8123,43 @@ def handle_verify_creator_callback(telegram_token, callback_query, payload, exch
         telegram_token,
         chat_id,
         render_creator_handle_list_message(creator),
+        reply_markup=creator_account_keyboard(str(payload or "").strip(), creator),
+    )
+    return True
+
+
+def handle_verify_handle_callback(telegram_token, callback_query, payload, exchange=None):
+    callback_query_id = (callback_query or {}).get("id")
+    if callback_query_id:
+        answer_telegram_callback(telegram_token, callback_query_id)
+        clear_callback_message_keyboard(telegram_token, callback_query)
+
+    message = (callback_query or {}).get("message") or {}
+    chat = message.get("chat") or {}
+    chat_id = str(chat.get("id") or "")
+    if not chat_id:
+        return False
+
+    parts = str(payload or "").split(":", 1)
+    if len(parts) != 2:
+        return False
+    creator_key, account_index_text = parts
+    try:
+        account_index = int(account_index_text)
+    except (TypeError, ValueError):
+        return False
+
+    creators = load_creators()
+    creator = creators.get(creator_key)
+    accounts = creator_accounts(creator) if creator else []
+    if account_index < 0 or account_index >= len(accounts):
+        return False
+
+    send_verify_handle_response(
+        telegram_token,
+        chat_id,
+        accounts[account_index]["handle"],
+        creators=creators,
     )
     return True
 
@@ -8123,6 +8185,7 @@ def handle_telegram_callback_query(exchange, telegram_token, callback_query):
         EXPLAIN_GROUP_CALLBACK_PREFIX: handle_explain_group_callback,
         EXPLAIN_CONCEPT_CALLBACK_PREFIX: handle_explain_concept_callback,
         VERIFY_CREATOR_CALLBACK_PREFIX: handle_verify_creator_callback,
+        VERIFY_HANDLE_CALLBACK_PREFIX: handle_verify_handle_callback,
     }
     handler = callback_handlers.get(namespace)
     if handler is None:

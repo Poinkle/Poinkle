@@ -2747,6 +2747,217 @@ class ScannerLogicTests(unittest.TestCase):
             },
         )
 
+    def test_verify_creator_callback_shows_one_account_button_per_registered_account(self):
+        sent_messages = []
+        creators = {
+            "mike_knows": {
+                "display_name": "Mike Knows",
+                "community": "The Inner Circle",
+                "accounts": [
+                    {"platform": "telegram", "handle": "@MikeKnows_Official"},
+                    {"platform": "tiktok", "handle": "@mikeknows.io"},
+                    {"platform": "youtube", "handle": "@MikeKnows"},
+                ],
+                "registered_at": "2026-07-13",
+            }
+        }
+        callback_query = {
+            "id": "callback-1",
+            "message": {"chat": {"id": "777"}, "message_id": 44},
+            "from": {"id": 777},
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            creators_path = Path(tmpdir) / "creators.json"
+            creators_path.write_text(json.dumps(creators))
+            with patch.object(scanner, "CREATORS_FILE", creators_path), patch.object(
+                scanner, "answer_telegram_callback"
+            ), patch.object(scanner, "clear_callback_message_keyboard"), patch.object(
+                scanner,
+                "send_telegram_message",
+                side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                    (str(chat_id), text, reply_markup)
+                ),
+            ):
+                handled = scanner.handle_verify_creator_callback("TOKEN", callback_query, "mike_knows")
+
+        self.assertTrue(handled)
+        rows = sent_messages[0][2]["inline_keyboard"]
+        self.assertEqual([len(row) for row in rows], [1, 1, 1])
+        self.assertEqual(rows[0][0]["text"], "Telegram  @MikeKnows_Official")
+        self.assertEqual(rows[0][0]["callback_data"], "verifyhandle:mike_knows:0")
+        self.assertEqual(rows[1][0]["text"], "TikTok  @mikeknows.io")
+        self.assertEqual(rows[1][0]["callback_data"], "verifyhandle:mike_knows:1")
+        self.assertEqual(rows[2][0]["text"], "YouTube  @MikeKnows")
+        self.assertEqual(rows[2][0]["callback_data"], "verifyhandle:mike_knows:2")
+
+    def test_verify_handle_callback_sends_verified_card_for_that_handle(self):
+        sent_messages = []
+        creators = {
+            "mike_knows": {
+                "display_name": "Mike Knows",
+                "community": "The Inner Circle",
+                "accounts": [
+                    {"platform": "telegram", "handle": "@MikeKnows_Official"},
+                    {"platform": "tiktok", "handle": "@mikeknows.io"},
+                ],
+                "registered_at": "2026-07-13",
+            }
+        }
+        callback_query = {
+            "id": "callback-1",
+            "message": {"chat": {"id": "777"}, "message_id": 44},
+            "from": {"id": 777},
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            creators_path = Path(tmpdir) / "creators.json"
+            creators_path.write_text(json.dumps(creators))
+            with patch.object(scanner, "CREATORS_FILE", creators_path), patch.object(
+                scanner, "answer_telegram_callback"
+            ), patch.object(scanner, "clear_callback_message_keyboard"), patch.object(
+                scanner,
+                "send_telegram_message",
+                side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                    (str(chat_id), text, reply_markup)
+                ),
+            ):
+                handled = scanner.handle_verify_handle_callback("TOKEN", callback_query, "mike_knows:1")
+
+        self.assertTrue(handled)
+        self.assertIn("✅ <b>VERIFIED</b>", sent_messages[0][1])
+        self.assertIn("@mikeknows.io is <b>Mike Knows</b>' real TikTok.", sent_messages[0][1])
+
+    def test_verify_handle_button_path_matches_typed_verify_card(self):
+        typed_messages = []
+        button_messages = []
+        creators = {
+            "mike_knows": {
+                "display_name": "Mike Knows",
+                "community": "The Inner Circle",
+                "accounts": [
+                    {"platform": "telegram", "handle": "@MikeKnows_Official"},
+                    {"platform": "tiktok", "handle": "@mikeknows.io"},
+                ],
+                "registered_at": "2026-07-13",
+            }
+        }
+        callback_query = {
+            "id": "callback-1",
+            "message": {"chat": {"id": "777"}, "message_id": 44},
+            "from": {"id": 777},
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            creators_path = Path(tmpdir) / "creators.json"
+            creators_path.write_text(json.dumps(creators))
+            with patch.object(scanner, "CREATORS_FILE", creators_path), patch.object(
+                scanner,
+                "send_telegram_message",
+                side_effect=lambda token, chat_id, text, reply_markup=None: typed_messages.append(text),
+            ):
+                scanner.handle_verify_command("TOKEN", "777", "/verify @mikeknows.io")
+            with patch.object(scanner, "CREATORS_FILE", creators_path), patch.object(
+                scanner, "answer_telegram_callback"
+            ), patch.object(scanner, "clear_callback_message_keyboard"), patch.object(
+                scanner,
+                "send_telegram_message",
+                side_effect=lambda token, chat_id, text, reply_markup=None: button_messages.append(text),
+            ):
+                scanner.handle_verify_handle_callback("TOKEN", callback_query, "mike_knows:1")
+
+        self.assertEqual(button_messages[0], typed_messages[0])
+
+    def test_verify_handle_double_tap_sends_verified_card_once(self):
+        state = {}
+        sent_messages = []
+        acked_callbacks = []
+        creators = {
+            "mike_knows": {
+                "display_name": "Mike Knows",
+                "community": "The Inner Circle",
+                "accounts": [{"platform": "tiktok", "handle": "@mikeknows.io"}],
+                "registered_at": "2026-07-13",
+            }
+        }
+        updates = [
+            {
+                "update_id": 301,
+                "callback_query": {
+                    "id": "callback-1",
+                    "data": "verifyhandle:mike_knows:0",
+                    "message": {"chat": {"id": "777"}, "message_id": 55},
+                    "from": {"id": 777},
+                },
+            },
+            {
+                "update_id": 302,
+                "callback_query": {
+                    "id": "callback-2",
+                    "data": "verifyhandle:mike_knows:0",
+                    "message": {"chat": {"id": "777"}, "message_id": 55},
+                    "from": {"id": 777},
+                },
+            },
+        ]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            creators_path = Path(tmpdir) / "creators.json"
+            creators_path.write_text(json.dumps(creators))
+            with patch.object(scanner, "CREATORS_FILE", creators_path), patch.object(
+                scanner, "get_telegram_updates", return_value=updates
+            ), patch.object(
+                scanner,
+                "send_telegram_message",
+                side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(text),
+            ), patch.object(
+                scanner,
+                "answer_telegram_callback",
+                side_effect=lambda token, callback_id, text="": acked_callbacks.append(callback_id),
+            ), patch.object(scanner, "clear_callback_message_keyboard", return_value=True), patch.object(
+                scanner, "save_state"
+            ):
+                scanner.process_telegram_commands(object(), "TOKEN", "999", state)
+
+        self.assertEqual(len(sent_messages), 1)
+        self.assertEqual(acked_callbacks, ["callback-1", "callback-2"])
+
+    def test_verify_creator_with_same_handle_on_two_platforms_renders_two_account_buttons(self):
+        creators = {
+            "mike_knows": {
+                "display_name": "Mike Knows",
+                "community": "The Inner Circle",
+                "accounts": [
+                    {"platform": "instagram", "handle": "@mikeknows_og"},
+                    {"platform": "x", "handle": "@mikeknows_og"},
+                ],
+                "registered_at": "2026-07-13",
+            }
+        }
+        keyboard = scanner.creator_account_keyboard("mike_knows", creators["mike_knows"])
+        rows = keyboard["inline_keyboard"]
+
+        self.assertEqual(rows[0][0]["text"], "Instagram  @mikeknows_og")
+        self.assertEqual(rows[1][0]["text"], "X  @mikeknows_og")
+        self.assertIn("Instagram, X", scanner.render_verified_creator_message(
+            "@mikeknows_og",
+            creators["mike_knows"],
+            matched_accounts=scanner.creator_accounts(creators["mike_knows"]),
+        ))
+
+    def test_verify_handle_callback_data_stays_under_telegram_limit(self):
+        creator_key = "mike_knows"
+        creator = {
+            "display_name": "Mike Knows",
+            "community": "The Inner Circle",
+            "accounts": [{"platform": "tiktok", "handle": "@mikeknows.io"}],
+            "registered_at": "2026-07-13",
+        }
+        keyboard = scanner.creator_account_keyboard(creator_key, creator)
+        callback_data = keyboard["inline_keyboard"][0][0]["callback_data"]
+
+        self.assertLessEqual(len(callback_data.encode("utf-8")), 64)
+
     def test_addcreator_rejects_non_owner_with_reply(self):
         sent_messages = []
 
