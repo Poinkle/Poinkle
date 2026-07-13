@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import re
 import tempfile
 import unittest
 from unittest.mock import ANY, patch
@@ -2499,12 +2500,45 @@ class ScannerLogicTests(unittest.TestCase):
             scanner.handle_help_command("TOKEN", "999")
 
         message = sent_messages[0][1]
-        self.assertIn("🐷 POINKLE HELP", message)
-        self.assertIn("/explain RSI", message)
-        self.assertIn("/learn works too", message)
+        self.assertIn("Poinkle watches the zones", message)
+        self.assertIn("/explain, /learn", message)
+        self.assertIn("/whynot, /why", message)
+        self.assertIn("/guide, /reference", message)
+        self.assertIn("/scan", message)
         self.assertIn("/coins", message)
+        self.assertIn("/status", message)
         self.assertNotIn("Current Supported Coins", message)
-        self.assertLess(len(message.splitlines()), 25)
+        self.assertLess(len(message), 4096)
+
+    def test_help_does_not_use_stale_trade_or_confluence_language(self):
+        message = scanner.poinkle_onboarding_text("help").lower()
+
+        for stale_phrase in ("confluence", "trade plan", "trade levels", "patience grade"):
+            self.assertNotIn(stale_phrase, message)
+
+    def test_help_lists_no_command_without_handler(self):
+        message = scanner.poinkle_onboarding_text("help")
+        help_commands = set(re.findall(r"/([a-z]+)", message))
+        public_commands = {item["command"] for item in scanner.PUBLIC_BOT_COMMANDS}
+        public_commands.update({"reference", "scan", "status"})
+
+        self.assertTrue(help_commands)
+        self.assertTrue(help_commands.issubset(public_commands))
+        self.assertNotIn("mystats", help_commands)
+        self.assertNotIn("chart", help_commands)
+        self.assertNotIn("watchlist", help_commands)
+
+    def test_every_public_command_menu_entry_appears_in_help(self):
+        message = scanner.poinkle_onboarding_text("help")
+
+        for command in scanner.PUBLIC_BOT_COMMANDS:
+            self.assertIn(f"/{command['command']}", message)
+
+    def test_hidden_public_handlers_appear_in_help(self):
+        message = scanner.poinkle_onboarding_text("help")
+
+        for command in ("reference", "scan", "status"):
+            self.assertIn(f"/{command}", message)
 
     def test_process_telegram_commands_replies_on_first_poll(self):
         state = {}
