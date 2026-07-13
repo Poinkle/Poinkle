@@ -2526,7 +2526,7 @@ class ScannerLogicTests(unittest.TestCase):
             "mike_knows": {
                 "display_name": "Mike Knows",
                 "community": "The Inner Circle",
-                "handles": ["@MikeKnows_Official"],
+                "accounts": [{"platform": "telegram", "handle": "@MikeKnows_Official"}],
                 "registered_at": "2026-07-13",
             }
         }
@@ -2544,28 +2544,128 @@ class ScannerLogicTests(unittest.TestCase):
                 scanner.handle_verify_command("TOKEN", "999", "/verify @MikeKnows_Official")
 
         self.assertIn("✅ <b>VERIFIED</b>", sent_messages[0][1])
-        self.assertIn("@MikeKnows_Official is a registered account", sent_messages[0][1])
-        self.assertIn("<b>Mike Knows</b> · The Inner Circle", sent_messages[0][1])
+        self.assertIn("@MikeKnows_Official is <b>Mike Knows</b>' real Telegram.", sent_messages[0][1])
+        self.assertIn("All registered accounts for <b>Mike Knows</b> · The Inner Circle:", sent_messages[0][1])
         self.assertIn("Registered with Poinkle on 13 Jul 2026.", sent_messages[0][1])
+
+    def test_verify_tiktok_handle_names_platform_and_lists_all_accounts(self):
+        sent_messages = []
+        creators = {
+            "mike_knows": {
+                "display_name": "Mike Knows",
+                "community": "The Inner Circle",
+                "accounts": [
+                    {"platform": "telegram", "handle": "@MikeKnows_Official"},
+                    {"platform": "tiktok", "handle": "@mikeknows"},
+                    {"platform": "youtube", "handle": "@MikeKnows"},
+                ],
+                "registered_at": "2026-07-13",
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            creators_path = Path(tmpdir) / "creators.json"
+            creators_path.write_text(json.dumps(creators))
+            with patch.object(scanner, "CREATORS_FILE", creators_path), patch.object(
+                scanner,
+                "send_telegram_message",
+                side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                    (str(chat_id), text, reply_markup)
+                ),
+            ):
+                scanner.handle_verify_command("TOKEN", "999", "/verify mikeknows")
+
+        message = sent_messages[0][1]
+        self.assertIn("@mikeknows is registered for <b>Mike Knows</b> on: TikTok, YouTube.", message)
+        self.assertIn("Telegram  @MikeKnows_Official", message)
+        self.assertIn("TikTok    @mikeknows", message)
+        self.assertIn("YouTube   @MikeKnows", message)
+
+    def test_verified_card_uses_possessive_s_for_names_not_ending_in_s(self):
+        creator = {
+            "display_name": "Test Creator",
+            "community": "Test Community",
+            "accounts": [{"platform": "tiktok", "handle": "@testtok"}],
+            "registered_at": "2026-07-13",
+        }
+
+        message = scanner.render_verified_creator_message(
+            "@testtok",
+            creator,
+            matched_accounts=creator["accounts"],
+        )
+
+        self.assertIn("@testtok is <b>Test Creator</b>'s real TikTok.", message)
+
+    def test_verified_card_uses_apostrophe_for_names_ending_in_s(self):
+        creator = {
+            "display_name": "Chris",
+            "community": "Test Community",
+            "accounts": [{"platform": "tiktok", "handle": "@chris"}],
+            "registered_at": "2026-07-13",
+        }
+
+        message = scanner.render_verified_creator_message(
+            "@chris",
+            creator,
+            matched_accounts=creator["accounts"],
+        )
+
+        self.assertIn("@chris is <b>Chris</b>' real TikTok.", message)
+
+    def test_verify_same_handle_on_two_platforms_shows_both_matches(self):
+        creator = {
+            "display_name": "Mike Knows",
+            "community": "The Inner Circle",
+            "accounts": [
+                {"platform": "tiktok", "handle": "@mikeknows"},
+                {"platform": "x", "handle": "@mikeknows"},
+            ],
+            "registered_at": "2026-07-13",
+        }
+
+        message = scanner.render_verified_creator_message(
+            "@mikeknows",
+            creator,
+            matched_accounts=creator["accounts"],
+        )
+
+        self.assertIn("@mikeknows is registered for <b>Mike Knows</b> on: TikTok, X.", message)
+        self.assertIn("TikTok  @mikeknows", message)
+        self.assertIn("X       @mikeknows", message)
 
     def test_verify_matching_is_case_insensitive_and_at_optional(self):
         creators = {
             "mike_knows": {
                 "display_name": "Mike Knows",
                 "community": "The Inner Circle",
-                "handles": ["@MikeKnows_Official"],
+                "accounts": [{"platform": "telegram", "handle": "@MikeKnows_Official"}],
                 "registered_at": "2026-07-13",
             }
         }
         self.assertEqual(scanner.find_creator_by_handle(creators, "mikeknows_official")[0], "mike_knows")
         self.assertEqual(scanner.find_creator_by_handle(creators, "@MIKEKNOWS_OFFICIAL")[0], "mike_knows")
 
+    def test_old_creator_handles_shape_loads_as_telegram_accounts(self):
+        creator = {
+            "display_name": "Mike Knows",
+            "community": "The Inner Circle",
+            "handles": ["@MikeKnows_Official"],
+            "registered_at": "2026-07-13",
+        }
+
+        self.assertEqual(
+            scanner.creator_accounts(creator),
+            [{"platform": "telegram", "handle": "@MikeKnows_Official"}],
+        )
+        self.assertEqual(scanner.find_creator_by_handle({"mike_knows": creator}, "mikeknows_official")[0], "mike_knows")
+
     def test_verify_unregistered_handle_is_not_registered_and_never_accuses(self):
         creators = {
             "mike_knows": {
                 "display_name": "Mike Knows",
                 "community": "The Inner Circle",
-                "handles": ["@MikeKnows_Official"],
+                "accounts": [{"platform": "telegram", "handle": "@MikeKnows_Official"}],
                 "registered_at": "2026-07-13",
             }
         }
@@ -2579,7 +2679,7 @@ class ScannerLogicTests(unittest.TestCase):
         creator = {
             "display_name": "Mike Knows",
             "community": "The Inner Circle",
-            "handles": ["@MikeKnows_Official"],
+            "accounts": [{"platform": "telegram", "handle": "@MikeKnows_Official"}],
             "registered_at": "2026-07-13",
         }
         responses = [
@@ -2615,7 +2715,7 @@ class ScannerLogicTests(unittest.TestCase):
             "mike_knows": {
                 "display_name": "Mike Knows",
                 "community": "The Inner Circle",
-                "handles": ["@MikeKnows_Official"],
+                "accounts": [{"platform": "telegram", "handle": "@MikeKnows_Official"}],
                 "registered_at": "2026-07-13",
             }
         }
@@ -2658,7 +2758,7 @@ class ScannerLogicTests(unittest.TestCase):
             scanner.handle_addcreator_command(
                 "TOKEN",
                 "999",
-                "/addcreator mike_knows | Mike Knows | The Inner Circle | @MikeKnows_Official",
+                "/addcreator mike_knows | Mike Knows | The Inner Circle | telegram:@MikeKnows_Official",
                 from_user={"id": 123},
             )
 
@@ -2717,11 +2817,29 @@ class ScannerLogicTests(unittest.TestCase):
             scanner.handle_addcreator_command(
                 "TOKEN",
                 "999",
-                "/addcreator mike_knows | Mike Knows | The Inner Circle | MikeKnows_Official",
+                "/addcreator mike_knows | Mike Knows | The Inner Circle | telegram:",
                 from_user={"id": 777},
             )
 
-        self.assertIn("Handles must start with @: MikeKnows_Official", sent_messages[0][1])
+        self.assertIn("Malformed account: telegram:", sent_messages[0][1])
+
+    def test_addcreator_unknown_platform_replies_with_valid_platforms(self):
+        sent_messages = []
+
+        with patch.object(scanner, "configured_owner_ids", return_value={"777"}), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append((str(chat_id), text)),
+        ):
+            scanner.handle_addcreator_command(
+                "TOKEN",
+                "999",
+                "/addcreator mike_knows | Mike Knows | The Inner Circle | myspace:@MikeKnows",
+                from_user={"id": 777},
+            )
+
+        self.assertIn("Unknown platform: myspace.", sent_messages[0][1])
+        self.assertIn("Valid platforms: telegram, tiktok, youtube, x, instagram, discord, website", sent_messages[0][1])
 
     def test_addcreator_writes_creator_and_then_verifies(self):
         sent_messages = []
@@ -2740,7 +2858,7 @@ class ScannerLogicTests(unittest.TestCase):
                 scanner.handle_addcreator_command(
                     "TOKEN",
                     "999",
-                    "/addcreator mike_knows | Mike Knows | The Inner Circle | @MikeKnows_Official",
+                    "/addcreator mike_knows | Mike Knows | The Inner Circle | telegram:@MikeKnows_Official",
                     from_user={"id": 777},
                 )
                 creators = scanner.load_creators()
@@ -2748,9 +2866,9 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertEqual(creators["mike_knows"]["display_name"], "Mike Knows")
         self.assertEqual(creators["mike_knows"]["community"], "The Inner Circle")
-        self.assertEqual(creators["mike_knows"]["handles"], ["@MikeKnows_Official"])
+        self.assertEqual(creators["mike_knows"]["accounts"], [{"platform": "telegram", "handle": "@MikeKnows_Official"}])
         self.assertRegex(creators["mike_knows"]["registered_at"], r"^\d{4}-\d{2}-\d{2}$")
-        self.assertIn("Added Mike Knows in the creator registry.", sent_messages[0][1])
+        self.assertIn("Added Mike Knows in the creator registry", sent_messages[0][1])
         self.assertIn("✅ <b>VERIFIED</b>", sent_messages[1][1])
 
     def test_removecreator_unknown_key_replies_with_registered_keys(self):
@@ -2759,7 +2877,7 @@ class ScannerLogicTests(unittest.TestCase):
             "mike_knows": {
                 "display_name": "Mike Knows",
                 "community": "The Inner Circle",
-                "handles": ["@MikeKnows_Official"],
+                "accounts": [{"platform": "telegram", "handle": "@MikeKnows_Official"}],
                 "registered_at": "2026-07-13",
             }
         }
@@ -2785,7 +2903,7 @@ class ScannerLogicTests(unittest.TestCase):
             "mike_knows": {
                 "display_name": "Mike Knows",
                 "community": "The Inner Circle",
-                "handles": ["@MikeKnows_Official"],
+                "accounts": [{"platform": "telegram", "handle": "@MikeKnows_Official"}],
                 "registered_at": "2026-07-13",
             }
         }
@@ -2807,7 +2925,7 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(sent_messages, [("999", "Removed Mike Knows from the creator registry.")])
 
     def test_addcreator_and_removecreator_paths_all_reply(self):
-        creator_payload = "mike_knows | Mike Knows | The Inner Circle | @MikeKnows_Official"
+        creator_payload = "mike_knows | Mike Knows | The Inner Circle | telegram:@MikeKnows_Official"
         add_commands = [
             "/addcreator",
             "/addcreator test_creator",
@@ -2815,7 +2933,7 @@ class ScannerLogicTests(unittest.TestCase):
             "/addcreator mike_knows |  | The Inner Circle | @MikeKnows_Official",
             "/addcreator mike_knows | Mike Knows |  | @MikeKnows_Official",
             "/addcreator mike_knows | Mike Knows | The Inner Circle | ",
-            "/addcreator mike_knows | Mike Knows | The Inner Circle | MikeKnows_Official",
+            "/addcreator mike_knows | Mike Knows | The Inner Circle | telegram:",
             f"/addcreator {creator_payload}",
         ]
         remove_commands = [

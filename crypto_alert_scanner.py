@@ -5305,6 +5305,7 @@ EXPLAIN_GROUP_CALLBACK_PREFIX = "xgroup"
 EXPLAIN_CONCEPT_CALLBACK_PREFIX = "xconcept"
 VERIFY_CREATOR_CALLBACK_PREFIX = "verifycreator"
 COIN_PICKER_BUTTONS_PER_ROW = 3
+SUPPORTED_CREATOR_PLATFORMS = ("telegram", "tiktok", "youtube", "x", "instagram", "discord", "website")
 WATCHLIST_ACTIONS = {
     "snapshot": "Snapshot",
     "research": "Research",
@@ -5499,6 +5500,27 @@ def normalize_telegram_handle(handle):
     return clean_handle.strip().lower()
 
 
+def normalize_creator_platform(platform):
+    return str(platform or "").strip().lower()
+
+
+def creator_platform_label(platform):
+    labels = {
+        "telegram": "Telegram",
+        "tiktok": "TikTok",
+        "youtube": "YouTube",
+        "x": "X",
+        "instagram": "Instagram",
+        "discord": "Discord",
+        "website": "Website",
+    }
+    return labels.get(normalize_creator_platform(platform), str(platform or "").strip().title())
+
+
+def valid_creator_platforms_text():
+    return ", ".join(SUPPORTED_CREATOR_PLATFORMS)
+
+
 def creator_display_label(creator):
     display_name = str((creator or {}).get("display_name") or "").strip()
     community = str((creator or {}).get("community") or "").strip()
@@ -5521,16 +5543,43 @@ def creator_picker_keyboard(creators):
     return {"inline_keyboard": rows}
 
 
-def find_creator_by_handle(creators, handle):
+def creator_accounts(creator):
+    accounts = []
+    for account in (creator or {}).get("accounts", []) or []:
+        if not isinstance(account, dict):
+            continue
+        platform = normalize_creator_platform(account.get("platform"))
+        handle = str(account.get("handle") or "").strip()
+        if platform and handle:
+            accounts.append({"platform": platform, "handle": display_handle(handle)})
+
+    for handle in (creator or {}).get("handles", []) or []:
+        handle = str(handle or "").strip()
+        if handle:
+            accounts.append({"platform": "telegram", "handle": display_handle(handle)})
+
+    return accounts
+
+
+def find_creator_matches_by_handle(creators, handle):
     normalized = normalize_telegram_handle(handle)
     if not normalized:
-        return None, None, None
+        return []
 
+    matches = []
     for creator_key, creator in (creators or {}).items():
-        for registered_handle in creator.get("handles", []):
-            if normalize_telegram_handle(registered_handle) == normalized:
-                return creator_key, creator, registered_handle
-    return None, None, None
+        for account in creator_accounts(creator):
+            if normalize_telegram_handle(account.get("handle")) == normalized:
+                matches.append((creator_key, creator, account))
+    return matches
+
+
+def find_creator_by_handle(creators, handle):
+    matches = find_creator_matches_by_handle(creators, handle)
+    if not matches:
+        return None, None, None
+    creator_key, creator, account = matches[0]
+    return creator_key, creator, account.get("handle")
 
 
 def format_registered_date(date_text):
@@ -5541,34 +5590,60 @@ def format_registered_date(date_text):
         return str(date_text or "").strip() or "unknown date"
 
 
+def creator_possessive_suffix(display_name):
+    return "'" if str(display_name or "").strip().lower().endswith("s") else "'s"
+
+
 def display_handle(handle):
     clean_handle = str(handle or "").strip()
     if not clean_handle:
         return "@unknown"
+    if "://" in clean_handle or clean_handle.startswith("www."):
+        return clean_handle
     return clean_handle if clean_handle.startswith("@") else f"@{clean_handle}"
 
 
-def creator_registered_handles_lines(creators):
+def creator_account_lines(creator):
+    accounts = creator_accounts(creator)
+    if not accounts:
+        return "  No accounts registered."
+
+    platform_width = max(len(creator_platform_label(account["platform"])) for account in accounts)
+    return "\n".join(
+        f"  {creator_platform_label(account['platform']).ljust(platform_width)}  {html.escape(str(account['handle']))}"
+        for account in accounts
+    )
+
+
+def creator_registered_accounts_lines(creators):
     lines = []
     for _creator_key, creator in sorted((creators or {}).items(), key=lambda item: creator_display_label(item[1]).lower()):
         display_name = html.escape(str(creator.get("display_name") or "Registered creator"))
         lines.append(f"Registered accounts for <b>{display_name}</b>:")
-        for handle in creator.get("handles", []):
-            lines.append(f"  {html.escape(str(handle))}")
+        lines.append(creator_account_lines(creator))
         lines.append("")
     return "\n".join(lines).strip()
 
 
-def render_verified_creator_message(handle, creator):
+def render_verified_creator_message(handle, creator, matched_accounts=None):
+    matched_accounts = matched_accounts or [{"platform": "telegram", "handle": display_handle(handle)}]
     handle_text = html.escape(display_handle(handle))
-    display_name = html.escape(str(creator.get("display_name") or "Registered creator"))
+    raw_display_name = str(creator.get("display_name") or "Registered creator")
+    display_name = html.escape(raw_display_name)
     community = html.escape(str(creator.get("community") or ""))
     community_suffix = f" · {community}" if community else ""
     registered_at = html.escape(format_registered_date(creator.get("registered_at")))
+    if len(matched_accounts) == 1:
+        platform_text = html.escape(creator_platform_label(matched_accounts[0].get("platform")))
+        match_line = f"{handle_text} is <b>{display_name}</b>{creator_possessive_suffix(raw_display_name)} real {platform_text}."
+    else:
+        platform_text = html.escape(", ".join(creator_platform_label(account.get("platform")) for account in matched_accounts))
+        match_line = f"{handle_text} is registered for <b>{display_name}</b> on: {platform_text}."
     return (
         "✅ <b>VERIFIED</b>\n\n"
-        f"{handle_text} is a registered account for\n"
-        f"<b>{display_name}</b>{community_suffix}.\n\n"
+        f"{match_line}\n\n"
+        f"All registered accounts for <b>{display_name}</b>{community_suffix}:\n"
+        f"{creator_account_lines(creator)}\n\n"
         f"Registered with Poinkle on {registered_at}.\n\n"
         "Run /verify yourself — never trust a screenshot of one."
     )
@@ -5579,7 +5654,7 @@ def render_not_registered_creator_message(handle, creators):
         return "No creators are registered with Poinkle yet."
 
     handle_text = html.escape(display_handle(handle))
-    registered_accounts = creator_registered_handles_lines(creators)
+    registered_accounts = creator_registered_accounts_lines(creators)
     return (
         "⚠️ <b>NOT REGISTERED</b>\n\n"
         f"{handle_text} is not on any creator's registered list.\n\n"
@@ -5596,12 +5671,10 @@ def render_creator_handle_list_message(creator):
     display_name = html.escape(str(creator.get("display_name") or "Registered creator"))
     community = html.escape(str(creator.get("community") or ""))
     community_suffix = f" · {community}" if community else ""
-    handles = [f"  {html.escape(str(handle))}" for handle in creator.get("handles", [])]
-    handle_block = "\n".join(handles) if handles else "  No handles registered."
     return (
         f"<b>{display_name}</b>{community_suffix}\n\n"
         "Registered accounts:\n"
-        f"{handle_block}\n\n"
+        f"{creator_account_lines(creator)}\n\n"
         "Run /verify @handle to check a specific account.\n"
         "Run it yourself — never trust a screenshot of one."
     )
@@ -5613,9 +5686,9 @@ def verify_usage_text():
 
 def addcreator_usage_text():
     return (
-        "Usage: /addcreator <key> | <Display Name> | <Community> | @handle1, @handle2\n\n"
+        "Usage: /addcreator <key> | <Display Name> | <Community> | platform:@handle, platform:@handle\n\n"
         "Example:\n"
-        "/addcreator mike_knows | Mike Knows | The Inner Circle | @MikeKnows_Official"
+        "/addcreator mike_knows | Mike Knows | The Inner Circle | telegram:@MikeKnows_Official, tiktok:@mikeknows"
     )
 
 
@@ -5628,8 +5701,12 @@ def addcreator_missing_field_message(missing_fields):
     return f"Missing: {', '.join(missing_fields)}.\n\n{addcreator_usage_text()}"
 
 
-def addcreator_bad_handles_message(handles):
-    return f"Handles must start with @: {', '.join(handles)}\n\n{addcreator_usage_text()}"
+def addcreator_unknown_platform_message(platforms):
+    return f"Unknown platform: {', '.join(platforms)}.\nValid platforms: {valid_creator_platforms_text()}"
+
+
+def addcreator_malformed_accounts_message(accounts):
+    return f"Malformed account: {', '.join(accounts)}\n\n{addcreator_usage_text()}"
 
 
 def registered_creator_keys_text(creators):
@@ -7102,12 +7179,18 @@ def handle_verify_command(telegram_token, telegram_chat_id, message_text, source
         send_telegram_message(telegram_token, response_chat_id, verify_usage_text())
         return
 
-    _creator_key, creator, registered_handle = find_creator_by_handle(creators, handle)
-    if creator:
+    matches = find_creator_matches_by_handle(creators, handle)
+    if matches:
+        first_creator_key, creator, _first_account = matches[0]
+        matched_accounts = [
+            account
+            for creator_key, _creator, account in matches
+            if creator_key == first_creator_key
+        ]
         send_telegram_message(
             telegram_token,
             response_chat_id,
-            render_verified_creator_message(registered_handle, creator),
+            render_verified_creator_message(handle, creator, matched_accounts=matched_accounts),
         )
         return
 
@@ -7122,6 +7205,48 @@ def creator_storage_handle(raw_handle):
     if not normalize_telegram_handle(raw_handle):
         return ""
     return display_handle(str(raw_handle).strip())
+
+
+def parse_creator_accounts(accounts_text):
+    accounts = []
+    seen_accounts = set()
+    unknown_platforms = []
+    malformed_accounts = []
+
+    for raw_account in str(accounts_text or "").split(","):
+        raw_account = raw_account.strip()
+        if not raw_account:
+            continue
+        if ":" not in raw_account:
+            malformed_accounts.append(raw_account)
+            continue
+        platform_text, handle_text = [part.strip() for part in raw_account.split(":", 1)]
+        platform = normalize_creator_platform(platform_text)
+        if platform not in SUPPORTED_CREATOR_PLATFORMS:
+            unknown_platforms.append(platform_text or "(empty)")
+            continue
+        if not handle_text:
+            malformed_accounts.append(raw_account)
+            continue
+        handle = creator_storage_handle(handle_text)
+        normalized_handle = normalize_telegram_handle(handle)
+        if not normalized_handle:
+            malformed_accounts.append(raw_account)
+            continue
+        account_key = (platform, normalized_handle)
+        if account_key in seen_accounts:
+            continue
+        seen_accounts.add(account_key)
+        accounts.append({"platform": platform, "handle": handle})
+
+    return accounts, unknown_platforms, malformed_accounts
+
+
+def creator_accounts_summary(accounts):
+    return ", ".join(
+        f"{creator_platform_label(account.get('platform'))}: {account.get('handle')}"
+        for account in accounts
+    )
 
 
 def handle_addcreator_command(telegram_token, telegram_chat_id, message_text, source_chat=None, from_user=None):
@@ -7148,30 +7273,19 @@ def handle_addcreator_command(telegram_token, telegram_chat_id, message_text, so
         send_telegram_message(telegram_token, response_chat_id, addcreator_missing_field_message(missing_fields))
         return
 
-    creator_key, display_name, community, handles_text = fields
-    handles = []
-    seen_handles = set()
-    bad_handles = []
-    for raw_handle in handles_text.split(","):
-        raw_handle = raw_handle.strip()
-        if not raw_handle:
-            continue
-        if not raw_handle.startswith("@"):
-            bad_handles.append(raw_handle)
-            continue
-        handle = creator_storage_handle(raw_handle)
-        normalized = normalize_telegram_handle(handle)
-        if not normalized or normalized in seen_handles:
-            continue
-        seen_handles.add(normalized)
-        handles.append(handle)
+    creator_key, display_name, community, accounts_text = fields
+    accounts, unknown_platforms, malformed_accounts = parse_creator_accounts(accounts_text)
 
-    if bad_handles:
-        send_telegram_message(telegram_token, response_chat_id, addcreator_bad_handles_message(bad_handles))
+    if unknown_platforms:
+        send_telegram_message(telegram_token, response_chat_id, addcreator_unknown_platform_message(unknown_platforms))
         return
 
-    if not creator_key or not handles:
-        send_telegram_message(telegram_token, response_chat_id, addcreator_missing_field_message(["handles"]))
+    if malformed_accounts:
+        send_telegram_message(telegram_token, response_chat_id, addcreator_malformed_accounts_message(malformed_accounts))
+        return
+
+    if not creator_key or not accounts:
+        send_telegram_message(telegram_token, response_chat_id, addcreator_missing_field_message(["accounts"]))
         return
 
     creators = load_creators()
@@ -7179,7 +7293,7 @@ def handle_addcreator_command(telegram_token, telegram_chat_id, message_text, so
     creators[creator_key] = {
         "display_name": display_name,
         "community": community,
-        "handles": handles,
+        "accounts": accounts,
         "registered_at": datetime.now(EASTERN_TIME).date().isoformat(),
     }
     save_creators(creators)
@@ -7187,7 +7301,7 @@ def handle_addcreator_command(telegram_token, telegram_chat_id, message_text, so
     send_telegram_message(
         telegram_token,
         response_chat_id,
-        f"{action} {display_name} in the creator registry.",
+        f"{action} {display_name} in the creator registry: {creator_accounts_summary(accounts)}.",
     )
 
 
