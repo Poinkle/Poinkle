@@ -1041,6 +1041,10 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(volume_alert["label"], "Volume Spike — Indecision Candle")
         self.assertIsNone(scanner.lightweight_alert_direction(volume_alert))
 
+    def test_rsi_extremes_are_directionless_readings(self):
+        self.assertIsNone(scanner.lightweight_alert_direction({"type": "rsi_cross_above_70"}))
+        self.assertIsNone(scanner.lightweight_alert_direction({"type": "rsi_cross_below_30"}))
+
     def test_whynot_command_message_accepts_current_scan_symbol_shape(self):
         candles = make_ohlcv_series([100 for _ in range(80)], volume=100)
         candles[-1] = candle(candles[-1][0], 98.5, 100.0, 98.0, 99.5, 250)
@@ -1134,6 +1138,22 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("<b>ZONE STATE</b>", message)
         self.assertIn("Nearest support: around 95.00 (5.0% below)", message)
         self.assertIn("Price isn't at a zone. There's nothing to confirm yet.", message)
+
+    def test_whynot_still_renders_rsi_extreme_reading(self):
+        scan_result = list(self.whynot_scan_result())
+        scan_result[12]["scorecard"] = [
+            {"type": "volume_spike", "state": "fail", "reason": "0.8x, no spike"},
+            {"type": "ema_cross_above", "state": "fail", "reason": "EMA 21 below EMA 55; no fresh bullish cross"},
+            {"type": "ema_cross_below", "state": "fail", "reason": "EMA 21 below EMA 55; no fresh bearish cross"},
+            {"type": "rsi_cross_above_70", "state": "pass", "reason": "RSI 72.0"},
+            {"type": "rsi_cross_below_30", "state": "fail", "reason": "RSI 72.0; no cross below 30"},
+        ]
+
+        with patch.object(scanner, "scan_symbol", return_value=tuple(scan_result)):
+            message = scanner.build_whynot_command_message(object(), "BTC/USD", state={})
+
+        self.assertIn("RSI extreme", message)
+        self.assertIn("above 70; RSI 72.0", message)
 
     def pending_breakdown_state(self, expected_candle=2_000, first_candle=1_000):
         return {
@@ -1677,7 +1697,7 @@ class ScannerLogicTests(unittest.TestCase):
         }
         rsi_alert = {
             "type": "rsi_cross_above_70",
-            "label": "RSI crossed above 70",
+            "label": "RSI above 70 — extended",
             "emoji": "🔥",
         }
 
@@ -1686,7 +1706,9 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertFalse(scanner.has_lightweight_confluence([rsi_alert]))
         self.assertFalse(scanner.has_lightweight_confluence([volume_alert, volume_alert.copy()]))
         self.assertFalse(scanner.has_lightweight_confluence([volume_alert, ema_alert]))
-        self.assertTrue(scanner.has_lightweight_confluence([ema_alert, rsi_alert]))
+        self.assertFalse(scanner.has_lightweight_confluence([ema_alert, rsi_alert]))
+        self.assertEqual(scanner.lightweight_alert_direction(ema_alert), "bullish")
+        self.assertIsNone(scanner.lightweight_alert_direction(rsi_alert))
 
     def test_volume_spike_returns_no_lightweight_direction(self):
         self.assertIsNone(
@@ -2091,7 +2113,7 @@ class ScannerLogicTests(unittest.TestCase):
 
         send_group.assert_not_called()
 
-    def test_run_once_suppresses_lightweight_only_group_that_old_gate_would_have_sent(self):
+    def test_run_once_suppresses_lightweight_only_group_with_directionless_rsi(self):
         original_watchlist = scanner.WATCHLIST[:]
         scanner.WATCHLIST = ["BTC/USD"]
         sent_alert_groups = []
@@ -2102,7 +2124,7 @@ class ScannerLogicTests(unittest.TestCase):
         }
         rsi_below = {
             "type": "rsi_cross_below_30",
-            "label": "RSI crossed below 30",
+            "label": "RSI below 30 — extended",
             "emoji": "🧊",
         }
         scan_result = scan_result_for_alerts([ema_below, rsi_below])
@@ -2128,7 +2150,7 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertEqual(sent_alert_groups, [])
         self.assertEqual(state["__inversion_metrics"]["suppressed_lightweight_groups"], 1)
-        self.assertEqual(state["__inversion_metrics"]["would_have_fired_under_old_rules"], 1)
+        self.assertEqual(state["__inversion_metrics"]["would_have_fired_under_old_rules"], 0)
 
     def test_run_once_sends_group_with_confirmed_level_break(self):
         original_watchlist = scanner.WATCHLIST[:]
@@ -3982,6 +4004,17 @@ class ScannerLogicTests(unittest.TestCase):
             scanner.ALERT_SEVERITY_BUILDING,
         )
 
+    def test_rsi_extreme_does_not_contradict_level_break_agreement(self):
+        alert = severity_confirmed_break_alert(
+            direction="breakdown",
+            ema_trend="Bearish EMA trend",
+            volume_multiple=2.1,
+        )
+        rsi_extreme = {"type": "rsi_cross_above_70", "label": "RSI above 70 — extended"}
+
+        self.assertEqual(scanner.level_break_agreement_score([alert]), 2)
+        self.assertEqual(scanner.level_break_agreement_score([alert, rsi_extreme]), 2)
+
     def test_confluence_caption_adds_severity_for_three_or_more_signals(self):
         sent_photos = []
         level_break = severity_confirmed_break_alert(
@@ -4005,7 +4038,7 @@ class ScannerLogicTests(unittest.TestCase):
             },
             {
                 "type": "rsi_cross_above_70",
-                "label": "RSI crossed above 70",
+                "label": "RSI above 70 — extended",
                 "emoji": "🔥",
             },
         ]
@@ -4078,6 +4111,41 @@ class ScannerLogicTests(unittest.TestCase):
                 "Worth a look · zone confirmed\n<b>BTC/USD Confluence Alert</b> — "
             )
         )
+
+    def test_rsi_reading_still_renders_on_alert_caption(self):
+        sent_photos = []
+        level_break = severity_confirmed_break_alert(direction="breakout")
+        rsi_reading = {
+            "type": "rsi_cross_above_70",
+            "label": "RSI above 70 — extended",
+            "emoji": "🔥",
+        }
+
+        with patch.object(scanner, "render_alert_snapshot_chart", return_value="/tmp/rsi.png"), patch.object(
+            scanner,
+            "send_telegram_photo",
+            side_effect=lambda token, chat_id, path, caption="", reply_markup=None: sent_photos.append(
+                (str(chat_id), path, caption, reply_markup)
+            )
+            or True,
+        ), patch.object(scanner, "send_telegram_message"):
+            scanner.send_alert_group_to_chat(
+                "TOKEN",
+                "999",
+                "BTC/USD",
+                candle(0, 100, 105, 99, 104, 250),
+                [level_break, rsi_reading],
+                ema_21=101,
+                ema_55=99,
+                current_rsi=72,
+                volume_avg=100,
+                alert_candles=[
+                    candle(0, 100, 105, 99, 104, 100),
+                    candle(scanner.TIMEFRAME_MS, 104, 108, 103, 107, 250),
+                ],
+            )
+
+        self.assertIn("RSI above 70 — extended", sent_photos[0][2])
 
     def test_alert_research_button_reuses_wact_without_clearing_alert_keyboard(self):
         callback_query = {

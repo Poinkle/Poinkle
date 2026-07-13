@@ -4254,7 +4254,7 @@ def should_send_level_break_alert(alert):
 
 def is_bullish_scan_alert(alert):
     alert_type = alert.get("type", "")
-    if alert_type in {"rsi_cross_above_70", "ema_cross_above"}:
+    if alert_type == "ema_cross_above":
         return True
     if alert_type == "volume_spike":
         return alert.get("direction") == "bullish"
@@ -4311,9 +4311,9 @@ def is_stablecoin_symbol(symbol):
 
 def lightweight_alert_direction(alert):
     alert_type = alert.get("type")
-    if alert_type in {"rsi_cross_above_70", "ema_cross_above"}:
+    if alert_type == "ema_cross_above":
         return "bullish"
-    if alert_type in {"rsi_cross_below_30", "ema_cross_below"}:
+    if alert_type == "ema_cross_below":
         return "bearish"
     return None
 
@@ -5028,9 +5028,6 @@ def should_send_telegram_alert(
     range_low=None,
     range_high=None,
 ):
-    if alert.get("type") == "rsi_cross_above_70":
-        return False
-
     if is_bullish_scan_alert(alert) and ema_21 is not None and ema_55 is not None and ema_21 < ema_55:
         if not is_deep_in_support_zone(current_price, range_low, range_high):
             return False
@@ -8683,16 +8680,16 @@ def evaluate_lightweight_signal_state(previous_closed_candles, closed_candles):
         },
         {
             "type": "rsi_cross_above_70",
-            "label": "RSI crossed above 70",
+            "label": "RSI above 70 — extended",
             "state": "pass" if rsi_crossed_above_70 else "fail",
-            "direction": "bullish",
+            "direction": "neutral",
             "reason": f"RSI {current_rsi:.1f}{'' if rsi_crossed_above_70 else '; no cross above 70'}",
         },
         {
             "type": "rsi_cross_below_30",
-            "label": "RSI crossed below 30",
+            "label": "RSI below 30 — extended",
             "state": "pass" if rsi_crossed_below_30 else "fail",
-            "direction": "bearish",
+            "direction": "neutral",
             "reason": f"RSI {current_rsi:.1f}{'' if rsi_crossed_below_30 else '; no cross below 30'}",
         },
     ]
@@ -8719,7 +8716,7 @@ def evaluate_lightweight_signal_state(previous_closed_candles, closed_candles):
         alerts.append(
             {
                 "type": "rsi_cross_above_70",
-                "label": "RSI crossed above 70",
+                "label": "RSI above 70 — extended",
                 "emoji": "🔥",
             }
         )
@@ -8727,7 +8724,7 @@ def evaluate_lightweight_signal_state(previous_closed_candles, closed_candles):
         alerts.append(
             {
                 "type": "rsi_cross_below_30",
-                "label": "RSI crossed below 30",
+                "label": "RSI below 30 — extended",
                 "emoji": "🧊",
             }
         )
