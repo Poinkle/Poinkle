@@ -3971,8 +3971,11 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertEqual(path, "/tmp/volume-alert-snapshot.png")
         self.assertEqual([item["volume"] for item in captured["candles"]], [100, 250])
-        self.assertEqual(captured["title"], "BTC / USD CONFLUENCE ALERT")
-        self.assertIn(("SIGNALS", "Bullish Volume Spike (2.50x)\n+ EMA 21 crossed above EMA 55"), captured["card_specs"])
+        self.assertEqual(captured["title"], "BTC / USD BULLISH VOLUME SPIKE")
+        self.assertIn(
+            ("CONFIRMING", "Volume context: Bullish Volume Spike (2.50x)\n+ EMA context: 21 crossed above 55"),
+            captured["card_specs"],
+        )
         self.assertIn(("VOLUME", "2.50x average\nCurrent candle"), captured["card_specs"])
         self.assertEqual(captured["signal_scope"], scanner.ALERT_SIGNAL_SCOPE)
         self.assertEqual(captured["supports"], [95])
@@ -4189,9 +4192,9 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(sent_photos[0][1], "/tmp/confluence.png")
         self.assertEqual(
             sent_photos[0][2],
+            "<b>BTC/USD — Market Context</b>\n"
             "Developing\n"
-            "<b>BTC/USD Confluence Alert</b> — "
-            "Bullish Volume Spike (2.50x) + EMA 21 crossed above EMA 55\n"
+            "Confirming: Volume context: Bullish Volume Spike (2.50x) + EMA context: 21 crossed above 55\n"
             "Learn more: https://bitcoin.org",
         )
         self.assertEqual(
@@ -4328,8 +4331,9 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertTrue(
             sent_photos[0][2].startswith(
+                "✅ <b>BTC/USD — Zone Broken (Up)</b>\n"
                 "Worth a close look · zone confirmed, 3 of 3 agree\n"
-                "<b>BTC/USD Confluence Alert</b> — "
+                "Confirming: Volume context: Bullish Volume Spike (2.50x) + EMA context: 21 crossed above 55"
             )
         )
 
@@ -4367,9 +4371,10 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertTrue(
             sent_photos[0][2].startswith(
-                "Worth a look · zone confirmed\n<b>BTC/USD Confluence Alert</b> — "
+                "✅ <b>BTC/USD — Zone Broken (Up)</b>\nWorth a look · zone confirmed"
             )
         )
+        self.assertNotIn("Confirming:", sent_photos[0][2])
 
     def test_rsi_reading_still_renders_on_alert_caption(self):
         sent_photos = []
@@ -4404,7 +4409,135 @@ class ScannerLogicTests(unittest.TestCase):
                 ],
             )
 
-        self.assertIn("RSI above 70 — extended", sent_photos[0][2])
+        self.assertIn("RSI reading: RSI above 70 — extended", sent_photos[0][2])
+
+    def test_bare_confirmed_breakdown_caption_names_zone_break_without_confluence(self):
+        sent_photos = []
+        alert = severity_confirmed_break_alert(
+            direction="breakdown",
+            ema_trend="Neutral EMA trend, not aligned",
+            volume_multiple=1.0,
+        )
+
+        with patch.object(scanner, "render_alert_snapshot_chart", return_value="/tmp/breakdown.png"), patch.object(
+            scanner,
+            "send_telegram_photo",
+            side_effect=lambda token, chat_id, path, caption="", reply_markup=None: sent_photos.append(
+                (str(chat_id), path, caption, reply_markup)
+            )
+            or True,
+        ), patch.object(scanner, "send_telegram_message"):
+            scanner.send_alert_group_to_chat(
+                "TOKEN",
+                "999",
+                "BTC/USD",
+                candle(0, 100, 105, 99, 96, 250),
+                [alert],
+                ema_21=99,
+                ema_55=101,
+                current_rsi=42,
+                volume_avg=100,
+                alert_candles=[
+                    candle(0, 100, 105, 99, 104, 100),
+                    candle(scanner.TIMEFRAME_MS, 104, 108, 95, 96, 250),
+                ],
+            )
+
+        caption = sent_photos[0][2]
+        self.assertIn("✅ <b>BTC/USD — Zone Broken (Down)</b>", caption)
+        self.assertIn("Worth a look · zone confirmed", caption)
+        self.assertNotIn("Confluence", caption)
+        self.assertNotIn("Confirming:", caption)
+
+    def test_confirmed_breakout_caption_lists_confirming_context(self):
+        sent_photos = []
+        level_break = severity_confirmed_break_alert(
+            direction="breakout",
+            ema_trend="Bullish EMA trend",
+            volume_multiple=2.5,
+        )
+        alerts = [
+            level_break,
+            {
+                "type": "volume_spike",
+                "label": "Volume Spike on an Up Candle",
+                "emoji": "🟢",
+                "volume_multiple": 2.5,
+            },
+            {
+                "type": "ema_cross_above",
+                "label": "EMA 21 crossed above EMA 55",
+                "emoji": "🟢",
+            },
+        ]
+
+        with patch.object(scanner, "render_alert_snapshot_chart", return_value="/tmp/breakout.png"), patch.object(
+            scanner,
+            "send_telegram_photo",
+            side_effect=lambda token, chat_id, path, caption="", reply_markup=None: sent_photos.append(
+                (str(chat_id), path, caption, reply_markup)
+            )
+            or True,
+        ), patch.object(scanner, "send_telegram_message"):
+            scanner.send_alert_group_to_chat(
+                "TOKEN",
+                "999",
+                "BTC/USD",
+                candle(0, 100, 105, 99, 104, 250),
+                alerts,
+                ema_21=101,
+                ema_55=99,
+                current_rsi=58,
+                volume_avg=100,
+                alert_candles=[
+                    candle(0, 100, 105, 99, 104, 100),
+                    candle(scanner.TIMEFRAME_MS, 104, 108, 103, 107, 250),
+                ],
+            )
+
+        caption = sent_photos[0][2]
+        self.assertIn("✅ <b>BTC/USD — Zone Broken (Up)</b>", caption)
+        self.assertIn(
+            "Confirming: Volume context: Volume Spike on an Up Candle (2.50x) + EMA context: 21 crossed above 55",
+            caption,
+        )
+        self.assertNotIn("Confluence", caption)
+
+    def test_sent_alert_text_does_not_use_confluence_language(self):
+        sent_photos = []
+        sent_messages = []
+        level_break = severity_confirmed_break_alert(direction="breakout")
+
+        with patch.object(scanner, "render_alert_snapshot_chart", return_value="/tmp/zone.png"), patch.object(
+            scanner,
+            "send_telegram_photo",
+            side_effect=lambda token, chat_id, path, caption="", reply_markup=None: sent_photos.append(
+                (str(chat_id), path, caption, reply_markup)
+            )
+            or True,
+        ), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append((str(chat_id), text, reply_markup)),
+        ):
+            scanner.send_alert_group_to_chat(
+                "TOKEN",
+                "999",
+                "BTC/USD",
+                candle(0, 100, 105, 99, 104, 250),
+                [level_break],
+                ema_21=101,
+                ema_55=99,
+                current_rsi=58,
+                volume_avg=100,
+                alert_candles=[
+                    candle(0, 100, 105, 99, 104, 100),
+                    candle(scanner.TIMEFRAME_MS, 104, 108, 103, 107, 250),
+                ],
+            )
+
+        user_facing = "\n".join([photo[2] for photo in sent_photos] + [message[1] for message in sent_messages])
+        self.assertNotIn("Confluence", user_facing)
 
     def test_alert_research_button_reuses_wact_without_clearing_alert_keyboard(self):
         callback_query = {

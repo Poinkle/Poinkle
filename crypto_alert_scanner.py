@@ -4077,7 +4077,7 @@ def build_alert(symbol, candle, alert, ema_21, ema_55, current_rsi, volume_avg, 
             )
 
         return (
-            f"✅ <b>{symbol} Daily Break Confirmed</b>\n\n"
+            f"{zone_break_title_for_alert(symbol, alert, html_format=True)}\n\n"
             f"{test_mode_text}"
             f"{time_text}"
             f"<b>Setup:</b> {trade_plan['classification']}\n"
@@ -4778,9 +4778,41 @@ def record_inversion_level_break_sent(state):
 def alert_signal_summary(alert):
     alert_type = alert.get("type")
     label = alert.get("label", "Market Alert")
-    if alert_type == "volume_spike" and alert.get("volume_multiple") is not None:
-        return f"{label} ({alert['volume_multiple']:.2f}x)"
+    if is_confirmed_level_break_alert(alert):
+        direction = level_break_direction_from_alert(alert)
+        if direction == "breakdown":
+            return "Zone broken down, two closes confirmed"
+        if direction == "breakout":
+            return "Zone broken up, two closes confirmed"
+        return "Zone broken, two closes confirmed"
+    if alert_type == "volume_spike":
+        if alert.get("volume_multiple") is not None:
+            return f"Volume context: {label} ({alert['volume_multiple']:.2f}x)"
+        return f"Volume context: {label}"
+    if alert_type == "ema_cross_above":
+        return "EMA context: 21 crossed above 55"
+    if alert_type == "ema_cross_below":
+        return "EMA context: 21 crossed below 55"
+    if alert_type in {"rsi_cross_above_70", "rsi_cross_below_30"}:
+        return f"RSI reading: {label}"
     return label
+
+
+def confirmed_level_break_alert(alerts):
+    return next((alert for alert in alerts if is_confirmed_level_break_alert(alert)), None)
+
+
+def zone_break_title_for_alert(symbol, alert, html_format=False):
+    direction = level_break_direction_from_alert(alert or {})
+    if direction == "breakdown":
+        title = f"{symbol} — Zone Broken (Down)"
+    elif direction == "breakout":
+        title = f"{symbol} — Zone Broken (Up)"
+    else:
+        title = f"{symbol} — Zone Broken"
+    if html_format:
+        return f"✅ <b>{title}</b>"
+    return title
 
 
 def severity_label_for_alerts(alerts):
@@ -4827,7 +4859,12 @@ def build_alert_snapshot_content(symbol, candle, alerts, ema_21, ema_55, current
     body_percent = candle_body_percent(open_price, close)
     primary_alert = alerts[0]
     signal_lines = [alert_signal_summary(alert) for alert in alerts]
-    title_label = "CONFLUENCE ALERT" if len(alerts) >= 2 else primary_alert.get("label", "MARKET ALERT").upper()
+    confirmed_break = confirmed_level_break_alert(alerts)
+    title = (
+        zone_break_title_for_alert(symbol.replace("/", " / "), confirmed_break).upper()
+        if confirmed_break
+        else f"{symbol.replace('/', ' / ')} {primary_alert.get('label', 'MARKET ALERT').upper()}"
+    )
     secondary_footer = secondary_timeframe_footer_item(alerts)
     volume_multiple = None
     for alert in alerts:
@@ -4838,9 +4875,9 @@ def build_alert_snapshot_content(symbol, candle, alerts, ema_21, ema_55, current
         volume_multiple = volume / volume_avg if volume_avg > 0 else 0
 
     return {
-        "title": f"{symbol.replace('/', ' / ')} {title_label}",
+        "title": title,
         "card_specs": [
-            ("SIGNALS", "\n+ ".join(signal_lines[:3])),
+            ("CONFIRMING", "\n+ ".join(signal_lines[:3])),
             ("PRICE", f"{format_level(close)}\nBody {body_percent:.2f}%"),
             ("VOLUME", f"{volume_multiple:.2f}x average\nCurrent candle"),
             ("RSI", f"{current_rsi:.2f}\n{get_rsi_status(current_rsi)}"),
@@ -5005,10 +5042,22 @@ def send_alert_group_to_chat(
             supports=supports,
             resistances=resistances,
         )
-        signal_label = " + ".join(alert_signal_summary(alert) for alert in alerts)
-        caption = f"<b>{symbol} Confluence Alert</b> — {signal_label}"
+        confirmed_break = confirmed_level_break_alert(alerts)
+        caption_lines = [
+            zone_break_title_for_alert(symbol, confirmed_break, html_format=True)
+            if confirmed_break
+            else f"<b>{symbol} — Market Context</b>"
+        ]
         if severity_label:
-            caption = f"{severity_label}\n{caption}"
+            caption_lines.append(severity_label)
+        lightweight_labels = [
+            alert_signal_summary(alert)
+            for alert in alerts
+            if is_lightweight_alert(alert)
+        ]
+        if lightweight_labels:
+            caption_lines.append(f"Confirming: {' + '.join(lightweight_labels)}")
+        caption = "\n".join(caption_lines)
         link = official_coin_link(symbol)
         if link:
             caption = f"{caption}\nLearn more: {link}"
