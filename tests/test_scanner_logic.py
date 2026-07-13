@@ -2480,6 +2480,7 @@ class ScannerLogicTests(unittest.TestCase):
 
         message = sent_messages[0][1]
         self.assertIn("Poinkle watches the zones", message)
+        self.assertIn("You don't have to remember any of these. Just send /commands and tap.", message)
         self.assertIn("VERIFY\n/verify", message)
         self.assertIn("/explain, /learn", message)
         self.assertIn("/whynot, /why", message)
@@ -3045,6 +3046,47 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(sent_messages[0], ("777", scanner.command_panel_text(), scanner.command_panel_keyboard()))
         self.assertEqual(sent_messages[1], ("777", scanner.command_panel_text(), scanner.command_panel_keyboard()))
 
+    def test_command_panel_shows_questions_not_command_names(self):
+        self.assertEqual(scanner.command_panel_text(), "What do you want to know?")
+        labels = [
+            row[0]["text"]
+            for row in scanner.command_panel_keyboard()["inline_keyboard"]
+        ]
+        callbacks = [
+            row[0]["callback_data"]
+            for row in scanner.command_panel_keyboard()["inline_keyboard"]
+        ]
+
+        self.assertEqual(
+            labels,
+            [
+                "📍 Where is this coin right now?",
+                "🤔 Why isn't it alerting?",
+                "🔍 Tell me more about a coin",
+                "👀 Watch a coin for me",
+                "📚 Teach me a concept",
+                "🔍 Verify a creator's account",
+                "🔔 How much should I hear from you?",
+                "ℹ️ What is Poinkle?",
+            ],
+        )
+        self.assertEqual(
+            callbacks,
+            [
+                "panel:where",
+                "panel:whynot",
+                "panel:research",
+                "panel:watch",
+                "panel:explain",
+                "panel:verify",
+                "panel:alertlevel",
+                "panel:help",
+            ],
+        )
+        joined_labels = "\n".join(labels)
+        for command_name in ("Research a coin", "Daily snapshot", "Key levels"):
+            self.assertNotIn(command_name, joined_labels)
+
     def test_panel_buttons_open_existing_paths_or_coin_picker(self):
         callback_query = {
             "id": "callback-1",
@@ -3080,7 +3122,7 @@ class ScannerLogicTests(unittest.TestCase):
                 if other_name != handler_name:
                     handler.assert_not_called()
 
-        for payload in ("whynot", "watch", "snapshot", "research", "levels"):
+        for payload, expected_target in (("where", "snapshot"), ("whynot", "whynot"), ("watch", "watch"), ("research", "research")):
             sent_messages = []
             with self.subTest(payload=payload), patch.object(scanner, "answer_telegram_callback"), patch.object(
                 scanner, "clear_callback_message_keyboard"
@@ -3099,7 +3141,8 @@ class ScannerLogicTests(unittest.TestCase):
                 self.assertEqual(sent_messages[0][1], scanner.watch_toggle_picker_text())
                 self.assertEqual(sent_messages[0][2], scanner.watch_toggle_keyboard("777"))
             else:
-                self.assertEqual(sent_messages[0][2], scanner.target_coin_picker_keyboard(payload))
+                self.assertEqual(sent_messages[0][1], "Which coin?")
+                self.assertEqual(sent_messages[0][2], scanner.target_coin_picker_keyboard(expected_target))
 
     def test_bare_watch_opens_toggle_picker(self):
         sent_messages = []
@@ -3344,6 +3387,174 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertEqual(watchlists, {"777": ["BTC/USD"]})
         self.assertEqual(sent_messages, [("777", "✅ Added to your watchlist: BTC")])
+
+    def test_bare_snapshot_opens_coin_picker(self):
+        sent_messages = []
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            scanner, "USER_WATCHLISTS_FILE", Path(tmpdir) / "missing_user_watchlists.json"
+        ), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                (str(chat_id), text, reply_markup)
+            ),
+        ):
+            scanner.handle_levels_command(
+                object(),
+                "TOKEN",
+                "777",
+                "/snapshot",
+                source_chat={"id": "777", "type": "private"},
+                from_user={"id": 777},
+            )
+
+        self.assertEqual(sent_messages[0][0], "777")
+        self.assertEqual(sent_messages[0][1], scanner.target_coin_picker_text("snapshot"))
+        self.assertEqual(sent_messages[0][2], scanner.target_coin_picker_keyboard("snapshot", user_id="777"))
+        self.assertNotIn("Use: /snapshot BTC", sent_messages[0][1])
+
+    def test_bare_research_opens_coin_picker(self):
+        sent_messages = []
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            scanner, "USER_WATCHLISTS_FILE", Path(tmpdir) / "missing_user_watchlists.json"
+        ), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                (str(chat_id), text, reply_markup)
+            ),
+        ):
+            scanner.handle_research_command(
+                object(),
+                "TOKEN",
+                "777",
+                "/research",
+                source_chat={"id": "777", "type": "private"},
+                from_user={"id": 777},
+            )
+
+        self.assertEqual(sent_messages[0][1], scanner.target_coin_picker_text("research"))
+        self.assertEqual(sent_messages[0][2], scanner.target_coin_picker_keyboard("research", user_id="777"))
+
+    def test_bare_levels_opens_coin_picker(self):
+        sent_messages = []
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            scanner, "USER_WATCHLISTS_FILE", Path(tmpdir) / "missing_user_watchlists.json"
+        ), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                (str(chat_id), text, reply_markup)
+            ),
+        ):
+            scanner.handle_levels_command(
+                object(),
+                "TOKEN",
+                "777",
+                "/levels",
+                source_chat={"id": "777", "type": "private"},
+                from_user={"id": 777},
+            )
+
+        self.assertEqual(sent_messages[0][1], scanner.target_coin_picker_text("levels"))
+        self.assertEqual(sent_messages[0][2], scanner.target_coin_picker_keyboard("levels", user_id="777"))
+
+    def test_bare_whynot_opens_coin_picker(self):
+        sent_messages = []
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            scanner, "USER_WATCHLISTS_FILE", Path(tmpdir) / "missing_user_watchlists.json"
+        ), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                (str(chat_id), text, reply_markup)
+            ),
+        ):
+            scanner.handle_whynot_command(
+                object(),
+                "TOKEN",
+                "777",
+                "/whynot",
+                source_chat={"id": "777", "type": "private"},
+                from_user={"id": 777},
+            )
+
+        self.assertEqual(sent_messages[0][1], scanner.target_coin_picker_text("whynot"))
+        self.assertEqual(sent_messages[0][2], scanner.target_coin_picker_keyboard("whynot", user_id="777"))
+
+    def test_bare_unwatch_opens_toggle_picker(self):
+        sent_messages = []
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            scanner, "USER_WATCHLISTS_FILE", Path(tmpdir) / "user_watchlists.json"
+        ), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                (str(chat_id), text, reply_markup)
+            ),
+        ):
+            scanner.handle_unwatch_command(
+                "TOKEN",
+                "777",
+                "/unwatch",
+                source_chat={"id": "777", "type": "private"},
+                from_user={"id": 777},
+            )
+            expected_keyboard = scanner.watch_toggle_keyboard("777")
+
+        self.assertEqual(sent_messages[0], ("777", scanner.watch_toggle_picker_text(), expected_keyboard))
+
+    def test_no_bare_coin_command_reply_contains_use_command(self):
+        command_calls = [
+            lambda: scanner.handle_levels_command(
+                object(),
+                "TOKEN",
+                "777",
+                "/snapshot",
+                source_chat={"id": "777", "type": "private"},
+                from_user={"id": 777},
+            ),
+            lambda: scanner.handle_research_command(
+                object(),
+                "TOKEN",
+                "777",
+                "/research",
+                source_chat={"id": "777", "type": "private"},
+                from_user={"id": 777},
+            ),
+            lambda: scanner.handle_levels_command(
+                object(),
+                "TOKEN",
+                "777",
+                "/levels",
+                source_chat={"id": "777", "type": "private"},
+                from_user={"id": 777},
+            ),
+            lambda: scanner.handle_whynot_command(
+                object(),
+                "TOKEN",
+                "777",
+                "/whynot",
+                source_chat={"id": "777", "type": "private"},
+                from_user={"id": 777},
+            ),
+            lambda: scanner.handle_unwatch_command(
+                "TOKEN",
+                "777",
+                "/unwatch",
+                source_chat={"id": "777", "type": "private"},
+                from_user={"id": 777},
+            ),
+        ]
+
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            scanner, "USER_WATCHLISTS_FILE", Path(tmpdir) / "missing_user_watchlists.json"
+        ), patch.object(scanner, "send_telegram_message") as send_message:
+            for command_call in command_calls:
+                command_call()
+
+        for call in send_message.call_args_list:
+            self.assertNotIn("Use: /", call.args[2])
 
     def test_coin_picker_routes_to_correct_handler_per_target(self):
         callback_query = {

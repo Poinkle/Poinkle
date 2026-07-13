@@ -5396,14 +5396,13 @@ WATCH_LETTER_CALLBACK_PREFIX = "watchletter"
 COIN_PICKER_BUTTONS_PER_ROW = 3
 COIN_PICK_TYPE_DIFFERENT_SYMBOL = "__type__"
 COMMAND_PANEL_ACTIONS = (
-    ("🔍 Verify a creator", "verify"),
-    ("📚 Learn a concept", "explain"),
-    ("📊 Why isn't it alerting?", "whynot"),
-    ("🔎 Research a coin", "research"),
-    ("📈 Daily snapshot", "snapshot"),
-    ("📐 Key levels", "levels"),
-    ("👀 Watch a coin", "watch"),
-    ("🔔 Alert level", "alertlevel"),
+    ("📍 Where is this coin right now?", "where"),
+    ("🤔 Why isn't it alerting?", "whynot"),
+    ("🔍 Tell me more about a coin", "research"),
+    ("👀 Watch a coin for me", "watch"),
+    ("📚 Teach me a concept", "explain"),
+    ("🔍 Verify a creator's account", "verify"),
+    ("🔔 How much should I hear from you?", "alertlevel"),
     ("ℹ️ What is Poinkle?", "help"),
 )
 TOP_COIN_PICKER_BASES = ("BTC", "ETH", "SOL", "XRP", "DOGE", "ADA", "AVAX", "LINK", "DOT", "POL", "TON", "TAO")
@@ -5846,7 +5845,7 @@ def command_panel_keyboard():
 
 
 def command_panel_text():
-    return "What do you want to do?"
+    return "What do you want to know?"
 
 
 def top_coin_picker_symbols(user_id=None):
@@ -5903,12 +5902,13 @@ def target_coin_picker_keyboard(target, user_id=None):
 
 def target_coin_picker_text(target):
     labels = {
-        "whynot": "Which coin should I check?",
+        "where": "Which coin?",
+        "whynot": "Which coin?",
         "watch": "Which coin do you want to watch?",
-        "snapshot": "Which coin should I snapshot?",
-        "research": "Which coin should I research?",
-        "levels": "Which coin should I map?",
-        "chart": "Which coin should I chart?",
+        "snapshot": "Which coin?",
+        "research": "Which coin?",
+        "levels": "Which coin?",
+        "chart": "Which coin?",
     }
     return labels.get(str(target or "").strip().lower(), "Pick a coin.")
 
@@ -7390,6 +7390,7 @@ def poinkle_onboarding_text(kind):
             "You already made your plan. Poinkle just tells you when you're at the "
             "place you said you'd be watching.\n\n"
             "Price is truth. Indicators only reinforce what price already shows you.\n\n"
+            "You don't have to remember any of these. Just send /commands and tap.\n\n"
             "VERIFY\n"
             "/verify — check whether an account really belongs to a creator\n\n"
             "LEARN\n"
@@ -8190,7 +8191,7 @@ def handle_whynot_command(
         send_telegram_message(
             telegram_token,
             response_chat_id,
-            "I couldn't find that coin yet. Try the ticker, like /whynot BTC.",
+            unknown_symbol_command_message(parts[1], command),
         )
         return
 
@@ -8817,6 +8818,10 @@ def handle_panel_callback(telegram_token, callback_query, payload, exchange=None
     if action == "watch":
         user_id = str(from_user.get("id") or chat_id)
         send_watch_toggle_picker(telegram_token, chat_id, user_id)
+        return True
+    if action == "where":
+        user_id = str(from_user.get("id") or chat_id)
+        send_target_coin_picker(telegram_token, chat_id, "snapshot", user_id=user_id)
         return True
     if action in {"whynot", "snapshot", "research", "levels", "chart"}:
         user_id = str(from_user.get("id") or chat_id)
@@ -9464,36 +9469,7 @@ def send_bare_command_watchlist_panel(
     from_user = from_user or {}
     response_chat_id = str(source_chat.get("id", telegram_chat_id))
     user_chat_id = alert_dm_chat_id(source_chat, from_user, telegram_chat_id)
-    user_symbols = user_watchlist_symbols(user_chat_id)
-
-    if not user_symbols:
-        send_telegram_message(
-            telegram_token,
-            response_chat_id,
-            f"Use: {command} {example_ticker}\n"
-            f"Or start a watchlist with /watch {example_ticker}.",
-        )
-        return True
-
-    sorted_symbols = sorted(user_symbols, key=base_symbol)
-    is_private = is_private_chat(source_chat)
-    try:
-        send_telegram_message(
-            telegram_token,
-            user_chat_id,
-            f"{action_label} — pick a coin below, or type any ticker (e.g. {command} {example_ticker})",
-            reply_markup=watchlist_direct_action_keyboard(sorted_symbols, action),
-        )
-        if not is_private:
-            send_telegram_message(
-                telegram_token,
-                response_chat_id,
-                f"I sent your {action_label.lower()} coin picker to your DM.",
-            )
-    except Exception as error:
-        log_warn(f"Could not DM {action} picker to user {user_chat_id}: {error}")
-        if not is_private:
-            send_telegram_message(telegram_token, response_chat_id, levels_dm_failed_message())
+    send_target_coin_picker(telegram_token, response_chat_id, action, user_id=user_chat_id)
     return True
 
 
@@ -9661,13 +9637,14 @@ def handle_levels_command(
 
     if len(parts) < 2:
         log_warn(f"Missing symbol for {command} command")
+        picker_target = "levels" if command == "/levels" else "snapshot"
         send_bare_command_watchlist_panel(
             telegram_token,
             telegram_chat_id,
             source_chat,
             from_user,
             command,
-            "snapshot",
+            picker_target,
             "Snapshot",
             "BTC",
         )
