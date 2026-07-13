@@ -626,14 +626,22 @@ def log_accuracy_audit_snapshot(symbol, candle, current_market_price, ema_21, em
     )
 
 
-def format_loop_phase_benchmark(command_seconds, scan_seconds, user_alert_seconds, active_trade_seconds):
-    total = command_seconds + scan_seconds + user_alert_seconds + active_trade_seconds
+def format_loop_phase_benchmark(
+    command_seconds,
+    scan_seconds,
+    user_alert_seconds,
+    active_trade_seconds,
+    post_scan_poll_seconds=0,
+):
+    total = command_seconds + scan_seconds + user_alert_seconds + active_trade_seconds + post_scan_poll_seconds
+    post_scan_text = f" | post-scan poll {post_scan_poll_seconds:.2f}s" if post_scan_poll_seconds else ""
     return (
         "Loop phase benchmark: "
         f"commands {command_seconds:.2f}s | "
         f"scan {scan_seconds:.2f}s | "
         f"user alerts {user_alert_seconds:.2f}s | "
-        f"active trades {active_trade_seconds:.2f}s | "
+        f"active trades {active_trade_seconds:.2f}s"
+        f"{post_scan_text} | "
         f"total before sleep {total:.2f}s"
     )
 
@@ -1517,6 +1525,43 @@ def mark_telegram_callback_handled(command_state, callback_query_id):
         return
     handled_ids.append(callback_query_id)
     del handled_ids[:-TELEGRAM_CALLBACK_DEDUPE_LIMIT]
+
+
+def handled_telegram_callback_message_keys(command_state):
+    handled_keys = command_state.setdefault("handled_callback_message_keys", [])
+    if not isinstance(handled_keys, list):
+        handled_keys = []
+        command_state["handled_callback_message_keys"] = handled_keys
+    return handled_keys
+
+
+def telegram_callback_message_dedupe_key(callback_query):
+    callback_query = callback_query or {}
+    message = callback_query.get("message") or {}
+    chat = message.get("chat") or {}
+    chat_id = chat.get("id")
+    message_id = message.get("message_id")
+    callback_data = callback_query.get("data")
+    if chat_id is None or message_id is None or not callback_data:
+        return None
+    return f"{chat_id}:{message_id}:{callback_data}"
+
+
+def telegram_callback_message_already_handled(command_state, callback_message_key):
+    if not callback_message_key:
+        return False
+    return str(callback_message_key) in set(handled_telegram_callback_message_keys(command_state))
+
+
+def mark_telegram_callback_message_handled(command_state, callback_message_key):
+    if not callback_message_key:
+        return
+    callback_message_key = str(callback_message_key)
+    handled_keys = handled_telegram_callback_message_keys(command_state)
+    if callback_message_key in handled_keys:
+        return
+    handled_keys.append(callback_message_key)
+    del handled_keys[:-TELEGRAM_CALLBACK_DEDUPE_LIMIT]
 
 
 def handled_telegram_message_keys(command_state):
@@ -7837,6 +7882,7 @@ def handle_snapshot_look_order_callback(telegram_token, callback_query):
     if not resolved_key:
         if callback_query_id:
             answer_telegram_callback(telegram_token, callback_query_id, "Concept unavailable.")
+            clear_callback_message_keyboard(telegram_token, callback_query)
         return True
 
     message = callback_query.get("message") or {}
@@ -7845,12 +7891,14 @@ def handle_snapshot_look_order_callback(telegram_token, callback_query):
     if not chat_id:
         if callback_query_id:
             answer_telegram_callback(telegram_token, callback_query_id, "Concept unavailable.")
+            clear_callback_message_keyboard(telegram_token, callback_query)
         return True
 
     user_id = str((callback_query.get("from") or {}).get("id") or "")
     skill_level = user_skill_level(user_id) if user_id else None
     if callback_query_id:
         answer_telegram_callback(telegram_token, callback_query_id)
+        clear_callback_message_keyboard(telegram_token, callback_query)
     send_explain_command_response(
         telegram_token,
         chat_id,
@@ -7864,6 +7912,7 @@ def handle_explain_group_callback(telegram_token, callback_query, payload, excha
     callback_query_id = (callback_query or {}).get("id")
     if callback_query_id:
         answer_telegram_callback(telegram_token, callback_query_id)
+        clear_callback_message_keyboard(telegram_token, callback_query)
 
     keyboard = explain_concept_keyboard(payload)
     if keyboard is None:
@@ -7882,7 +7931,6 @@ def handle_explain_group_callback(telegram_token, callback_query, payload, excha
         f"{group_label}\nPick a concept.",
         reply_markup=keyboard,
     )
-    clear_callback_message_keyboard(telegram_token, callback_query)
     return True
 
 
@@ -7890,6 +7938,7 @@ def handle_explain_concept_callback(telegram_token, callback_query, payload, exc
     callback_query_id = (callback_query or {}).get("id")
     if callback_query_id:
         answer_telegram_callback(telegram_token, callback_query_id)
+        clear_callback_message_keyboard(telegram_token, callback_query)
 
     concept_key = normalize_concept_key(payload)
     if not concept_key:
@@ -7909,7 +7958,6 @@ def handle_explain_concept_callback(telegram_token, callback_query, payload, exc
         build_explain_command_message(f"/explain {concept_key}", skill_level=skill_level),
         concept_key=concept_key,
     )
-    clear_callback_message_keyboard(telegram_token, callback_query)
     return True
 
 
@@ -7917,6 +7965,7 @@ def handle_watchlist_coin_callback(telegram_token, callback_query, payload, exch
     callback_query_id = (callback_query or {}).get("id")
     if callback_query_id:
         answer_telegram_callback(telegram_token, callback_query_id)
+        clear_callback_message_keyboard(telegram_token, callback_query)
 
     symbol = normalize_trade_symbol_input(payload)
     if not symbol:
@@ -7934,7 +7983,6 @@ def handle_watchlist_coin_callback(telegram_token, callback_query, payload, exch
         f"<b>{base_symbol(symbol)}</b>\nWhat do you want to open?",
         reply_markup=watchlist_action_keyboard(symbol),
     )
-    clear_callback_message_keyboard(telegram_token, callback_query)
     return True
 
 
@@ -7942,6 +7990,7 @@ def handle_watchlist_action_callback(telegram_token, callback_query, payload, ex
     callback_query_id = (callback_query or {}).get("id")
     if callback_query_id:
         answer_telegram_callback(telegram_token, callback_query_id)
+        clear_callback_message_keyboard(telegram_token, callback_query)
 
     parts = str(payload or "").split(":", 1)
     if len(parts) != 2:
@@ -7969,7 +8018,6 @@ def handle_watchlist_action_callback(telegram_token, callback_query, payload, ex
         )
         if queued:
             send_heavy_job_acknowledgment(telegram_token, user_id, "snapshot", f"/snapshot {ticker}")
-            clear_callback_message_keyboard(telegram_token, callback_query)
         return True
     if action == "research":
         queued = enqueue_telegram_command_job(
@@ -7981,8 +8029,6 @@ def handle_watchlist_action_callback(telegram_token, callback_query, payload, ex
         )
         if queued:
             send_heavy_job_acknowledgment(telegram_token, user_id, "research", f"/research {ticker}")
-            if not is_alert_research_button:
-                clear_callback_message_keyboard(telegram_token, callback_query)
         return True
     if action == "whynot":
         queued = enqueue_telegram_command_job(
@@ -7994,7 +8040,6 @@ def handle_watchlist_action_callback(telegram_token, callback_query, payload, ex
         )
         if queued:
             send_heavy_job_acknowledgment(telegram_token, user_id, "whynot", f"/whynot {ticker}")
-            clear_callback_message_keyboard(telegram_token, callback_query)
         return True
 
     return False
@@ -8006,17 +8051,20 @@ def handle_alert_severity_callback(telegram_token, callback_query, payload, exch
     if selected_tier != str(payload or "").strip().lower():
         if callback_query_id:
             answer_telegram_callback(telegram_token, callback_query_id, "Option unavailable.")
+            clear_callback_message_keyboard(telegram_token, callback_query)
         return True
 
     user_id = str(((callback_query or {}).get("from") or {}).get("id") or "")
     if not user_id:
         if callback_query_id:
             answer_telegram_callback(telegram_token, callback_query_id, "Option unavailable.")
+            clear_callback_message_keyboard(telegram_token, callback_query)
         return True
 
     set_user_preference(user_id, ALERT_SEVERITY_PREFERENCE_KEY, selected_tier)
     if callback_query_id:
         answer_telegram_callback(telegram_token, callback_query_id, "Saved.")
+        clear_callback_message_keyboard(telegram_token, callback_query)
     send_telegram_message(
         telegram_token,
         user_id,
@@ -8032,6 +8080,7 @@ def handle_verify_creator_callback(telegram_token, callback_query, payload, exch
     callback_query_id = (callback_query or {}).get("id")
     if callback_query_id:
         answer_telegram_callback(telegram_token, callback_query_id)
+        clear_callback_message_keyboard(telegram_token, callback_query)
 
     message = (callback_query or {}).get("message") or {}
     chat = message.get("chat") or {}
@@ -8043,7 +8092,6 @@ def handle_verify_creator_callback(telegram_token, callback_query, payload, exch
     creator = creators.get(str(payload or "").strip())
     if not creator:
         send_telegram_message(telegram_token, chat_id, "No creators are registered with Poinkle yet.")
-        clear_callback_message_keyboard(telegram_token, callback_query)
         return True
 
     send_telegram_message(
@@ -8051,7 +8099,6 @@ def handle_verify_creator_callback(telegram_token, callback_query, payload, exch
         chat_id,
         render_creator_handle_list_message(creator),
     )
-    clear_callback_message_keyboard(telegram_token, callback_query)
     return True
 
 
@@ -9073,7 +9120,16 @@ def process_telegram_commands(
                 save_state(state)
                 continue
 
+            callback_message_key = telegram_callback_message_dedupe_key(callback_query)
+            if telegram_callback_message_already_handled(command_state, callback_message_key):
+                if callback_query_id:
+                    answer_telegram_callback(telegram_token, callback_query_id)
+                command_state["last_update_id"] = update_id
+                save_state(state)
+                continue
+
             mark_telegram_callback_handled(command_state, callback_query_id)
+            mark_telegram_callback_message_handled(command_state, callback_message_key)
             command_state["last_update_id"] = update_id
             save_state(state)
             handle_telegram_callback_query(exchange, telegram_token, callback_query)
@@ -11024,12 +11080,24 @@ def main():
             monitor_active_trades(exchange, telegram_token, telegram_chat_id, state)
             active_trade_seconds = time.perf_counter() - active_trade_phase_start
 
+            post_scan_poll_phase_start = time.perf_counter()
+            process_telegram_commands(
+                exchange,
+                telegram_token,
+                telegram_chat_id,
+                state,
+                defer_heavy_commands=True,
+                telegram_poll_timeout=0,
+            )
+            post_scan_poll_seconds = time.perf_counter() - post_scan_poll_phase_start
+
             log_info(
                 format_loop_phase_benchmark(
                     command_seconds,
                     scan_seconds,
                     user_alert_seconds,
                     active_trade_seconds,
+                    post_scan_poll_seconds=post_scan_poll_seconds,
                 )
             )
 

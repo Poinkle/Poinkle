@@ -3407,6 +3407,152 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("<b>Volume Spike</b>", send_response.call_args.args[2])
         self.assertEqual(send_response.call_args.kwargs["concept_key"], "volume_spike")
 
+    def test_same_picker_button_double_tap_sends_once_and_acks_second_tap(self):
+        state = {}
+        sent_messages = []
+        acked_callbacks = []
+        creators = {
+            "mike_knows": {
+                "display_name": "Mike Knows",
+                "community": "The Inner Circle",
+                "accounts": [{"platform": "telegram", "handle": "@MikeKnows_Official"}],
+                "registered_at": "2026-07-13",
+            }
+        }
+        updates = [
+            {
+                "update_id": 201,
+                "callback_query": {
+                    "id": "callback-1",
+                    "data": "verifycreator:mike_knows",
+                    "message": {"chat": {"id": "777"}, "message_id": 44},
+                    "from": {"id": 777},
+                },
+            },
+            {
+                "update_id": 202,
+                "callback_query": {
+                    "id": "callback-2",
+                    "data": "verifycreator:mike_knows",
+                    "message": {"chat": {"id": "777"}, "message_id": 44},
+                    "from": {"id": 777},
+                },
+            },
+        ]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            creators_path = Path(tmpdir) / "creators.json"
+            creators_path.write_text(json.dumps(creators))
+            with patch.object(scanner, "CREATORS_FILE", creators_path), patch.object(
+                scanner, "get_telegram_updates", return_value=updates
+            ), patch.object(
+                scanner,
+                "send_telegram_message",
+                side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append((chat_id, text)),
+            ), patch.object(
+                scanner,
+                "answer_telegram_callback",
+                side_effect=lambda token, callback_id, text="": acked_callbacks.append((callback_id, text)),
+            ), patch.object(scanner, "clear_callback_message_keyboard", return_value=True), patch.object(
+                scanner, "save_state"
+            ):
+                scanner.process_telegram_commands(object(), "TOKEN", "999", state)
+
+        self.assertEqual(len(sent_messages), 1)
+        self.assertEqual(acked_callbacks, [("callback-1", ""), ("callback-2", "")])
+
+    def test_callback_keyboard_clears_before_card_is_sent(self):
+        events = []
+        creators = {
+            "mike_knows": {
+                "display_name": "Mike Knows",
+                "community": "The Inner Circle",
+                "accounts": [{"platform": "telegram", "handle": "@MikeKnows_Official"}],
+                "registered_at": "2026-07-13",
+            }
+        }
+        callback_query = {
+            "id": "callback-1",
+            "data": "verifycreator:mike_knows",
+            "message": {"chat": {"id": "777"}, "message_id": 44},
+            "from": {"id": 777},
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            creators_path = Path(tmpdir) / "creators.json"
+            creators_path.write_text(json.dumps(creators))
+            with patch.object(scanner, "CREATORS_FILE", creators_path), patch.object(
+                scanner, "answer_telegram_callback", side_effect=lambda *args, **kwargs: events.append("ack")
+            ), patch.object(
+                scanner, "clear_callback_message_keyboard", side_effect=lambda *args, **kwargs: events.append("clear")
+            ), patch.object(
+                scanner, "send_telegram_message", side_effect=lambda *args, **kwargs: events.append("send")
+            ):
+                handled = scanner.handle_verify_creator_callback("TOKEN", callback_query, "mike_knows")
+
+        self.assertTrue(handled)
+        self.assertEqual(events, ["ack", "clear", "send"])
+
+    def test_different_buttons_on_same_message_are_independently_tappable(self):
+        state = {}
+        updates = [
+            {
+                "update_id": 211,
+                "callback_query": {
+                    "id": "callback-1",
+                    "data": "xconcept:rsi",
+                    "message": {"chat": {"id": "777"}, "message_id": 44},
+                    "from": {"id": 777},
+                },
+            },
+            {
+                "update_id": 212,
+                "callback_query": {
+                    "id": "callback-2",
+                    "data": "xconcept:ema",
+                    "message": {"chat": {"id": "777"}, "message_id": 44},
+                    "from": {"id": 777},
+                },
+            },
+        ]
+
+        with patch.object(scanner, "get_telegram_updates", return_value=updates), patch.object(
+            scanner, "handle_telegram_callback_query", return_value=True
+        ) as handle_callback, patch.object(scanner, "save_state"):
+            scanner.process_telegram_commands(object(), "TOKEN", "999", state)
+
+        self.assertEqual(handle_callback.call_count, 2)
+
+    def test_same_button_on_new_picker_message_works_normally(self):
+        state = {}
+        updates = [
+            {
+                "update_id": 221,
+                "callback_query": {
+                    "id": "callback-1",
+                    "data": "verifycreator:mike_knows",
+                    "message": {"chat": {"id": "777"}, "message_id": 44},
+                    "from": {"id": 777},
+                },
+            },
+            {
+                "update_id": 222,
+                "callback_query": {
+                    "id": "callback-2",
+                    "data": "verifycreator:mike_knows",
+                    "message": {"chat": {"id": "777"}, "message_id": 45},
+                    "from": {"id": 777},
+                },
+            },
+        ]
+
+        with patch.object(scanner, "get_telegram_updates", return_value=updates), patch.object(
+            scanner, "handle_telegram_callback_query", return_value=True
+        ) as handle_callback, patch.object(scanner, "save_state"):
+            scanner.process_telegram_commands(object(), "TOKEN", "999", state)
+
+        self.assertEqual(handle_callback.call_count, 2)
+
     def test_every_explanation_registry_key_is_grouped_exactly_once(self):
         grouped_keys = [
             concept_key
@@ -5002,7 +5148,7 @@ class ScannerLogicTests(unittest.TestCase):
         user_facing = "\n".join([photo[2] for photo in sent_photos] + [message[1] for message in sent_messages])
         self.assertNotIn("Confluence", user_facing)
 
-    def test_alert_research_button_reuses_wact_without_clearing_alert_keyboard(self):
+    def test_alert_research_button_reuses_wact_and_clears_keyboard_first(self):
         callback_query = {
             "id": "callback-1",
             "from": {"id": 111},
@@ -5017,9 +5163,7 @@ class ScannerLogicTests(unittest.TestCase):
             scanner, "user_watchlist_symbols", return_value=[]
         ), patch.object(scanner, "enqueue_telegram_command_job", return_value=True) as enqueue_job, patch.object(
             scanner, "send_heavy_job_acknowledgment"
-        ) as send_ack, patch.object(
-            scanner, "clear_callback_message_keyboard", side_effect=AssertionError("alert keyboard should stay tappable")
-        ):
+        ) as send_ack, patch.object(scanner, "clear_callback_message_keyboard") as clear_keyboard:
             handled = scanner.handle_watchlist_action_callback(
                 "TOKEN",
                 callback_query,
@@ -5028,6 +5172,7 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertTrue(handled)
         answer_callback.assert_called_once_with("TOKEN", "callback-1")
+        clear_keyboard.assert_called_once_with("TOKEN", callback_query)
         enqueue_job.assert_called_once_with(
             "research",
             "111",
