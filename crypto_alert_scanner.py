@@ -352,6 +352,7 @@ PUBLIC_BOT_COMMANDS = [
     {"command": "research", "description": "Deeper multi-card research brief"},
     {"command": "whynot", "description": "See why a coin is waiting"},
     {"command": "why", "description": "Alias for whynot"},
+    {"command": "commands", "description": "Open the tappable command panel"},
     {"command": "levels", "description": "Legacy text-only version"},
     {"command": "alerts", "description": "Set a personal price-zone alert"},
     {"command": "alertlevel", "description": "Choose personal alert noise level"},
@@ -5352,7 +5353,23 @@ EXPLAIN_CONCEPT_CALLBACK_PREFIX = "xconcept"
 VERIFY_CREATOR_CALLBACK_PREFIX = "verifycreator"
 VERIFY_HANDLE_CALLBACK_PREFIX = "verifyhandle"
 START_ORIENTATION_CALLBACK_PREFIX = "start"
+ONBOARD_CALLBACK_PREFIX = "onboard"
+COIN_PICK_CALLBACK_PREFIX = "coinpick"
+PANEL_CALLBACK_PREFIX = "panel"
 COIN_PICKER_BUTTONS_PER_ROW = 3
+COIN_PICK_TYPE_DIFFERENT_SYMBOL = "__type__"
+COMMAND_PANEL_ACTIONS = (
+    ("🔍 Verify a creator", "verify"),
+    ("📚 Learn a concept", "explain"),
+    ("📊 Why isn't it alerting?", "whynot"),
+    ("🔎 Research a coin", "research"),
+    ("📈 Daily snapshot", "snapshot"),
+    ("📐 Key levels", "levels"),
+    ("👀 Watch a coin", "watch"),
+    ("🔔 Alert level", "alertlevel"),
+    ("ℹ️ What is Poinkle?", "help"),
+)
+TOP_COIN_PICKER_BASES = ("BTC", "ETH", "SOL", "XRP", "DOGE", "ADA", "AVAX", "LINK", "DOT", "POL", "TON", "TAO")
 SUPPORTED_CREATOR_PLATFORMS = ("telegram", "tiktok", "youtube", "x", "instagram", "discord", "website")
 WATCHLIST_ACTIONS = {
     "snapshot": "Snapshot",
@@ -5501,17 +5518,17 @@ def callback_query_has_alert_research_keyboard(callback_query, symbol):
 
 
 def explain_group_keyboard():
-    return {
-        "inline_keyboard": [
-            [
-                {
-                    "text": group_label,
-                    "callback_data": f"{EXPLAIN_GROUP_CALLBACK_PREFIX}:{index}",
-                }
-            ]
-            for index, (group_label, _concept_keys) in enumerate(CONCEPT_GROUPS)
+    rows = [
+        [
+            {
+                "text": group_label,
+                "callback_data": f"{EXPLAIN_GROUP_CALLBACK_PREFIX}:{index}",
+            }
         ]
-    }
+        for index, (group_label, _concept_keys) in enumerate(CONCEPT_GROUPS)
+    ]
+    rows.append([{"text": "⬅️ Back", "callback_data": f"{PANEL_CALLBACK_PREFIX}:open"}])
+    return {"inline_keyboard": rows}
 
 
 def concept_button_label(concept_key):
@@ -5531,7 +5548,9 @@ def explain_concept_keyboard(group_index):
         }
         for concept_key in concept_keys
     ]
-    return {"inline_keyboard": coin_picker_button_rows(buttons)}
+    rows = coin_picker_button_rows(buttons)
+    rows.append([{"text": "⬅️ Back", "callback_data": f"{EXPLAIN_GROUP_CALLBACK_PREFIX}:{group_index}"}])
+    return {"inline_keyboard": rows}
 
 
 def explain_group_prompt():
@@ -5588,6 +5607,7 @@ def creator_picker_keyboard(creators):
                 }
             ]
         )
+    rows.append([{"text": "⬅️ Back", "callback_data": f"{PANEL_CALLBACK_PREFIX}:open"}])
     return {"inline_keyboard": rows}
 
 
@@ -5679,6 +5699,7 @@ def creator_account_keyboard(creator_key, creator):
                 }
             ]
         )
+    rows.append([{"text": "⬅️ Back", "callback_data": f"{PANEL_CALLBACK_PREFIX}:verify"}])
     return {"inline_keyboard": rows} if rows else None
 
 
@@ -5687,30 +5708,166 @@ def start_orientation_keyboard():
         "inline_keyboard": [
             [
                 {
-                    "text": "🔍 Verify a creator's account",
-                    "callback_data": f"{START_ORIENTATION_CALLBACK_PREFIX}:verify",
+                    "text": "🌱 Total beginner — I don't know what a candle is",
+                    "callback_data": f"{ONBOARD_CALLBACK_PREFIX}:beginner",
                 }
             ],
             [
                 {
-                    "text": "📚 Learn a concept",
-                    "callback_data": f"{START_ORIENTATION_CALLBACK_PREFIX}:explain",
+                    "text": "📈 I know the basics, I want to read charts better",
+                    "callback_data": f"{ONBOARD_CALLBACK_PREFIX}:basics",
                 }
             ],
             [
                 {
-                    "text": "📊 Why isn't a coin alerting?",
-                    "callback_data": f"{START_ORIENTATION_CALLBACK_PREFIX}:whynot",
+                    "text": "🎯 I trade already, I want a second set of eyes",
+                    "callback_data": f"{ONBOARD_CALLBACK_PREFIX}:trader",
                 }
             ],
             [
                 {
-                    "text": "ℹ️ What is Poinkle?",
-                    "callback_data": f"{START_ORIENTATION_CALLBACK_PREFIX}:help",
+                    "text": "🤷 Just looking around",
+                    "callback_data": f"{ONBOARD_CALLBACK_PREFIX}:browsing",
                 }
             ],
         ]
     }
+
+
+def onboard_route_keyboard(route):
+    if route == "beginner":
+        rows = [
+            [{"text": "📚 Explain: candle", "callback_data": f"{EXPLAIN_CONCEPT_CALLBACK_PREFIX}:candle"}],
+            [{"text": "📚 Explain: support", "callback_data": f"{EXPLAIN_CONCEPT_CALLBACK_PREFIX}:support"}],
+            [{"text": "⚡ All commands", "callback_data": f"{PANEL_CALLBACK_PREFIX}:open"}],
+        ]
+    elif route == "basics":
+        rows = [
+            [{"text": "📚 Explain: confirmation", "callback_data": f"{EXPLAIN_CONCEPT_CALLBACK_PREFIX}:confirmation"}],
+            [{"text": "📊 Why isn't a coin alerting?", "callback_data": f"{PANEL_CALLBACK_PREFIX}:whynot"}],
+            [{"text": "⚡ All commands", "callback_data": f"{PANEL_CALLBACK_PREFIX}:open"}],
+        ]
+    elif route == "trader":
+        rows = [
+            [{"text": "👀 Watch a coin", "callback_data": f"{PANEL_CALLBACK_PREFIX}:watch"}],
+            [{"text": "📊 Why isn't a coin alerting?", "callback_data": f"{PANEL_CALLBACK_PREFIX}:whynot"}],
+            [{"text": "⚡ All commands", "callback_data": f"{PANEL_CALLBACK_PREFIX}:open"}],
+        ]
+    elif route == "browsing":
+        rows = [
+            [{"text": "ℹ️ What is Poinkle?", "callback_data": f"{PANEL_CALLBACK_PREFIX}:help"}],
+            [{"text": "🔍 Verify a creator", "callback_data": f"{PANEL_CALLBACK_PREFIX}:verify"}],
+            [{"text": "⚡ All commands", "callback_data": f"{PANEL_CALLBACK_PREFIX}:open"}],
+        ]
+    else:
+        return None
+    return {"inline_keyboard": rows}
+
+
+def onboard_route_text(route):
+    if route == "beginner":
+        return (
+            "Good. Start at the beginning — everything else is built on this.\n\n"
+            "A candle is one unit of time on a chart: where price opened, where it closed, "
+            "and how far it swung in between."
+        )
+    if route == "basics":
+        return (
+            "Then here's the one that matters most.\n\n"
+            "A zone breaking isn't the event. A zone breaking AND HOLDING is the event.\n\n"
+            "One close beyond a level is an attempt. Two consecutive closes is confirmation."
+        )
+    if route == "trader":
+        return (
+            "Then you already have a plan. I won't give you another one.\n\n"
+            "I'll tell you when a zone you care about actually breaks — two daily closes, "
+            "not one. That's it."
+        )
+    if route == "browsing":
+        return "No pressure. Have a look around."
+    return ""
+
+
+def command_panel_keyboard():
+    return {
+        "inline_keyboard": [
+            [
+                {
+                    "text": label,
+                    "callback_data": f"{PANEL_CALLBACK_PREFIX}:{action}",
+                }
+            ]
+            for label, action in COMMAND_PANEL_ACTIONS
+        ]
+    }
+
+
+def command_panel_text():
+    return "What do you want to do?"
+
+
+def top_coin_picker_symbols(user_id=None):
+    by_base = {base_symbol(symbol): symbol for symbol in WATCHLIST}
+    symbols = []
+    for symbol in user_watchlist_symbols(user_id) if user_id else []:
+        normalized = normalize_trade_symbol_input(symbol)
+        if normalized and normalized in WATCHLIST and normalized not in symbols:
+            symbols.append(normalized)
+        if len(symbols) >= 9:
+            break
+    for ticker in TOP_COIN_PICKER_BASES:
+        symbol = by_base.get(ticker)
+        if symbol and symbol not in symbols:
+            symbols.append(symbol)
+        if len(symbols) >= 12:
+            break
+    return symbols
+
+
+def coin_picker_target_command(target):
+    commands = {
+        "whynot": "/whynot",
+        "watch": "/watch",
+        "snapshot": "/snapshot",
+        "research": "/research",
+        "levels": "/levels",
+        "chart": "/snapshot",
+    }
+    return commands.get(str(target or "").strip().lower())
+
+
+def target_coin_picker_keyboard(target, user_id=None):
+    target = str(target or "").strip().lower()
+    buttons = [
+        {
+            "text": base_symbol(symbol),
+            "callback_data": f"{COIN_PICK_CALLBACK_PREFIX}:{target}:{base_symbol(symbol)}",
+        }
+        for symbol in top_coin_picker_symbols(user_id)
+    ]
+    rows = coin_picker_button_rows(buttons)
+    rows.append(
+        [
+            {
+                "text": "⌨️ Type a different coin",
+                "callback_data": f"{COIN_PICK_CALLBACK_PREFIX}:{target}:{COIN_PICK_TYPE_DIFFERENT_SYMBOL}",
+            }
+        ]
+    )
+    rows.append([{"text": "⬅️ Back", "callback_data": f"{PANEL_CALLBACK_PREFIX}:open"}])
+    return {"inline_keyboard": rows}
+
+
+def target_coin_picker_text(target):
+    labels = {
+        "whynot": "Which coin should I check?",
+        "watch": "Which coin do you want to watch?",
+        "snapshot": "Which coin should I snapshot?",
+        "research": "Which coin should I research?",
+        "levels": "Which coin should I map?",
+        "chart": "Which coin should I chart?",
+    }
+    return labels.get(str(target or "").strip().lower(), "Pick a coin.")
 
 
 def creator_registered_accounts_lines(creators):
@@ -7126,6 +7283,7 @@ def poinkle_onboarding_text(kind):
             "LEARN\n"
             "/explain, /learn — tap through the concepts Poinkle teaches\n"
             "/whynot, /why — why a coin hasn't alerted: where it sits, what would confirm\n"
+            "/commands — open the tappable command panel\n"
             "/guide, /reference — command and coin reference card\n"
             "/help — show this message\n\n"
             "WATCH\n"
@@ -7180,7 +7338,7 @@ def start_orientation_text():
         "I watch the zones on a chart and tell you when one actually breaks — "
         "confirmed by two daily closes, not one.\n\n"
         "I never tell you what to do. No entries, no stops, no targets, no calls.\n\n"
-        "Here's where to start:"
+        "Before I throw anything at you — where are you at?"
     )
 
 
@@ -7295,8 +7453,23 @@ def handle_private_non_command_message(telegram_token, chat, from_user=None):
     return True
 
 
+def set_user_experience(user_id, experience):
+    user_id = str(user_id or "").strip()
+    if not user_id:
+        return {}
+    profiles = load_user_profiles()
+    profile = profiles.setdefault(user_id, {})
+    profile["experience"] = str(experience or "").strip()
+    save_user_profiles(profiles)
+    return profile
+
+
 def handle_help_command(telegram_token, telegram_chat_id):
     send_telegram_message(telegram_token, telegram_chat_id, poinkle_onboarding_text("help"))
+
+
+def handle_commands_command(telegram_token, telegram_chat_id):
+    send_command_panel(telegram_token, telegram_chat_id)
 
 
 def send_verify_handle_response(telegram_token, response_chat_id, handle, creators=None):
@@ -8016,7 +8189,6 @@ def handle_explain_group_callback(telegram_token, callback_query, payload, excha
     callback_query_id = (callback_query or {}).get("id")
     if callback_query_id:
         answer_telegram_callback(telegram_token, callback_query_id)
-        clear_callback_message_keyboard(telegram_token, callback_query)
 
     keyboard = explain_concept_keyboard(payload)
     if keyboard is None:
@@ -8184,7 +8356,6 @@ def handle_verify_creator_callback(telegram_token, callback_query, payload, exch
     callback_query_id = (callback_query or {}).get("id")
     if callback_query_id:
         answer_telegram_callback(telegram_token, callback_query_id)
-        clear_callback_message_keyboard(telegram_token, callback_query)
 
     message = (callback_query or {}).get("message") or {}
     chat = message.get("chat") or {}
@@ -8243,6 +8414,24 @@ def handle_verify_handle_callback(telegram_token, callback_query, payload, excha
     return True
 
 
+def send_command_panel(telegram_token, chat_id):
+    send_telegram_message(
+        telegram_token,
+        chat_id,
+        command_panel_text(),
+        reply_markup=command_panel_keyboard(),
+    )
+
+
+def send_target_coin_picker(telegram_token, chat_id, target, user_id=None):
+    send_telegram_message(
+        telegram_token,
+        chat_id,
+        target_coin_picker_text(target),
+        reply_markup=target_coin_picker_keyboard(target, user_id=user_id),
+    )
+
+
 def handle_start_orientation_callback(telegram_token, callback_query, payload, exchange=None):
     callback_query_id = (callback_query or {}).get("id")
     if callback_query_id:
@@ -8282,6 +8471,142 @@ def handle_start_orientation_callback(telegram_token, callback_query, payload, e
     return False
 
 
+def handle_onboard_callback(telegram_token, callback_query, payload, exchange=None):
+    callback_query_id = (callback_query or {}).get("id")
+    if callback_query_id:
+        answer_telegram_callback(telegram_token, callback_query_id)
+
+    route = str(payload or "").strip().lower()
+    message = (callback_query or {}).get("message") or {}
+    chat = message.get("chat") or {}
+    chat_id = str(chat.get("id") or "")
+    user_id = str(((callback_query or {}).get("from") or {}).get("id") or chat_id)
+    route_text = onboard_route_text(route)
+    route_keyboard = onboard_route_keyboard(route)
+    if not chat_id or not route_text or not route_keyboard:
+        return False
+
+    set_user_experience(user_id, route)
+    send_telegram_message(
+        telegram_token,
+        chat_id,
+        route_text,
+        reply_markup=route_keyboard,
+    )
+    return True
+
+
+def handle_panel_callback(telegram_token, callback_query, payload, exchange=None):
+    callback_query_id = (callback_query or {}).get("id")
+    if callback_query_id:
+        answer_telegram_callback(telegram_token, callback_query_id)
+
+    action = str(payload or "").strip().lower()
+    message = (callback_query or {}).get("message") or {}
+    source_chat = message.get("chat") or {}
+    chat_id = str(source_chat.get("id") or "")
+    from_user = (callback_query or {}).get("from") or {}
+    if not chat_id:
+        return False
+
+    if action == "open":
+        send_command_panel(telegram_token, chat_id)
+        return True
+    if action == "verify":
+        handle_verify_command(telegram_token, chat_id, "/verify", source_chat=source_chat)
+        return True
+    if action == "explain":
+        handle_explain_command(
+            telegram_token,
+            chat_id,
+            "/explain",
+            source_chat=source_chat,
+            from_user=from_user,
+        )
+        return True
+    if action in {"whynot", "watch", "snapshot", "research", "levels", "chart"}:
+        user_id = str(from_user.get("id") or chat_id)
+        send_target_coin_picker(telegram_token, chat_id, action, user_id=user_id)
+        return True
+    if action == "alertlevel":
+        handle_alertlevel_command(
+            telegram_token,
+            chat_id,
+            source_chat=source_chat,
+            from_user=from_user,
+        )
+        return True
+    if action == "help":
+        handle_help_command(telegram_token, chat_id)
+        return True
+    return False
+
+
+def handle_coin_pick_callback(telegram_token, callback_query, payload, exchange=None):
+    callback_query_id = (callback_query or {}).get("id")
+    if callback_query_id:
+        answer_telegram_callback(telegram_token, callback_query_id)
+        clear_callback_message_keyboard(telegram_token, callback_query)
+
+    parts = str(payload or "").split(":", 1)
+    if len(parts) != 2:
+        return False
+    target, ticker = [part.strip() for part in parts]
+    target = target.lower()
+    command = coin_picker_target_command(target)
+    if not command:
+        return False
+
+    message = (callback_query or {}).get("message") or {}
+    source_chat = message.get("chat") or {}
+    chat_id = str(source_chat.get("id") or "")
+    from_user = (callback_query or {}).get("from") or {}
+    if not chat_id:
+        return False
+
+    if ticker == COIN_PICK_TYPE_DIFFERENT_SYMBOL:
+        send_telegram_message(
+            telegram_token,
+            chat_id,
+            f"Send {command} <COIN> for any coin I track.",
+        )
+        return True
+
+    ticker = ticker.upper()
+    command_text = f"{command} {ticker}"
+    if target in {"whynot", "research", "snapshot", "chart"}:
+        job_action = "snapshot" if target == "chart" else target
+        if enqueue_telegram_command_job(job_action, chat_id, command_text, source_chat=source_chat, from_user=from_user):
+            send_heavy_job_acknowledgment(
+                telegram_token,
+                alert_dm_chat_id(source_chat, from_user, chat_id),
+                job_action,
+                command_text,
+            )
+        return True
+    if target == "watch":
+        handle_watch_command(
+            exchange,
+            telegram_token,
+            chat_id,
+            command_text,
+            source_chat=source_chat,
+            from_user=from_user,
+        )
+        return True
+    if target == "levels":
+        handle_levels_command(
+            exchange,
+            telegram_token,
+            chat_id,
+            command_text,
+            source_chat=source_chat,
+            from_user=from_user,
+        )
+        return True
+    return False
+
+
 def handle_telegram_callback_query(exchange, telegram_token, callback_query):
     callback_query = callback_query or {}
     callback_query_id = callback_query.get("id")
@@ -8305,6 +8630,9 @@ def handle_telegram_callback_query(exchange, telegram_token, callback_query):
         VERIFY_CREATOR_CALLBACK_PREFIX: handle_verify_creator_callback,
         VERIFY_HANDLE_CALLBACK_PREFIX: handle_verify_handle_callback,
         START_ORIENTATION_CALLBACK_PREFIX: handle_start_orientation_callback,
+        ONBOARD_CALLBACK_PREFIX: handle_onboard_callback,
+        PANEL_CALLBACK_PREFIX: handle_panel_callback,
+        COIN_PICK_CALLBACK_PREFIX: handle_coin_pick_callback,
     }
     handler = callback_handlers.get(namespace)
     if handler is None:
@@ -9472,6 +9800,11 @@ def process_telegram_commands(
                 telegram_token,
                 chat_id,
                 source_chat=chat,
+            )
+        elif lower_text.startswith("/commands"):
+            handle_commands_command(
+                telegram_token,
+                chat_id,
             )
         elif is_explain_command(text):
             handle_explain_command(

@@ -2742,7 +2742,8 @@ class ScannerLogicTests(unittest.TestCase):
                             "text": "Mike Knows · The Inner Circle",
                             "callback_data": "verifycreator:mike_knows",
                         }
-                    ]
+                    ],
+                    [{"text": "⬅️ Back", "callback_data": "panel:open"}],
                 ]
             },
         )
@@ -2783,13 +2784,14 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertTrue(handled)
         rows = sent_messages[0][2]["inline_keyboard"]
-        self.assertEqual([len(row) for row in rows], [1, 1, 1])
+        self.assertEqual([len(row) for row in rows], [1, 1, 1, 1])
         self.assertEqual(rows[0][0]["text"], "Telegram  @MikeKnows_Official")
         self.assertEqual(rows[0][0]["callback_data"], "verifyhandle:mike_knows:0")
         self.assertEqual(rows[1][0]["text"], "TikTok  @mikeknows.io")
         self.assertEqual(rows[1][0]["callback_data"], "verifyhandle:mike_knows:1")
         self.assertEqual(rows[2][0]["text"], "YouTube  @MikeKnows")
         self.assertEqual(rows[2][0]["callback_data"], "verifyhandle:mike_knows:2")
+        self.assertEqual(rows[3][0]["callback_data"], "panel:verify")
 
     def test_verify_handle_callback_sends_verified_card_for_that_handle(self):
         sent_messages = []
@@ -2958,7 +2960,88 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertLessEqual(len(callback_data.encode("utf-8")), 64)
 
-    def test_start_orientation_buttons_route_to_existing_handlers(self):
+    def test_onboard_routes_store_experience_and_show_next_steps(self):
+        callback_query = {
+            "id": "callback-1",
+            "message": {"chat": {"id": "777", "type": "private"}, "message_id": 44},
+            "from": {"id": 777},
+        }
+        routes = ("beginner", "basics", "trader", "browsing")
+
+        for route in routes:
+            sent_messages = []
+            with self.subTest(route=route), tempfile.TemporaryDirectory() as tmpdir, patch.object(
+                scanner, "USER_PROFILES_FILE", Path(tmpdir) / "user_profiles.json"
+            ), patch.object(scanner, "answer_telegram_callback") as answer_callback, patch.object(
+                scanner, "clear_callback_message_keyboard"
+            ) as clear_keyboard, patch.object(
+                scanner,
+                "send_telegram_message",
+                side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                    (str(chat_id), text, reply_markup)
+                ),
+            ):
+                handled = scanner.handle_onboard_callback("TOKEN", callback_query, route)
+                profiles = scanner.load_user_profiles()
+
+            self.assertTrue(handled)
+            answer_callback.assert_called_once_with("TOKEN", "callback-1")
+            clear_keyboard.assert_not_called()
+            self.assertEqual(profiles["777"]["experience"], route)
+            self.assertEqual(sent_messages[0][0], "777")
+            self.assertEqual(sent_messages[0][1], scanner.onboard_route_text(route))
+            self.assertEqual(sent_messages[0][2], scanner.onboard_route_keyboard(route))
+            flat_buttons = [
+                button["callback_data"]
+                for row in sent_messages[0][2]["inline_keyboard"]
+                for button in row
+            ]
+            self.assertIn("panel:open", flat_buttons)
+
+    def test_orientation_card_shows_where_are_you_buttons(self):
+        keyboard = scanner.start_orientation_keyboard()
+        labels = [row[0]["text"] for row in keyboard["inline_keyboard"]]
+        callbacks = [row[0]["callback_data"] for row in keyboard["inline_keyboard"]]
+
+        self.assertIn("Before I throw anything at you", scanner.start_orientation_text())
+        self.assertEqual(
+            labels,
+            [
+                "🌱 Total beginner — I don't know what a candle is",
+                "📈 I know the basics, I want to read charts better",
+                "🎯 I trade already, I want a second set of eyes",
+                "🤷 Just looking around",
+            ],
+        )
+        self.assertEqual(callbacks, ["onboard:beginner", "onboard:basics", "onboard:trader", "onboard:browsing"])
+
+    def test_command_panel_opens_from_callback_and_commands_command(self):
+        callback_query = {
+            "id": "callback-1",
+            "message": {"chat": {"id": "777", "type": "private"}, "message_id": 44},
+            "from": {"id": 777},
+        }
+        sent_messages = []
+
+        with patch.object(scanner, "answer_telegram_callback") as answer_callback, patch.object(
+            scanner, "clear_callback_message_keyboard"
+        ) as clear_keyboard, patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                (str(chat_id), text, reply_markup)
+            ),
+        ):
+            handled = scanner.handle_panel_callback("TOKEN", callback_query, "open")
+            scanner.handle_commands_command("TOKEN", "777")
+
+        self.assertTrue(handled)
+        answer_callback.assert_called_once_with("TOKEN", "callback-1")
+        clear_keyboard.assert_not_called()
+        self.assertEqual(sent_messages[0], ("777", scanner.command_panel_text(), scanner.command_panel_keyboard()))
+        self.assertEqual(sent_messages[1], ("777", scanner.command_panel_text(), scanner.command_panel_keyboard()))
+
+    def test_panel_buttons_open_existing_paths_or_coin_picker(self):
         callback_query = {
             "id": "callback-1",
             "message": {"chat": {"id": "777", "type": "private"}, "message_id": 44},
@@ -2968,38 +3051,162 @@ class ScannerLogicTests(unittest.TestCase):
         cases = [
             ("verify", "handle_verify_command"),
             ("explain", "handle_explain_command"),
-            ("whynot", "handle_whynot_command"),
+            ("alertlevel", "handle_alertlevel_command"),
             ("help", "handle_help_command"),
         ]
         for payload, handler_name in cases:
-            with self.subTest(payload=payload), patch.object(
-                scanner, "answer_telegram_callback"
-            ) as answer_callback, patch.object(
+            with self.subTest(payload=payload), patch.object(scanner, "answer_telegram_callback"), patch.object(
                 scanner, "clear_callback_message_keyboard"
-            ) as clear_keyboard, patch.object(
-                scanner, "handle_verify_command"
-            ) as verify_handler, patch.object(
+            ), patch.object(scanner, "handle_verify_command") as verify_handler, patch.object(
                 scanner, "handle_explain_command"
-            ) as explain_handler, patch.object(
-                scanner, "handle_whynot_command"
-            ) as whynot_handler, patch.object(
+            ) as explain_handler, patch.object(scanner, "handle_alertlevel_command") as alertlevel_handler, patch.object(
                 scanner, "handle_help_command"
             ) as help_handler:
-                handled = scanner.handle_start_orientation_callback("TOKEN", callback_query, payload, exchange=object())
+                handled = scanner.handle_panel_callback("TOKEN", callback_query, payload, exchange=object())
 
             self.assertTrue(handled)
-            answer_callback.assert_called_once_with("TOKEN", "callback-1")
-            clear_keyboard.assert_called_once_with("TOKEN", callback_query)
             handlers = {
                 "handle_verify_command": verify_handler,
                 "handle_explain_command": explain_handler,
-                "handle_whynot_command": whynot_handler,
+                "handle_alertlevel_command": alertlevel_handler,
                 "handle_help_command": help_handler,
             }
             handlers[handler_name].assert_called_once()
             for other_name, handler in handlers.items():
                 if other_name != handler_name:
                     handler.assert_not_called()
+
+        for payload in ("whynot", "watch", "snapshot", "research", "levels"):
+            sent_messages = []
+            with self.subTest(payload=payload), patch.object(scanner, "answer_telegram_callback"), patch.object(
+                scanner, "clear_callback_message_keyboard"
+            ), patch.object(
+                scanner,
+                "send_telegram_message",
+                side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                    (str(chat_id), text, reply_markup)
+                ),
+            ):
+                handled = scanner.handle_panel_callback("TOKEN", callback_query, payload, exchange=object())
+
+            self.assertTrue(handled)
+            self.assertEqual(sent_messages[0][0], "777")
+            self.assertEqual(sent_messages[0][2], scanner.target_coin_picker_keyboard(payload))
+
+    def test_coin_picker_routes_to_correct_handler_per_target(self):
+        callback_query = {
+            "id": "callback-1",
+            "message": {"chat": {"id": "777", "type": "private"}, "message_id": 44},
+            "from": {"id": 777},
+        }
+
+        with patch.object(scanner, "answer_telegram_callback"), patch.object(
+            scanner, "clear_callback_message_keyboard"
+        ), patch.object(scanner, "handle_watch_command") as watch_handler:
+            self.assertTrue(scanner.handle_coin_pick_callback("TOKEN", callback_query, "watch:BTC", exchange=object()))
+        watch_handler.assert_called_once()
+        self.assertEqual(watch_handler.call_args.args[3], "/watch BTC")
+
+        with patch.object(scanner, "answer_telegram_callback"), patch.object(
+            scanner, "clear_callback_message_keyboard"
+        ), patch.object(scanner, "handle_levels_command") as levels_handler:
+            self.assertTrue(scanner.handle_coin_pick_callback("TOKEN", callback_query, "levels:ETH", exchange=object()))
+        levels_handler.assert_called_once()
+        self.assertEqual(levels_handler.call_args.args[3], "/levels ETH")
+
+    def test_coin_picker_heavy_targets_go_through_job_queue(self):
+        callback_query = {
+            "id": "callback-1",
+            "message": {"chat": {"id": "777", "type": "private"}, "message_id": 44},
+            "from": {"id": 777},
+        }
+
+        for target, action, command in (
+            ("whynot", "whynot", "/whynot BTC"),
+            ("research", "research", "/research BTC"),
+            ("snapshot", "snapshot", "/snapshot BTC"),
+            ("chart", "snapshot", "/snapshot BTC"),
+        ):
+            with self.subTest(target=target), patch.object(scanner, "answer_telegram_callback"), patch.object(
+                scanner, "clear_callback_message_keyboard"
+            ), patch.object(scanner, "enqueue_telegram_command_job", return_value=True) as enqueue_job, patch.object(
+                scanner, "send_heavy_job_acknowledgment"
+            ) as send_ack:
+                handled = scanner.handle_coin_pick_callback("TOKEN", callback_query, f"{target}:BTC", exchange=object())
+
+            self.assertTrue(handled)
+            enqueue_job.assert_called_once()
+            self.assertEqual(enqueue_job.call_args.args[:3], (action, "777", command))
+            send_ack.assert_called_once()
+
+    def test_coin_picker_type_fallback_is_not_the_primary_whynot_action(self):
+        keyboard = scanner.target_coin_picker_keyboard("whynot")
+        callbacks = [
+            button["callback_data"]
+            for row in keyboard["inline_keyboard"]
+            for button in row
+        ]
+
+        self.assertIn("coinpick:whynot:BTC", callbacks)
+        self.assertEqual(callbacks[-2], "coinpick:whynot:__type__")
+        self.assertEqual(callbacks[-1], "panel:open")
+        self.assertNotIn("Use: /whynot BTC", scanner.start_orientation_text())
+
+    def test_coin_picker_shows_user_watchlist_first_then_popular(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            watchlist_path = Path(tmpdir) / "user_watchlists.json"
+            watchlist_path.write_text(json.dumps({"777": ["TAO/USD", "SOL/USD", "BTC/USD"]}))
+            with patch.object(scanner, "USER_WATCHLISTS_FILE", watchlist_path):
+                keyboard = scanner.target_coin_picker_keyboard("whynot", user_id="777")
+
+        first_buttons = [
+            button["text"]
+            for row in keyboard["inline_keyboard"]
+            for button in row
+            if button["callback_data"].startswith("coinpick:whynot:")
+        ][:5]
+
+        self.assertEqual(first_buttons[:3], ["TAO", "SOL", "BTC"])
+        self.assertEqual(first_buttons[3:5], ["ETH", "XRP"])
+
+    def test_coin_picker_uses_popular_list_without_watchlist(self):
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            scanner, "USER_WATCHLISTS_FILE", Path(tmpdir) / "missing_user_watchlists.json"
+        ):
+            keyboard = scanner.target_coin_picker_keyboard("whynot", user_id="777")
+
+        first_buttons = [
+            button["text"]
+            for row in keyboard["inline_keyboard"]
+            for button in row
+            if button["callback_data"].startswith("coinpick:whynot:")
+        ][:4]
+
+        self.assertEqual(first_buttons, ["BTC", "ETH", "SOL", "XRP"])
+
+    def test_terminal_coin_picker_button_clears_keyboard(self):
+        callback_query = {
+            "id": "callback-1",
+            "message": {"chat": {"id": "777", "type": "private"}, "message_id": 44},
+            "from": {"id": 777},
+        }
+        sent_messages = []
+
+        with patch.object(scanner, "answer_telegram_callback") as answer_callback, patch.object(
+            scanner, "clear_callback_message_keyboard"
+        ) as clear_keyboard, patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                (str(chat_id), text, reply_markup)
+            ),
+        ):
+            handled = scanner.handle_coin_pick_callback("TOKEN", callback_query, "whynot:__type__", exchange=object())
+
+        self.assertTrue(handled)
+        answer_callback.assert_called_once_with("TOKEN", "callback-1")
+        clear_keyboard.assert_called_once_with("TOKEN", callback_query)
+        self.assertEqual(sent_messages, [("777", "Send /whynot <COIN> for any coin I track.", None)])
 
     def test_addcreator_rejects_non_owner_with_reply(self):
         sent_messages = []
@@ -3590,10 +3797,11 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(sent_messages[0][0], "777")
         self.assertIn("What do you want to understand?", sent_messages[0][1])
         rows = sent_messages[0][2]["inline_keyboard"]
-        self.assertEqual(len(rows), 5)
-        self.assertEqual([len(row) for row in rows], [1, 1, 1, 1, 1])
+        self.assertEqual(len(rows), 6)
+        self.assertEqual([len(row) for row in rows], [1, 1, 1, 1, 1, 1])
         self.assertEqual(rows[0][0]["callback_data"], "xgroup:0")
-        self.assertEqual(rows[-1][0]["callback_data"], "xgroup:4")
+        self.assertEqual(rows[-2][0]["callback_data"], "xgroup:4")
+        self.assertEqual(rows[-1][0]["callback_data"], "panel:open")
 
     def test_bare_learn_command_sends_group_picker(self):
         sent_messages = []
@@ -3614,7 +3822,7 @@ class ScannerLogicTests(unittest.TestCase):
             )
 
         self.assertIn("What do you want to understand?", sent_messages[0][1])
-        self.assertEqual(len(sent_messages[0][2]["inline_keyboard"]), 5)
+        self.assertEqual(len(sent_messages[0][2]["inline_keyboard"]), 6)
 
     def test_explain_group_callback_sends_concepts_three_per_row(self):
         sent_messages = []
@@ -3635,12 +3843,13 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertTrue(handled)
         answer_callback.assert_called_once_with("TOKEN", "callback-1")
-        clear_keyboard.assert_called_once_with("TOKEN", callback_query)
+        clear_keyboard.assert_not_called()
         rows = sent_messages[0][2]["inline_keyboard"]
-        self.assertEqual([len(row) for row in rows], [3, 3, 1])
+        self.assertEqual([len(row) for row in rows], [3, 3, 1, 1])
         self.assertEqual(rows[0][0]["text"], "Candle")
         self.assertEqual(rows[0][0]["callback_data"], "xconcept:candle")
-        self.assertEqual(rows[-1][0]["callback_data"], "xconcept:market_structure")
+        self.assertEqual(rows[-2][0]["callback_data"], "xconcept:market_structure")
+        self.assertEqual(rows[-1][0]["callback_data"], "xgroup:0")
 
     def test_explain_concept_callback_sends_existing_concept_response(self):
         callback_query = {
@@ -3715,7 +3924,7 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(len(sent_messages), 1)
         self.assertEqual(acked_callbacks, [("callback-1", ""), ("callback-2", "")])
 
-    def test_callback_keyboard_clears_before_card_is_sent(self):
+    def test_terminal_callback_keyboard_clears_before_card_is_sent(self):
         events = []
         creators = {
             "mike_knows": {
@@ -3727,7 +3936,7 @@ class ScannerLogicTests(unittest.TestCase):
         }
         callback_query = {
             "id": "callback-1",
-            "data": "verifycreator:mike_knows",
+            "data": "verifyhandle:mike_knows:0",
             "message": {"chat": {"id": "777"}, "message_id": 44},
             "from": {"id": 777},
         }
@@ -3742,7 +3951,7 @@ class ScannerLogicTests(unittest.TestCase):
             ), patch.object(
                 scanner, "send_telegram_message", side_effect=lambda *args, **kwargs: events.append("send")
             ):
-                handled = scanner.handle_verify_creator_callback("TOKEN", callback_query, "mike_knows")
+                handled = scanner.handle_verify_handle_callback("TOKEN", callback_query, "mike_knows:0")
 
         self.assertTrue(handled)
         self.assertEqual(events, ["ack", "clear", "send"])
@@ -3806,6 +4015,92 @@ class ScannerLogicTests(unittest.TestCase):
             scanner.process_telegram_commands(object(), "TOKEN", "999", state)
 
         self.assertEqual(handle_callback.call_count, 2)
+
+    def test_double_tapping_new_onboard_button_dispatches_once(self):
+        state = {}
+        updates = [
+            {
+                "update_id": 231,
+                "callback_query": {
+                    "id": "callback-1",
+                    "data": "onboard:beginner",
+                    "message": {"chat": {"id": "777"}, "message_id": 44},
+                    "from": {"id": 777},
+                },
+            },
+            {
+                "update_id": 232,
+                "callback_query": {
+                    "id": "callback-2",
+                    "data": "onboard:beginner",
+                    "message": {"chat": {"id": "777"}, "message_id": 44},
+                    "from": {"id": 777},
+                },
+            },
+        ]
+        acked_callbacks = []
+
+        with patch.object(scanner, "get_telegram_updates", return_value=updates), patch.object(
+            scanner, "answer_telegram_callback", side_effect=lambda token, callback_id, text="": acked_callbacks.append(callback_id)
+        ), patch.object(scanner, "handle_telegram_callback_query", return_value=True) as handle_callback, patch.object(
+            scanner, "save_state"
+        ):
+            scanner.process_telegram_commands(object(), "TOKEN", "999", state)
+
+        self.assertEqual(handle_callback.call_count, 1)
+        self.assertEqual(acked_callbacks, ["callback-2"])
+
+    def test_different_navigation_buttons_on_same_menu_all_work(self):
+        state = {}
+        sent_messages = []
+        updates = [
+            {
+                "update_id": 241,
+                "callback_query": {
+                    "id": "callback-1",
+                    "data": "panel:watch",
+                    "message": {"chat": {"id": "777", "type": "private"}, "message_id": 44},
+                    "from": {"id": 777},
+                },
+            },
+            {
+                "update_id": 242,
+                "callback_query": {
+                    "id": "callback-2",
+                    "data": "panel:open",
+                    "message": {"chat": {"id": "777", "type": "private"}, "message_id": 44},
+                    "from": {"id": 777},
+                },
+            },
+            {
+                "update_id": 243,
+                "callback_query": {
+                    "id": "callback-3",
+                    "data": "panel:explain",
+                    "message": {"chat": {"id": "777", "type": "private"}, "message_id": 44},
+                    "from": {"id": 777},
+                },
+            },
+        ]
+
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            scanner, "USER_WATCHLISTS_FILE", Path(tmpdir) / "missing_user_watchlists.json"
+        ), patch.object(scanner, "get_telegram_updates", return_value=updates), patch.object(
+            scanner, "answer_telegram_callback"
+        ), patch.object(scanner, "clear_callback_message_keyboard") as clear_keyboard, patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                (str(chat_id), text, reply_markup)
+            ),
+        ), patch.object(scanner, "save_state"):
+            scanner.process_telegram_commands(object(), "TOKEN", "999", state)
+
+        clear_keyboard.assert_not_called()
+        self.assertEqual(sent_messages[0][1], scanner.target_coin_picker_text("watch"))
+        self.assertEqual(sent_messages[0][2]["inline_keyboard"][-1][0]["callback_data"], "panel:open")
+        self.assertEqual(sent_messages[1], ("777", scanner.command_panel_text(), scanner.command_panel_keyboard()))
+        self.assertEqual(sent_messages[2][1], scanner.explain_group_prompt())
 
     def test_every_explanation_registry_key_is_grouped_exactly_once(self):
         grouped_keys = [
