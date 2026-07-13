@@ -6693,6 +6693,19 @@ def command_example_asset(index=0):
     return symbol.split("/")[0]
 
 
+def unknown_symbol_command_message(raw_symbol, command="/research", has_picker=True):
+    requested_symbol = str(raw_symbol or "").strip().upper() or "that coin"
+    command_name = str(command or "/research").strip() or "/research"
+    message = f"I don't have {requested_symbol} in my list yet. Try {command_name} with one of the coins I track"
+    if has_picker:
+        return f"{message} — or type {command_name} on its own to pick from a list."
+    return f"{message}."
+
+
+def card_generation_failure_message():
+    return "I couldn't build that card just now. Try again in a moment."
+
+
 def poinkle_onboarding_text(kind):
     supported_coins = format_supported_coins_for_help(WATCHLIST)
     primary_example = command_example_asset(0)
@@ -7129,7 +7142,7 @@ def handle_research_command(
         send_telegram_message(
             telegram_token,
             response_chat_id,
-            "Symbol currently unavailable.",
+            unknown_symbol_command_message(parts[1], command),
         )
         return
 
@@ -7140,7 +7153,7 @@ def handle_research_command(
         send_telegram_message(
             telegram_token,
             response_chat_id,
-            "Symbol currently unavailable.",
+            card_generation_failure_message(),
         )
         return
 
@@ -7772,7 +7785,11 @@ def handle_alerts_command(
     symbol = normalize_symbol(parts[1])
     action = parts[2].lower()
     if symbol is None:
-        send_telegram_message(telegram_token, response_chat_id, "Symbol currently unavailable.")
+        send_telegram_message(
+            telegram_token,
+            response_chat_id,
+            unknown_symbol_command_message(parts[1], "/alerts", has_picker=False),
+        )
         return
 
     ticker = base_symbol(symbol)
@@ -8304,7 +8321,7 @@ def handle_levels_command(
         send_telegram_message(
             telegram_token,
             response_chat_id,
-            "Symbol currently unavailable.",
+            unknown_symbol_command_message(parts[1], command),
         )
         return
 
@@ -8321,7 +8338,7 @@ def handle_levels_command(
         send_telegram_message(
             telegram_token,
             response_chat_id,
-            "Symbol currently unavailable.",
+            card_generation_failure_message(),
         )
         return
 

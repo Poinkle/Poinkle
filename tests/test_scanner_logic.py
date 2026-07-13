@@ -3451,7 +3451,58 @@ class ScannerLogicTests(unittest.TestCase):
         with patch.object(scanner, "send_telegram_message", side_effect=lambda token, chat_id, text: sent_messages.append(text)):
             scanner.handle_research_command(object(), "TOKEN", "999", "/research NOTREAL")
 
-        self.assertEqual(sent_messages[-1], "Symbol currently unavailable.")
+        self.assertEqual(
+            sent_messages[-1],
+            (
+                "I don't have NOTREAL in my list yet. Try /research with one of the coins "
+                "I track — or type /research on its own to pick from a list."
+            ),
+        )
+
+    def test_research_command_replies_when_card_generation_fails(self):
+        sent_messages = []
+
+        with patch.object(
+            scanner,
+            "build_research_command_message",
+            side_effect=RuntimeError("chart boom"),
+        ), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
+        ):
+            scanner.handle_research_command(object(), "TOKEN", "999", "/research BTC")
+
+        self.assertEqual(
+            sent_messages,
+            [("999", "I couldn't build that card just now. Try again in a moment.")],
+        )
+
+    def test_research_command_valid_symbol_still_sends_cards(self):
+        with patch.object(scanner, "build_research_command_message", return_value="BTC PRB") as build_message, patch.object(
+            scanner,
+            "send_research_cards",
+            return_value=True,
+        ) as send_cards, patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=AssertionError("valid card path should not send fallback text"),
+        ):
+            scanner.handle_research_command(object(), "TOKEN", "999", "/research BTC")
+
+        build_message.assert_called_once()
+        send_cards.assert_called_once()
+
+    def test_alerts_command_replies_for_unknown_symbol(self):
+        sent_messages = []
+
+        with patch.object(scanner, "send_telegram_message", side_effect=lambda token, chat_id, text: sent_messages.append(text)):
+            scanner.handle_alerts_command("TOKEN", "999", "/alerts NOTREAL support")
+
+        self.assertEqual(
+            sent_messages[-1],
+            "I don't have NOTREAL in my list yet. Try /alerts with one of the coins I track.",
+        )
 
     def test_prb_card_renderer_produces_image_path(self):
         prb_text = (
@@ -5011,13 +5062,19 @@ class ScannerLogicTests(unittest.TestCase):
         with patch.object(scanner, "send_telegram_message", side_effect=lambda token, chat_id, text: sent_messages.append(text)):
             scanner.handle_levels_command(object(), "TOKEN", "999", "/levels NOTREAL")
 
-        self.assertEqual(sent_messages[-1], "Symbol currently unavailable.")
+        self.assertEqual(
+            sent_messages[-1],
+            (
+                "I don't have NOTREAL in my list yet. Try /levels with one of the coins "
+                "I track — or type /levels on its own to pick from a list."
+            ),
+        )
 
-        failing_exchange = FakeExchange({}, ticker_price=0, failing_timeframes={"15m"})
+        failing_exchange = FakeExchange({}, ticker_price=0, failing_timeframes={scanner.TIMEFRAME})
         with patch.object(scanner, "send_telegram_message", side_effect=lambda token, chat_id, text: sent_messages.append(text)):
-            scanner.handle_levels_command(failing_exchange, "TOKEN", "999", "/levels EDEL")
+            scanner.handle_levels_command(failing_exchange, "TOKEN", "999", "/levels BTC")
 
-        self.assertEqual(sent_messages[-1], "Symbol currently unavailable.")
+        self.assertEqual(sent_messages[-1], "I couldn't build that card just now. Try again in a moment.")
 
     def test_levels_command_uses_wide_zones_not_micro_levels(self):
         current_price = 62300
