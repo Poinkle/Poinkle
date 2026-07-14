@@ -2486,12 +2486,21 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("VERIFY\n/verify", message)
         self.assertIn("/explain", message)
         self.assertIn("/whynot", message)
-        self.assertIn("/guide", message)
-        for deleted_command in ("/levels", "/snap", "/why", "/learn", "/watching", "/reference"):
+        for deleted_command in (
+            "/levels",
+            "/snap",
+            "/why",
+            "/learn",
+            "/watching",
+            "/reference",
+            "/guide",
+            "/coins",
+            "/clearwatch",
+            "/mywatch",
+            "/scan",
+            "/status",
+        ):
             self.assertIsNone(re.search(rf"{re.escape(deleted_command)}(?:\s|,|—|$)", message))
-        self.assertIn("/scan", message)
-        self.assertIn("/coins", message)
-        self.assertIn("/status", message)
         self.assertNotIn("Current Supported Coins", message)
         self.assertLess(len(message), 4096)
 
@@ -2513,7 +2522,6 @@ class ScannerLogicTests(unittest.TestCase):
         message = scanner.poinkle_onboarding_text("help")
         help_commands = set(re.findall(r"/([a-z]+)", message))
         public_commands = {item["command"] for item in scanner.PUBLIC_BOT_COMMANDS}
-        public_commands.update({"scan", "status"})
 
         self.assertTrue(help_commands)
         self.assertTrue(help_commands.issubset(public_commands))
@@ -2530,8 +2538,24 @@ class ScannerLogicTests(unittest.TestCase):
     def test_hidden_public_handlers_appear_in_help(self):
         message = scanner.poinkle_onboarding_text("help")
 
-        for command in ("scan", "status"):
-            self.assertIn(f"/{command}", message)
+        expected_commands = {
+            "start",
+            "commands",
+            "help",
+            "verify",
+            "explain",
+            "snapshot",
+            "research",
+            "whynot",
+            "watch",
+            "unwatch",
+            "alertlevel",
+            "alerts",
+            "myalerts",
+            "mike",
+        }
+
+        self.assertEqual(set(re.findall(r"/([a-z]+)", message)), expected_commands)
 
     def test_verify_registered_handle_returns_verified(self):
         sent_messages = []
@@ -3936,6 +3960,72 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(sent_messages[0][0:3], ("999", "/research eth", "ETH/USD"))
         self.assertEqual(state["__telegram_commands"]["last_update_id"], 124)
 
+    def test_process_telegram_commands_routes_scan_and_status_for_owner(self):
+        cases = (
+            ("/scan", "scan"),
+            ("/status", "status"),
+        )
+        for index, (command, expected_handler) in enumerate(cases, start=224):
+            state = {}
+            updates = [
+                {
+                    "update_id": index,
+                    "message": {
+                        "chat": {"id": "999", "type": "private"},
+                        "from": {"id": 999},
+                        "text": command,
+                    },
+                }
+            ]
+
+            with self.subTest(command=command), patch.object(scanner, "get_telegram_updates", return_value=updates), patch.object(
+                scanner, "is_owner_user", return_value=True
+            ), patch.object(scanner, "handle_scan_command") as scan_handler, patch.object(
+                scanner, "handle_status_command"
+            ) as status_handler, patch.object(
+                scanner, "command_allowed_by_active_mode", return_value=True
+            ), patch.object(scanner, "save_state"):
+                scanner.process_telegram_commands(object(), "TOKEN", "999", state)
+
+            if expected_handler == "scan":
+                scan_handler.assert_called_once()
+                status_handler.assert_not_called()
+            else:
+                status_handler.assert_called_once()
+                scan_handler.assert_not_called()
+            self.assertEqual(state["__telegram_commands"]["last_update_id"], index)
+
+    def test_process_telegram_commands_hides_scan_and_status_from_non_owner(self):
+        for index, command in enumerate(("/scan", "/status"), start=226):
+            state = {}
+            sent_messages = []
+            updates = [
+                {
+                    "update_id": index,
+                    "message": {
+                        "message_id": index,
+                        "chat": {"id": "999", "type": "private"},
+                        "from": {"id": 999},
+                        "text": command,
+                    },
+                }
+            ]
+
+            with self.subTest(command=command), patch.object(scanner, "get_telegram_updates", return_value=updates), patch.object(
+                scanner, "is_owner_user", return_value=False
+            ), patch.object(
+                scanner,
+                "send_telegram_message",
+                side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append((str(chat_id), text, reply_markup)),
+            ), patch.object(
+                scanner, "command_allowed_by_active_mode", return_value=True
+            ), patch.object(scanner, "save_state"):
+                scanner.process_telegram_commands(object(), "TOKEN", "999", state)
+
+            self.assertEqual(sent_messages, [("999", scanner.start_orientation_text(), scanner.start_orientation_keyboard())])
+            self.assertNotIn("owner", sent_messages[0][1].lower())
+            self.assertEqual(state["__telegram_commands"]["last_update_id"], index)
+
     def test_skill_onboarding_message_sends_once_for_group_snapshot(self):
         sent_messages = []
 
@@ -4576,7 +4666,15 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(send_response.call_args.kwargs["concept_key"], "rsi")
 
     def test_unknown_private_command_sends_orientation_card(self):
-        for index, command in enumerate(("/levels BTC", "/banana"), start=126):
+        deleted_commands = (
+            "/levels BTC",
+            "/guide",
+            "/coins",
+            "/clearwatch",
+            "/mywatch",
+            "/banana",
+        )
+        for index, command in enumerate(deleted_commands, start=126):
             state = {}
             sent_messages = []
             updates = [
@@ -4643,7 +4741,15 @@ class ScannerLogicTests(unittest.TestCase):
         )
 
     def test_unknown_group_command_sends_nothing(self):
-        for index, command in enumerate(("/levels BTC", "/banana"), start=140):
+        deleted_commands = (
+            "/levels BTC",
+            "/guide",
+            "/coins",
+            "/clearwatch",
+            "/mywatch",
+            "/banana",
+        )
+        for index, command in enumerate(deleted_commands, start=140):
             state = {}
             updates = [
                 {
@@ -4803,33 +4909,6 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertEqual(len(sent_messages), 1)
         self.assertEqual(sent_messages[0][0:2], ("999", "/explain support"))
-        self.assertEqual(state["__telegram_commands"]["last_update_id"], 127)
-
-    def test_process_telegram_commands_routes_coins_command(self):
-        state = {}
-        sent_messages = []
-        updates = [
-            {
-                "update_id": 127,
-                "message": {
-                    "chat": {"id": "999", "type": "private"},
-                    "from": {"id": 999},
-                    "text": "/coins",
-                },
-            }
-        ]
-
-        def fake_handle(token, chat_id, source_chat=None):
-            sent_messages.append((chat_id, source_chat))
-
-        with patch.object(scanner, "get_telegram_updates", return_value=updates), patch.object(
-            scanner, "handle_coins_command", side_effect=fake_handle
-        ), patch.object(
-            scanner, "command_allowed_by_active_mode", return_value=True
-        ), patch.object(scanner, "save_state"):
-            scanner.process_telegram_commands(object(), "TOKEN", "999", state)
-
-        self.assertEqual(sent_messages[0][0], "999")
         self.assertEqual(state["__telegram_commands"]["last_update_id"], 127)
 
     def test_snapshot_caption_skill_level_wording(self):
@@ -5390,51 +5469,6 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertTrue(header_text_x)
         self.assertGreater(min(header_text_x), 32 + 48)
 
-    def test_reference_card_renders_and_uses_supported_watchlist_symbols(self):
-        original_watchlist = scanner.WATCHLIST[:]
-        scanner.WATCHLIST = ["BTC/USD", "ETH/USD", "XMR/USD"]
-        scanner.UNSUPPORTED_SYMBOLS_THIS_SESSION.add("XMR/USD")
-
-        try:
-            symbols = scanner.reference_card_symbols()
-            with tempfile.TemporaryDirectory() as tmpdir:
-                path = prb_card_renderer.render_reference_card(symbols, output_dir=tmpdir)
-                card_exists = Path(path).exists()
-                png_header = Path(path).read_bytes()[:8]
-        finally:
-            scanner.WATCHLIST = original_watchlist
-            scanner.UNSUPPORTED_SYMBOLS_THIS_SESSION.discard("XMR/USD")
-
-        self.assertEqual(symbols, ["BTC/USD", "ETH/USD"])
-        self.assertTrue(card_exists)
-        self.assertEqual(png_header, b"\x89PNG\r\n\x1a\n")
-
-    def test_coins_command_lists_enabled_supported_watchlist_symbols(self):
-        original_watchlist = scanner.WATCHLIST[:]
-        scanner.WATCHLIST = ["BTC/USD", "ETH/USD", "XMR/USD"]
-        scanner.UNSUPPORTED_SYMBOLS_THIS_SESSION.add("XMR/USD")
-        sent_messages = []
-
-        try:
-            with patch.object(
-                scanner,
-                "send_telegram_message",
-                side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
-            ):
-                scanner.handle_coins_command(
-                    "TOKEN",
-                    "-100",
-                    source_chat={"id": "-100", "type": "group"},
-                )
-        finally:
-            scanner.WATCHLIST = original_watchlist
-            scanner.UNSUPPORTED_SYMBOLS_THIS_SESSION.discard("XMR/USD")
-
-        self.assertEqual(sent_messages[0][0], "-100")
-        self.assertIn("🪙 Coins Poinkle tracks: 2 coins", sent_messages[0][1])
-        self.assertIn("BTC, ETH", sent_messages[0][1])
-        self.assertNotIn("XMR", sent_messages[0][1])
-
     def test_welcome_card_renderer_produces_image_path(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = prb_card_renderer.render_welcome_card(
@@ -5444,27 +5478,6 @@ class ScannerLogicTests(unittest.TestCase):
 
             self.assertTrue(Path(path).exists())
             self.assertEqual(Path(path).read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
-
-    def test_reference_command_sends_rendered_card(self):
-        sent_photos = []
-
-        with patch.object(scanner, "reference_card_symbols", return_value=["BTC/USD", "ETH/USD"]) as symbols, patch.object(
-            scanner, "render_reference_card", return_value="/tmp/reference.png"
-        ) as render_card, patch.object(
-            scanner,
-            "send_telegram_photo",
-            side_effect=lambda token, chat_id, path: sent_photos.append((str(chat_id), path)) or True,
-        ), patch.object(scanner, "send_telegram_message", side_effect=AssertionError("text fallback should not be sent")):
-            scanner.handle_reference_command(
-                "TOKEN",
-                "999",
-                source_chat={"id": "999", "type": "private"},
-            )
-
-        symbols.assert_called_once()
-        render_card.assert_called_once()
-        self.assertEqual(render_card.call_args.kwargs["logo_path"], scanner.POINKLE_RESEARCH_EMBLEM_PATH)
-        self.assertEqual(sent_photos, [("999", "/tmp/reference.png")])
 
     def test_start_command_sends_orientation_card_and_captures_new_profile(self):
         sent_messages = []
@@ -5784,16 +5797,8 @@ class ScannerLogicTests(unittest.TestCase):
         ):
             scanner.send_research_cards("TOKEN", "999", "BTC PRB", symbol="BTC/USD")
 
-        with patch.object(scanner, "render_reference_card", return_value="/tmp/reference.png") as reference_render, patch.object(
-            scanner,
-            "send_telegram_photo",
-            return_value=True,
-        ):
-            scanner.handle_reference_command("TOKEN", "999")
-
         self.assertEqual(alert_render.call_args.kwargs["logo_path"], scanner.POINKLE_RESEARCH_EMBLEM_PATH)
         self.assertEqual(prb_render.call_args.kwargs["logo_path"], scanner.POINKLE_RESEARCH_EMBLEM_PATH)
-        self.assertEqual(reference_render.call_args.kwargs["logo_path"], scanner.POINKLE_RESEARCH_EMBLEM_PATH)
 
     def test_confluence_alert_snapshot_passes_alert_cards_and_volume_candles(self):
         captured = {}

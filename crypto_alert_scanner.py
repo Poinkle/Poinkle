@@ -19,13 +19,11 @@ try:
     from prb_card_renderer import (
         render_alert_card,
         render_mike_list_card,
-        render_reference_card,
         render_welcome_card,
     )
 except ModuleNotFoundError:
     render_alert_card = None
     render_mike_list_card = None
-    render_reference_card = None
     render_welcome_card = None
 
 try:
@@ -356,13 +354,9 @@ PUBLIC_BOT_COMMANDS = [
     {"command": "myalerts", "description": "View your active alerts"},
     {"command": "watch", "description": "Add a coin to your watchlist"},
     {"command": "unwatch", "description": "Remove a coin from your watchlist"},
-    {"command": "clearwatch", "description": "Clear watched coins by number"},
-    {"command": "mywatch", "description": "View your watched coins"},
     {"command": "mike", "description": "Mike's curated watchlist"},
-    {"command": "guide", "description": "Command and coin reference card"},
     {"command": "verify", "description": "Verify a creator account"},
     {"command": "explain", "description": "Learn a market concept"},
-    {"command": "coins", "description": "See every coin I track"},
     {"command": "help", "description": "Full help message"},
     {"command": "start", "description": "Welcome message"},
 ]
@@ -5374,7 +5368,6 @@ SNAPSHOT_LOOK_ORDER_BUTTONS = (
     ("5 Plan", "trade_plan"),
 )
 SNAPSHOT_LOOK_ORDER_CALLBACK_PREFIX = "look_order"
-WATCHLIST_COIN_CALLBACK_PREFIX = "wcoin"
 WATCHLIST_ACTION_CALLBACK_PREFIX = "wact"
 ALERT_SEVERITY_CALLBACK_PREFIX = "sev"
 EXPLAIN_GROUP_CALLBACK_PREFIX = "xgroup"
@@ -5401,11 +5394,6 @@ COMMAND_PANEL_ACTIONS = (
 )
 TOP_COIN_PICKER_BASES = ("BTC", "ETH", "SOL", "XRP", "DOGE", "ADA", "AVAX", "LINK", "DOT", "POL", "TON", "TAO")
 SUPPORTED_CREATOR_PLATFORMS = ("telegram", "tiktok", "youtube", "x", "instagram", "discord", "website")
-WATCHLIST_ACTIONS = {
-    "snapshot": "Snapshot",
-    "research": "Research",
-    "whynot": "Why not?",
-}
 CONCEPT_GROUPS = (
     ("📊 Price & Structure", ("candle", "support", "resistance", "range", "key_level", "trend", "market_structure")),
     ("⚡ The Event", ("breakout", "breakdown", "confirmation", "retest", "follow_through")),
@@ -5454,46 +5442,6 @@ def coin_picker_button_rows(buttons, buttons_per_row=COIN_PICKER_BUTTONS_PER_ROW
         buttons[index : index + buttons_per_row]
         for index in range(0, len(buttons), buttons_per_row)
     ]
-
-
-def watchlist_coin_keyboard(symbols):
-    buttons = [
-        {
-            "text": base_symbol(symbol),
-            "callback_data": f"{WATCHLIST_COIN_CALLBACK_PREFIX}:{symbol}",
-        }
-        for symbol in symbols
-    ]
-    return {
-        "inline_keyboard": coin_picker_button_rows(buttons)
-    }
-
-
-def watchlist_direct_action_keyboard(symbols, action):
-    buttons = [
-        {
-            "text": base_symbol(symbol),
-            "callback_data": f"{WATCHLIST_ACTION_CALLBACK_PREFIX}:{action}:{symbol}",
-        }
-        for symbol in symbols
-    ]
-    return {
-        "inline_keyboard": coin_picker_button_rows(buttons)
-    }
-
-
-def watchlist_action_keyboard(symbol):
-    return {
-        "inline_keyboard": [
-            [
-                {
-                    "text": label,
-                    "callback_data": f"{WATCHLIST_ACTION_CALLBACK_PREFIX}:{action}:{symbol}",
-                }
-                for action, label in WATCHLIST_ACTIONS.items()
-            ]
-        ]
-    }
 
 
 def alert_severity_keyboard():
@@ -7294,7 +7242,6 @@ def send_research_cards(telegram_token, chat_id, prb_text, symbol=None, chart_da
 SNAPSHOT_COMMANDS = ("/snapshot",)
 RESEARCH_COMMANDS = ("/research",)
 WHYNOT_COMMANDS = ("/whynot",)
-REFERENCE_COMMANDS = ("/guide",)
 EXPLAIN_COMMANDS = ("/explain",)
 
 
@@ -7312,10 +7259,6 @@ def is_research_command(message_text):
 
 def is_whynot_command(message_text):
     return snapshot_command_name(message_text) in WHYNOT_COMMANDS
-
-
-def is_reference_command(message_text):
-    return snapshot_command_name(message_text) in REFERENCE_COMMANDS
 
 
 def is_explain_command(message_text):
@@ -7385,23 +7328,17 @@ def poinkle_onboarding_text(kind):
             "/explain — tap through the concepts Poinkle teaches\n"
             "/whynot — why a coin hasn't alerted: where it sits, what would confirm\n"
             "/commands — open the tappable command panel\n"
-            "/guide — command and coin reference card\n"
             "/help — show this message\n\n"
             "WATCH\n"
             "/watch, /unwatch — manage your personal watchlist\n"
-            "/mywatch — open your watchlist panel\n"
             "Tip: type @Poinkle_Bot followed by a coin in any chat to search all 140.\n"
-            "/clearwatch — remove watched coins by number\n"
             "/alerts — set a personal price-zone alert\n"
             "/myalerts — view your active alerts\n"
             "/alertlevel — choose how much you want to hear from Poinkle\n\n"
             "LOOK\n"
             "/snapshot — visual chart and breakdown\n"
             "/research — deeper multi-card research brief\n"
-            "/scan — quick Top 100 market scan\n"
             "/mike — Mike's curated watchlist\n"
-            "/coins — every coin Poinkle tracks\n"
-            "/status — bot status and delivery metrics\n"
             "/start — welcome message\n\n"
             "Poinkle describes what price has already done. It never predicts what comes next."
         )
@@ -8197,48 +8134,6 @@ def handle_whynot_command(
     log_info(f"Answered {command} command for {symbol}")
 
 
-def reference_card_symbols():
-    return [
-        symbol
-        for symbol in WATCHLIST
-        if symbol not in UNSUPPORTED_SYMBOLS_THIS_SESSION
-    ]
-
-
-def build_coins_command_message(symbols=None):
-    symbols = reference_card_symbols() if symbols is None else symbols
-    coins = [symbol.replace("/USD", "") for symbol in symbols]
-    if not coins:
-        return "🪙 Coins Poinkle tracks:\n\nNo tracked coins are available right now."
-
-    return (
-        f"🪙 Coins Poinkle tracks: {len(coins)} coins\n\n"
-        f"{format_supported_coins_for_help(symbols)}"
-    )
-
-
-def handle_coins_command(telegram_token, telegram_chat_id, source_chat=None):
-    source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
-    response_chat_id = str(source_chat.get("id", telegram_chat_id))
-    send_telegram_message(telegram_token, response_chat_id, build_coins_command_message())
-
-
-def reference_text_fallback():
-    coins = " ".join(symbol.replace("/USD", "") for symbol in reference_card_symbols())
-    return (
-        "POINKLE - QUICK REFERENCE\n\n"
-        "/snapshot BTC - full visual chart + breakdown\n"
-        "/research SOL - deeper multi-card research brief\n"
-        "/whynot BTC - why a coin is waiting\n"
-        "/alerts XRP support - get DM'd when XRP nears a key zone\n"
-        "/myalerts - see your active alerts\n"
-        "/help - full command list anytime\n\n"
-        f"Supported Coins:\n{coins}\n\n"
-        "Every alert is a short-term signal on one specific timeframe - not a call on the overall trend.\n\n"
-        "Educational market structure only. Not financial advice. Poinkle did the research. The decision is yours."
-    )
-
-
 def concept_menu_text():
     concepts = ", ".join(available_concepts())
     return (
@@ -8398,31 +8293,6 @@ def handle_explain_concept_callback(telegram_token, callback_query, payload, exc
         chat_id,
         build_explain_command_message(f"/explain {concept_key}", skill_level=skill_level),
         concept_key=concept_key,
-    )
-    return True
-
-
-def handle_watchlist_coin_callback(telegram_token, callback_query, payload, exchange=None):
-    callback_query_id = (callback_query or {}).get("id")
-    if callback_query_id:
-        answer_telegram_callback(telegram_token, callback_query_id)
-        clear_callback_message_keyboard(telegram_token, callback_query)
-
-    symbol = normalize_trade_symbol_input(payload)
-    if not symbol:
-        return False
-
-    user_id = str(((callback_query or {}).get("from") or {}).get("id") or "")
-    if not user_id:
-        return False
-    if symbol not in user_watchlist_symbols(user_id):
-        return False
-
-    send_telegram_message(
-        telegram_token,
-        user_id,
-        f"<b>{base_symbol(symbol)}</b>\nWhat do you want to open?",
-        reply_markup=watchlist_action_keyboard(symbol),
     )
     return True
 
@@ -8896,7 +8766,6 @@ def handle_telegram_callback_query(exchange, telegram_token, callback_query):
         SNAPSHOT_LOOK_ORDER_CALLBACK_PREFIX: (
             lambda token, query, _payload, _exchange=None: handle_snapshot_look_order_callback(token, query)
         ),
-        WATCHLIST_COIN_CALLBACK_PREFIX: handle_watchlist_coin_callback,
         WATCHLIST_ACTION_CALLBACK_PREFIX: handle_watchlist_action_callback,
         ALERT_SEVERITY_CALLBACK_PREFIX: handle_alert_severity_callback,
         EXPLAIN_GROUP_CALLBACK_PREFIX: handle_explain_group_callback,
@@ -8955,24 +8824,6 @@ def handle_explain_command(telegram_token, telegram_chat_id, message_text, sourc
         build_explain_command_message(message_text, skill_level=skill_level),
         concept_key=explain_command_concept_key(message_text),
     )
-
-
-def handle_reference_command(telegram_token, telegram_chat_id, source_chat=None):
-    source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
-    response_chat_id = str(source_chat.get("id", telegram_chat_id))
-    try:
-        if render_reference_card is None:
-            raise RuntimeError("Reference card renderer unavailable")
-        card_path = render_reference_card(
-            reference_card_symbols(),
-            logo_path=POINKLE_RESEARCH_EMBLEM_PATH,
-        )
-        if send_telegram_photo(telegram_token, response_chat_id, card_path):
-            return
-        raise RuntimeError("Reference card send failed")
-    except Exception as error:
-        log_warn(f"Reference card rendering failed: {error}")
-        send_telegram_message(telegram_token, response_chat_id, reference_text_fallback())
 
 
 def handle_status_command(telegram_token, telegram_chat_id, state, source_chat=None):
@@ -9448,150 +9299,6 @@ def send_bare_command_watchlist_panel(
     return True
 
 
-def handle_mywatch_command(
-    telegram_token,
-    telegram_chat_id,
-    source_chat=None,
-    from_user=None,
-):
-    source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
-    response_chat_id = str(source_chat.get("id", telegram_chat_id))
-    user_chat_id = alert_dm_chat_id(source_chat, from_user or {}, telegram_chat_id)
-    is_private = is_private_chat(source_chat)
-    user_symbols = user_watchlist_symbols(user_chat_id)
-
-    if not user_symbols:
-        send_telegram_message(
-            telegram_token,
-            response_chat_id,
-            "You’re not watching any coins yet. Add one with /watch BTC.",
-        )
-        return
-
-    sorted_symbols = sorted(user_symbols, key=base_symbol)
-    try:
-        send_telegram_message(
-            telegram_token,
-            user_chat_id,
-            "Your watchlist - tap a coin.",
-            reply_markup=watchlist_coin_keyboard(sorted_symbols),
-        )
-        if not is_private:
-            send_telegram_message(
-                telegram_token,
-                response_chat_id,
-                "I sent your watchlist panel to your DM.",
-            )
-    except Exception as error:
-        log_warn(f"Could not DM watchlist panel to user {user_chat_id}: {error}")
-        if not is_private:
-            send_telegram_message(telegram_token, response_chat_id, levels_dm_failed_message())
-
-
-def handle_clearwatch_command(
-    telegram_token,
-    telegram_chat_id,
-    message_text,
-    source_chat=None,
-    from_user=None,
-):
-    parts = message_text.strip().split()
-    source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
-    from_user = from_user or {}
-    response_chat_id = str(source_chat.get("id", telegram_chat_id))
-    user_chat_id = alert_dm_chat_id(source_chat, from_user, telegram_chat_id)
-    watchlists = load_user_watchlists()
-    user_symbols = sorted(watchlists.get(user_chat_id, []), key=base_symbol)
-
-    if len(parts) < 2:
-        send_telegram_message(
-            telegram_token,
-            response_chat_id,
-            "Use: /clearwatch 2\nOr: /clearwatch 2 3 4\nOr: /clearwatch all",
-        )
-        return
-
-    if not user_symbols:
-        send_telegram_message(
-            telegram_token,
-            response_chat_id,
-            "You’re not watching any coins yet. Add one with /watch BTC.",
-        )
-        return
-
-    args = [part.lower() for part in parts[1:]]
-    if args[0] == "all":
-        if len(args) >= 2 and args[1] == "confirm":
-            watchlists.pop(user_chat_id, None)
-            save_user_watchlists(watchlists)
-            send_telegram_message(
-                telegram_token,
-                response_chat_id,
-                f"✅ Cleared all {len(user_symbols)} coins from your watchlist.",
-            )
-            return
-        send_telegram_message(
-            telegram_token,
-            response_chat_id,
-            f"This will remove all {len(user_symbols)} coins. Reply /clearwatch all confirm to proceed.",
-        )
-        return
-
-    requested_positions = []
-    invalid_args = []
-    for arg in args:
-        try:
-            position = int(arg)
-        except ValueError:
-            invalid_args.append(arg)
-            continue
-        if position < 1 or position > len(user_symbols):
-            invalid_args.append(arg)
-            continue
-        requested_positions.append(position)
-
-    if invalid_args:
-        send_telegram_message(
-            telegram_token,
-            response_chat_id,
-            f"You don’t have an item {', '.join(invalid_args)}.",
-        )
-        return
-
-    if not requested_positions:
-        send_telegram_message(
-            telegram_token,
-            response_chat_id,
-            "Use numbers from /mywatch, like /clearwatch 2.",
-        )
-        return
-
-    positions_to_remove = set(requested_positions)
-    removed_symbols = [
-        symbol
-        for index, symbol in enumerate(user_symbols, start=1)
-        if index in positions_to_remove
-    ]
-    remaining_symbols = [
-        symbol
-        for index, symbol in enumerate(user_symbols, start=1)
-        if index not in positions_to_remove
-    ]
-
-    if remaining_symbols:
-        watchlists[user_chat_id] = remaining_symbols
-    else:
-        watchlists.pop(user_chat_id, None)
-    save_user_watchlists(watchlists)
-
-    removed = ", ".join(base_symbol(symbol) for symbol in removed_symbols)
-    send_telegram_message(
-        telegram_token,
-        response_chat_id,
-        f"Removed: {removed}.",
-    )
-
-
 def handle_levels_command(
     exchange,
     telegram_token,
@@ -9958,22 +9665,8 @@ def process_telegram_commands(
                 text,
                 source_chat=chat,
             )
-        elif lower_text.startswith("/status"):
-            handle_status_command(
-                telegram_token,
-                chat_id,
-                state,
-                source_chat=chat,
-            )
         elif lower_text.startswith("/myalerts"):
             handle_myalerts_command(
-                telegram_token,
-                chat_id,
-                source_chat=chat,
-                from_user=from_user,
-            )
-        elif lower_text.startswith("/mywatch"):
-            handle_mywatch_command(
                 telegram_token,
                 chat_id,
                 source_chat=chat,
@@ -9988,14 +9681,6 @@ def process_telegram_commands(
             )
         elif lower_text.startswith("/alerts"):
             handle_alerts_command(
-                telegram_token,
-                chat_id,
-                text,
-                source_chat=chat,
-                from_user=from_user,
-            )
-        elif lower_text.startswith("/clearwatch"):
-            handle_clearwatch_command(
                 telegram_token,
                 chat_id,
                 text,
@@ -10019,7 +9704,7 @@ def process_telegram_commands(
                 source_chat=chat,
                 from_user=from_user,
             )
-        elif lower_text.startswith("/scan"):
+        elif lower_text.startswith("/scan") and is_owner_user(telegram_user_id(chat, from_user, chat_id)):
             handle_scan_command(
                 exchange,
                 telegram_token,
@@ -10027,15 +9712,16 @@ def process_telegram_commands(
                 text,
                 source_chat=chat,
             )
+        elif lower_text.startswith("/status") and is_owner_user(telegram_user_id(chat, from_user, chat_id)):
+            handle_status_command(
+                telegram_token,
+                chat_id,
+                state,
+                source_chat=chat,
+            )
         elif lower_text.startswith("/mike"):
             handle_mike_command(
                 exchange,
-                telegram_token,
-                chat_id,
-                source_chat=chat,
-            )
-        elif lower_text.startswith("/coins"):
-            handle_coins_command(
                 telegram_token,
                 chat_id,
                 source_chat=chat,
@@ -10052,12 +9738,6 @@ def process_telegram_commands(
                 text,
                 source_chat=chat,
                 from_user=from_user,
-            )
-        elif is_reference_command(text):
-            handle_reference_command(
-                telegram_token,
-                chat_id,
-                source_chat=chat,
             )
         elif is_whynot_command(text):
             if defer_heavy_commands and should_enqueue_heavy_command(text):
