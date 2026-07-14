@@ -590,21 +590,21 @@ def draw_footer_card(ax, title, lines, accent):
 def draw_level_one_footer(ax, trend_title, trend_hint, current_price, supports, resistances):
     ax.axis("off")
     box(ax, 0.00, 0.08, 1.00, 0.84, edge=GRID, face=PANEL, alpha=0.76, lw=1.0)
-    text(ax, 0.50, 0.735, "WHAT TO WATCH NEXT", size=13, color=BLUE, weight="bold", ha="center")
+    text(ax, 0.50, 0.735, "WHAT WOULD CHANGE THE PICTURE", size=11.6, color=BLUE, weight="bold", ha="center")
 
     watch_lines = [
         (
-            f"Hold above {format_price(supports[0])}",
-            "Trend stays healthy.",
-        ) if supports else ("Let support form", "Wait for a cleaner map."),
+            f"Daily close above {format_price(resistances[0])}",
+            "One close is an attempt.",
+        ) if resistances else ("Let resistance form", "Wait for a cleaner upper edge."),
         (
-            f"Reclaim {format_price(current_price)}",
-            "Buyers step back in.",
+            "Second close above it",
+            "That's confirmation.",
         ),
         (
-            f"Break {format_price(resistances[0])}",
-            "Next leg can start.",
-        ) if resistances else ("Wait for resistance", "Let price show the ceiling."),
+            f"Daily close below {format_price(supports[0])}",
+            "Same rule downward.",
+        ) if supports else ("Let support form", "Wait for a cleaner lower edge."),
     ]
     x_positions = [0.155, 0.420, 0.685]
     colors = [GREEN, BLUE, RED]
@@ -1111,21 +1111,22 @@ def generate_poinkle_snapshot_spec_chart(symbol, candles, current_price, support
             zorder=0,
         )
     )
-    footer_title = footer.text(0.50, 0.665, "WHAT TO WATCH NEXT", color="#3bdff4", fontsize=16, fontweight="bold", ha="center", va="center", zorder=3)
+    footer_title = footer.text(0.50, 0.665, "WHAT WOULD CHANGE THE PICTURE", color="#3bdff4", fontsize=14.2, fontweight="bold", ha="center", va="center", zorder=3)
     footer_title.set_path_effects([pe.withStroke(linewidth=3.0, foreground="#0b6878", alpha=0.42)])
 
     support_text = format_price(nearby_supports[0]) if nearby_supports else format_price(support_level)
     resistance_text = format_price(nearby_resistances[0]) if nearby_resistances else format_price(resistance_level)
     watch_items = [
-        f"1. Hold {support_text} support \u2192 trend stays healthy",
-        f"2. Reclaim {format_price(current_price)} \u2192 buyers step back in",
-        f"3. Break {resistance_text} \u2192 next leg can start",
+        f"1. Daily close above {resistance_text} - one close is an attempt",
+        "2. Second close above it - confirmation",
+        f"3. Daily close below {support_text} - same rule downward",
     ]
     footer_x = [0.065, 0.385, 0.690]
     for idx, (x_pos, item) in enumerate(zip(footer_x, watch_items)):
         footer.text(x_pos, 0.315, item, color="#dbe7ef", fontsize=11.2, ha="left", va="center", zorder=3)
         if idx < 2:
             footer.plot([x_pos + 0.292, x_pos + 0.292], [0.20, 0.50], color="#2dd4f0", linewidth=1.0, alpha=0.55, zorder=3)
+    footer.text(0.50, 0.115, "One close is a hypothesis. Two is an answer.", color="#a9dce8", fontsize=9.2, ha="center", va="center", zorder=3)
 
     canvas.text(
         0.50,
@@ -1316,20 +1317,21 @@ def generate_poinkle_reference_snapshot_chart(symbol, candles, current_price, su
     footer.axis("off")
     footer.add_patch(FancyBboxPatch((0, 0.02), 1, 0.86, boxstyle="round,pad=0.012,rounding_size=0.040", facecolor="#143341", edgecolor="#5ae6f4", linewidth=0.6, alpha=0.36, zorder=1))
     footer.add_patch(FancyBboxPatch((0, 0.02), 1, 0.86, boxstyle="round,pad=0.012,rounding_size=0.040", facecolor="none", edgecolor="#6fefff", linewidth=8, alpha=0.020, zorder=0))
-    footer_title = footer.text(0.50, 0.665, "WHAT TO WATCH NEXT", color="#3bdff4", fontsize=15.5, fontweight="bold", ha="center", va="center", zorder=3)
+    footer_title = footer.text(0.50, 0.665, "WHAT WOULD CHANGE THE PICTURE", color="#3bdff4", fontsize=13.8, fontweight="bold", ha="center", va="center", zorder=3)
     footer_title.set_path_effects([pe.withStroke(linewidth=3.0, foreground="#0b6878", alpha=0.42)])
 
     support_text = format_price(nearby_supports[0]) if nearby_supports else format_price(support_level)
     resistance_text = format_price(nearby_resistances[0]) if nearby_resistances else format_price(resistance_level)
     watch_items = [
-        f"1. Reclaim {format_price(current_price)} \u2192 buyers step back in",
-        f"2. Break {resistance_text} \u2192 next leg can start",
-        f"3. Lose {support_text} \u2192 watch support reaction",
+        f"1. Daily close above {resistance_text} - one close is an attempt",
+        "2. Second close above it - confirmation",
+        f"3. Daily close below {support_text} - same rule downward",
     ]
     for idx, (x_pos, item) in enumerate(zip([0.065, 0.385, 0.690], watch_items)):
         footer.text(x_pos, 0.315, item, color="#dbe7ef", fontsize=10.8, ha="left", va="center", zorder=3)
         if idx < 2:
             footer.plot([x_pos + 0.292, x_pos + 0.292], [0.20, 0.50], color="#2dd4f0", linewidth=1.0, alpha=0.52, zorder=3)
+    footer.text(0.50, 0.115, "One close is a hypothesis. Two is an answer.", color="#a9dce8", fontsize=9.0, ha="center", va="center", zorder=3)
 
     canvas.text(0.50, 0.062, "End of Snapshot  \u2022  Ready for Next Level", color="#a9b8c5", fontsize=10.5, alpha=0.74, ha="center", va="center", zorder=5)
 

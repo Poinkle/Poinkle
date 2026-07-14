@@ -5356,12 +5356,44 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("body_width = 0.76 if teaching_mode else 0.54", source)
         footer_guard_index = source.index("if not teaching_mode:\n        arrows =")
         self.assertGreater(source.index("footer = fig.add_axes", footer_guard_index), footer_guard_index)
-        self.assertGreater(source.index('"WHAT TO WATCH NEXT"', footer_guard_index), footer_guard_index)
+        self.assertGreater(source.index('"WHAT WOULD CHANGE THE PICTURE"', footer_guard_index), footer_guard_index)
+        self.assertIn("One close is a hypothesis. Two is an answer.", source)
         self.assertIn("if not teaching_mode:\n        volume_ax = fig.add_axes", source)
         self.assertIn("if ema21_values and not teaching_mode:", source)
         self.assertIn("if teaching_mode:", source)
         self.assertIn("if teaching_zone == \"resistance\":", source)
         self.assertIn("def zone(level, thickness, color, alpha, start, end, label=None):", source)
+
+    def test_snapshot_footer_uses_conditions_not_predictions(self):
+        sources = {
+            "chart_generator.py": (PROJECT_DIR / "chart_generator.py").read_text(),
+            "chart_generator_reference.py": (PROJECT_DIR / "chart_generator_reference.py").read_text(),
+        }
+
+        for filename, source in sources.items():
+            with self.subTest(filename=filename):
+                self.assertIn("WHAT WOULD CHANGE THE PICTURE", source)
+                self.assertIn("Daily close above", source)
+                self.assertIn("Second close above it", source)
+                self.assertIn("Daily close below", source)
+                self.assertIn("One close is a hypothesis. Two is an answer.", source)
+                for banned_phrase in (
+                    "buyers step back in",
+                    "next leg",
+                    "trend stays healthy",
+                    "step back in",
+                    "can start",
+                    "healthy",
+                ):
+                    self.assertNotIn(banned_phrase, source.lower())
+
+    def test_pending_one_close_footer_copy_is_attempt_not_prediction(self):
+        source = (PROJECT_DIR / "chart_generator_reference.py").read_text()
+
+        self.assertIn("one close is an attempt", source.lower())
+        self.assertIn("confirmation", source.lower())
+        for banned_word in ("buy", "sell", "enter", "exit", "long", "short", "target"):
+            self.assertIsNone(re.search(rf"\b{banned_word}\b", source[source.index("items = footer_items or [") : source.index("canvas.text(0.50, 0.062")].lower()))
 
     def test_teaching_logo_watermark_success_skips_text_fallback(self):
         source = (PROJECT_DIR / "chart_generator_reference.py").read_text()
