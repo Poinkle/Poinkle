@@ -5428,6 +5428,17 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn('"POINKLE"', snapshot_branch)
         self.assertNotIn("add_ghost_watermark(chart_ax)", snapshot_branch)
 
+    def test_snapshot_ema_labels_are_stacked_in_future_space(self):
+        source = (PROJECT_DIR / "chart_generator_reference.py").read_text()
+
+        self.assertIn("def draw_stacked_ema_labels(ax, ema_specs, label_x, y_min, y_max):", source)
+        self.assertIn("min_gap = y_span * 0.060", source)
+        self.assertIn("ema_label_specs.append((\"EMA 200\", \"#93c5fd\", ema200_values[-1]))", source)
+        self.assertIn("ema_label_specs.append((\"EMA 55\", \"#e8c76a\", ema55_values[-1]))", source)
+        self.assertIn("ema_label_specs.append((\"EMA 21\", \"#edf6fa\", ema21_values[-1]))", source)
+        self.assertIn("len(recent) + max(2.0, len(recent) * 0.025)", source)
+        self.assertIn('"boxstyle": "round,pad=0.20,rounding_size=0.06"', source)
+
     def test_pending_one_close_footer_copy_is_attempt_not_prediction(self):
         source = (PROJECT_DIR / "chart_generator_reference.py").read_text()
 
