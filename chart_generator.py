@@ -1357,6 +1357,8 @@ def generate_levels_chart(
     support_label=None,
     resistance_label=None,
     chart_annotations=None,
+    teaching_mode=False,
+    teaching_zone=None,
 ):
     from chart_generator_reference import generate_reference_levels_chart
 
@@ -1377,4 +1379,6 @@ def generate_levels_chart(
         support_label=support_label,
         resistance_label=resistance_label,
         chart_annotations=chart_annotations,
+        teaching_mode=teaching_mode,
+        teaching_zone=teaching_zone,
     )

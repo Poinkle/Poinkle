@@ -4911,11 +4911,29 @@ class ScannerLogicTests(unittest.TestCase):
         validate_symbol.assert_called_once()
         build_snapshot.assert_called_once()
         chart_path.assert_called_once()
+        self.assertEqual(chart_path.call_args.kwargs["teaching_zone"], "support")
         self.assertEqual(sent_photos[0][0:2], ("777", "/tmp/btc-support.png"))
         self.assertIn("<b>SUPPORT — on BTC, right now</b>", sent_photos[0][2])
         self.assertIn("nearest support zone", sent_photos[0][2])
         self.assertIn("Honest limit", sent_photos[0][2])
         static_response.assert_not_called()
+
+    def test_live_explain_support_chart_uses_teaching_mode(self):
+        snapshot = self.live_explain_snapshot(current_price=110)
+
+        with patch.object(scanner, "generate_levels_chart", return_value="/tmp/live-teaching.png") as generate_chart:
+            path = scanner.live_explain_chart_path(
+                "BTC/USD",
+                snapshot["chart_data"],
+                "BTC / USD — SUPPORT",
+                support_label="Nearest support",
+                teaching_zone="support",
+            )
+
+        self.assertEqual(path, "/tmp/live-teaching.png")
+        self.assertTrue(generate_chart.call_args.kwargs["teaching_mode"])
+        self.assertEqual(generate_chart.call_args.kwargs["teaching_zone"], "support")
+        self.assertEqual(generate_chart.call_args.kwargs["support_label"], "Nearest support")
 
     def test_live_explain_resistance_coin_sends_chart_and_resistance_caption(self):
         sent_photos = []
@@ -4941,6 +4959,7 @@ class ScannerLogicTests(unittest.TestCase):
             )
 
         self.assertEqual(chart_path.call_args.kwargs["resistance_label"], "Nearest resistance")
+        self.assertEqual(chart_path.call_args.kwargs["teaching_zone"], "resistance")
         self.assertEqual(sent_photos[0][0:2], ("777", "/tmp/btc-resistance.png"))
         self.assertIn("<b>RESISTANCE — on BTC, right now</b>", sent_photos[0][2])
         self.assertIn("nearest resistance zone", sent_photos[0][2])
@@ -4979,6 +4998,7 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertEqual(chart_path.call_args.kwargs["support_label"], "Attempt zone")
         self.assertEqual(chart_path.call_args.kwargs["chart_annotations"][0]["label"], "First close — attempt")
+        self.assertEqual(chart_path.call_args.kwargs["teaching_zone"], "support")
         self.assertIn("BTC closed below the 95.00 zone once", sent_photos[0][2])
         self.assertIn("That's an ATTEMPT", sent_photos[0][2])
         self.assertIn("SECOND consecutive daily close", sent_photos[0][2])
@@ -5010,6 +5030,19 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("BTC hasn't closed beyond a zone", sent_photos[0][2])
         self.assertIn("Nearest support", sent_photos[0][2])
         self.assertIn("Nearest resistance", sent_photos[0][2])
+
+    def test_teaching_reference_chart_strips_dashboard_footer_and_extra_zones(self):
+        source = (PROJECT_DIR / "chart_generator_reference.py").read_text()
+
+        self.assertIn("teaching_mode=False", source)
+        self.assertIn("teaching_zone=None", source)
+        footer_guard_index = source.index("if not teaching_mode:\n        arrows =")
+        self.assertGreater(source.index("footer = fig.add_axes", footer_guard_index), footer_guard_index)
+        self.assertGreater(source.index('"WHAT TO WATCH NEXT"', footer_guard_index), footer_guard_index)
+        self.assertIn("if not teaching_mode:\n        volume_ax = fig.add_axes", source)
+        self.assertIn("if ema21_values and not teaching_mode:", source)
+        self.assertIn("if teaching_mode:\n        if teaching_zone == \"resistance\":", source)
+        self.assertIn("else:\n            zone(support_level", source)
 
     def test_explain_rsi_with_symbol_still_uses_static_card(self):
         with patch.object(scanner, "handle_live_explain_command", side_effect=AssertionError("RSI must stay static")), patch.object(
@@ -5607,6 +5640,24 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(len(sent_messages), 1)
         for _, text in sent_messages:
             self.assertIn(scanner.poinkle_educational_footer(), text)
+
+    def test_snapshot_chart_still_uses_full_renderer(self):
+        snapshot = self.live_explain_snapshot(current_price=110)
+        scanner.LAST_LEVELS_CHART_DATA["BTC/USD"] = snapshot["chart_data"]
+        captured = {}
+
+        def fake_generate(symbol, candles, current_price, supports, resistances, **kwargs):
+            captured.update(kwargs)
+            return "/tmp/full-snapshot.png"
+
+        with patch.object(scanner, "generate_levels_chart", side_effect=fake_generate), patch.object(
+            scanner, "send_telegram_photo", return_value=True
+        ):
+            sent = scanner.send_levels_chart("TOKEN", "999", "BTC/USD", "caption")
+
+        self.assertTrue(sent)
+        self.assertNotIn("teaching_mode", captured)
+        self.assertNotIn("teaching_zone", captured)
 
     def test_research_btc_uses_standard_footer(self):
         current_price = 100

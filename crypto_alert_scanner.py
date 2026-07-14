@@ -8374,7 +8374,15 @@ def live_explain_static_fallback(telegram_token, response_chat_id, concept_key, 
     )
 
 
-def live_explain_chart_path(symbol, chart_data, title, support_label=None, resistance_label=None, chart_annotations=None):
+def live_explain_chart_path(
+    symbol,
+    chart_data,
+    title,
+    support_label=None,
+    resistance_label=None,
+    chart_annotations=None,
+    teaching_zone=None,
+):
     if generate_levels_chart is None:
         raise RuntimeError("Chart generator unavailable")
     return generate_levels_chart(
@@ -8395,6 +8403,8 @@ def live_explain_chart_path(symbol, chart_data, title, support_label=None, resis
         support_label=support_label,
         resistance_label=resistance_label,
         chart_annotations=chart_annotations,
+        teaching_mode=True,
+        teaching_zone=teaching_zone,
     )
 
 
@@ -8484,6 +8494,7 @@ def handle_live_explain_command(exchange, telegram_token, response_chat_id, symb
             chart_data,
             f"{symbol.replace('/', ' / ')} SUPPORT — RIGHT NOW",
             support_label="Nearest support",
+            teaching_zone="support",
         )
         if send_telegram_photo(telegram_token, response_chat_id, chart_path, caption=live_support_caption(symbol, snapshot)):
             return True
@@ -8504,6 +8515,7 @@ def handle_live_explain_command(exchange, telegram_token, response_chat_id, symb
             chart_data,
             f"{symbol.replace('/', ' / ')} RESISTANCE — RIGHT NOW",
             resistance_label="Nearest resistance",
+            teaching_zone="resistance",
         )
         if send_telegram_photo(telegram_token, response_chat_id, chart_path, caption=live_resistance_caption(symbol, snapshot)):
             return True
@@ -8514,12 +8526,15 @@ def handle_live_explain_command(exchange, telegram_token, response_chat_id, symb
         annotations = []
         support_label = "Nearest support"
         resistance_label = "Nearest resistance"
+        teaching_zone = "support"
         if pending_setup:
             direction = pending_setup.get("direction")
             if direction == "breakdown":
                 support_label = "Attempt zone"
+                teaching_zone = "support"
             elif direction == "breakout":
                 resistance_label = "Attempt zone"
+                teaching_zone = "resistance"
             if pending_setup.get("first_candle"):
                 annotations.append(
                     {
@@ -8535,6 +8550,7 @@ def handle_live_explain_command(exchange, telegram_token, response_chat_id, symb
             support_label=support_label,
             resistance_label=resistance_label,
             chart_annotations=annotations,
+            teaching_zone=teaching_zone,
         )
         if send_telegram_photo(
             telegram_token,
