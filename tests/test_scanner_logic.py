@@ -1625,6 +1625,8 @@ class ScannerLogicTests(unittest.TestCase):
             [item["command"] for item in scanner.PUBLIC_BOT_COMMANDS],
         )
         self.assertIn("verify", command_names)
+        for deleted_command in ("levels", "snap", "why", "learn", "watching", "reference"):
+            self.assertNotIn(deleted_command, command_names)
         self.assertNotIn("devmode", command_names)
         self.assertNotIn("maintenance", command_names)
         self.assertNotIn("livealerts", command_names)
@@ -2482,9 +2484,11 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("Poinkle watches the zones", message)
         self.assertIn("You don't have to remember any of these. Just send /commands and tap.", message)
         self.assertIn("VERIFY\n/verify", message)
-        self.assertIn("/explain, /learn", message)
-        self.assertIn("/whynot, /why", message)
-        self.assertIn("/guide, /reference", message)
+        self.assertIn("/explain", message)
+        self.assertIn("/whynot", message)
+        self.assertIn("/guide", message)
+        for deleted_command in ("/levels", "/snap", "/why", "/learn", "/watching", "/reference"):
+            self.assertIsNone(re.search(rf"{re.escape(deleted_command)}(?:\s|,|—|$)", message))
         self.assertIn("/scan", message)
         self.assertIn("/coins", message)
         self.assertIn("/status", message)
@@ -2497,11 +2501,19 @@ class ScannerLogicTests(unittest.TestCase):
         for stale_phrase in ("confluence", "trade plan", "trade levels", "patience grade"):
             self.assertNotIn(stale_phrase, message)
 
+    def test_no_user_facing_removed_command_message_exists(self):
+        scanner_source = (PROJECT_DIR / "crypto_alert_scanner.py").read_text()
+
+        self.assertNotIn("doesn't exist anymore", scanner_source)
+        self.assertNotIn("no longer exists", scanner_source)
+        self.assertNotIn("command was removed", scanner_source)
+        self.assertFalse(hasattr(scanner, "DELETED_COMMAND_MESSAGE"))
+
     def test_help_lists_no_command_without_handler(self):
         message = scanner.poinkle_onboarding_text("help")
         help_commands = set(re.findall(r"/([a-z]+)", message))
         public_commands = {item["command"] for item in scanner.PUBLIC_BOT_COMMANDS}
-        public_commands.update({"reference", "scan", "status"})
+        public_commands.update({"scan", "status"})
 
         self.assertTrue(help_commands)
         self.assertTrue(help_commands.issubset(public_commands))
@@ -2518,7 +2530,7 @@ class ScannerLogicTests(unittest.TestCase):
     def test_hidden_public_handlers_appear_in_help(self):
         message = scanner.poinkle_onboarding_text("help")
 
-        for command in ("reference", "scan", "status"):
+        for command in ("scan", "status"):
             self.assertIn(f"/{command}", message)
 
     def test_verify_registered_handle_returns_verified(self):
@@ -3436,29 +3448,6 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(sent_messages[0][1], scanner.target_coin_picker_text("research"))
         self.assertEqual(sent_messages[0][2], scanner.target_coin_picker_keyboard("research", user_id="777"))
 
-    def test_bare_levels_opens_coin_picker(self):
-        sent_messages = []
-        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
-            scanner, "USER_WATCHLISTS_FILE", Path(tmpdir) / "missing_user_watchlists.json"
-        ), patch.object(
-            scanner,
-            "send_telegram_message",
-            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
-                (str(chat_id), text, reply_markup)
-            ),
-        ):
-            scanner.handle_levels_command(
-                object(),
-                "TOKEN",
-                "777",
-                "/levels",
-                source_chat={"id": "777", "type": "private"},
-                from_user={"id": 777},
-            )
-
-        self.assertEqual(sent_messages[0][1], scanner.target_coin_picker_text("levels"))
-        self.assertEqual(sent_messages[0][2], scanner.target_coin_picker_keyboard("levels", user_id="777"))
-
     def test_bare_whynot_opens_coin_picker(self):
         sent_messages = []
         with tempfile.TemporaryDirectory() as tmpdir, patch.object(
@@ -3522,14 +3511,6 @@ class ScannerLogicTests(unittest.TestCase):
                 source_chat={"id": "777", "type": "private"},
                 from_user={"id": 777},
             ),
-            lambda: scanner.handle_levels_command(
-                object(),
-                "TOKEN",
-                "777",
-                "/levels",
-                source_chat={"id": "777", "type": "private"},
-                from_user={"id": 777},
-            ),
             lambda: scanner.handle_whynot_command(
                 object(),
                 "TOKEN",
@@ -3570,13 +3551,6 @@ class ScannerLogicTests(unittest.TestCase):
         watch_handler.assert_called_once()
         self.assertEqual(watch_handler.call_args.args[3], "/watch BTC")
 
-        with patch.object(scanner, "answer_telegram_callback"), patch.object(
-            scanner, "clear_callback_message_keyboard"
-        ), patch.object(scanner, "handle_levels_command") as levels_handler:
-            self.assertTrue(scanner.handle_coin_pick_callback("TOKEN", callback_query, "levels:ETH", exchange=object()))
-        levels_handler.assert_called_once()
-        self.assertEqual(levels_handler.call_args.args[3], "/levels ETH")
-
     def test_coin_picker_heavy_targets_go_through_job_queue(self):
         callback_query = {
             "id": "callback-1",
@@ -3588,7 +3562,6 @@ class ScannerLogicTests(unittest.TestCase):
             ("whynot", "whynot", "/whynot BTC"),
             ("research", "research", "/research BTC"),
             ("snapshot", "snapshot", "/snapshot BTC"),
-            ("chart", "snapshot", "/snapshot BTC"),
         ):
             with self.subTest(target=target), patch.object(scanner, "answer_telegram_callback"), patch.object(
                 scanner, "clear_callback_message_keyboard"
@@ -3904,7 +3877,7 @@ class ScannerLogicTests(unittest.TestCase):
                 "update_id": 123,
                 "message": {
                     "chat": {"id": "999"},
-                    "text": "/levels BTC",
+                    "text": "/snapshot BTC",
                 },
             }
         ]
@@ -3927,7 +3900,7 @@ class ScannerLogicTests(unittest.TestCase):
         ), patch.object(scanner, "save_state"):
             scanner.process_telegram_commands(object(), "TOKEN", "999", state)
 
-        self.assertEqual(sent_messages[0][0:3], ("999", "/levels BTC", "BTC/USD"))
+        self.assertEqual(sent_messages[0][0:3], ("999", "/snapshot BTC", "BTC/USD"))
         self.assertEqual(state["__telegram_commands"]["last_update_id"], 123)
 
     def test_process_telegram_commands_routes_research_command(self):
@@ -4121,7 +4094,7 @@ class ScannerLogicTests(unittest.TestCase):
             scanner.handle_explain_command(
                 "TOKEN",
                 "777",
-                "/learn moving average",
+                "/explain moving average",
                 source_chat={"id": "777", "type": "private"},
                 from_user={"id": 777},
             )
@@ -4232,7 +4205,7 @@ class ScannerLogicTests(unittest.TestCase):
 
     def test_explain_command_lists_concepts_for_empty_or_unknown_term(self):
         menu = scanner.build_explain_command_message("/explain")
-        unknown = scanner.build_explain_command_message("/learn mystery term")
+        unknown = scanner.build_explain_command_message("/explain mystery term")
 
         self.assertIn("Poinkle can explain these market concepts", menu)
         self.assertIn("Try: /explain rsi", menu)
@@ -4265,27 +4238,6 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(rows[0][0]["callback_data"], "xgroup:0")
         self.assertEqual(rows[-2][0]["callback_data"], "xgroup:4")
         self.assertEqual(rows[-1][0]["callback_data"], "panel:open")
-
-    def test_bare_learn_command_sends_group_picker(self):
-        sent_messages = []
-
-        with patch.object(
-            scanner,
-            "send_telegram_message",
-            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
-                (str(chat_id), text, reply_markup)
-            ),
-        ):
-            scanner.handle_explain_command(
-                "TOKEN",
-                "777",
-                "/learn",
-                source_chat={"id": "777", "type": "private"},
-                from_user={"id": 777},
-            )
-
-        self.assertIn("What do you want to understand?", sent_messages[0][1])
-        self.assertEqual(len(sent_messages[0][2]["inline_keyboard"]), 6)
 
     def test_explain_group_callback_sends_concepts_three_per_row(self):
         sent_messages = []
@@ -4623,32 +4575,97 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("<b>RSI</b>", send_response.call_args.args[2])
         self.assertEqual(send_response.call_args.kwargs["concept_key"], "rsi")
 
-    def test_process_telegram_commands_routes_learn_command(self):
+    def test_unknown_private_command_sends_orientation_card(self):
+        for index, command in enumerate(("/levels BTC", "/banana"), start=126):
+            state = {}
+            sent_messages = []
+            updates = [
+                {
+                    "update_id": index,
+                    "message": {
+                        "message_id": index,
+                        "chat": {"id": "999", "type": "private"},
+                        "from": {"id": 999},
+                        "text": command,
+                    },
+                }
+            ]
+
+            with self.subTest(command=command), patch.object(scanner, "get_telegram_updates", return_value=updates), patch.object(
+                scanner, "USER_PROFILES_FILE", Path(tempfile.mkdtemp()) / f"user_profiles_{index}.json"
+            ), patch.object(
+                scanner,
+                "send_telegram_message",
+                side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append((str(chat_id), text, reply_markup)),
+            ), patch.object(
+                scanner, "command_allowed_by_active_mode", return_value=True
+            ), patch.object(scanner, "save_state"):
+                scanner.process_telegram_commands(object(), "TOKEN", "999", state)
+
+            self.assertEqual(sent_messages, [("999", scanner.start_orientation_text(), scanner.start_orientation_keyboard())])
+            self.assertEqual(state["__telegram_commands"]["last_update_id"], index)
+
+    def test_unknown_private_command_orientation_is_not_rate_limited(self):
         state = {}
         sent_messages = []
         updates = [
             {
-                "update_id": 126,
+                "update_id": 136 + index,
                 "message": {
+                    "message_id": 236 + index,
                     "chat": {"id": "999", "type": "private"},
                     "from": {"id": 999},
-                    "text": "/learn breakout",
+                    "text": "/banana",
                 },
             }
+            for index in range(2)
         ]
 
-        def fake_handle(token, chat_id, text, source_chat=None, from_user=None):
-            sent_messages.append((chat_id, text, source_chat, from_user))
-
-        with patch.object(scanner, "get_telegram_updates", return_value=updates), patch.object(
-            scanner, "handle_explain_command", side_effect=fake_handle
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            scanner, "USER_PROFILES_FILE", Path(tmpdir) / "user_profiles.json"
+        ), patch.object(scanner.time, "time", return_value=1_000.0), patch.object(
+            scanner, "get_telegram_updates", return_value=updates
+        ), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append((str(chat_id), text, reply_markup)),
         ), patch.object(
             scanner, "command_allowed_by_active_mode", return_value=True
         ), patch.object(scanner, "save_state"):
             scanner.process_telegram_commands(object(), "TOKEN", "999", state)
 
-        self.assertEqual(sent_messages[0][0:2], ("999", "/learn breakout"))
-        self.assertEqual(state["__telegram_commands"]["last_update_id"], 126)
+        self.assertEqual(
+            sent_messages,
+            [
+                ("999", scanner.start_orientation_text(), scanner.start_orientation_keyboard()),
+                ("999", scanner.start_orientation_text(), scanner.start_orientation_keyboard()),
+            ],
+        )
+
+    def test_unknown_group_command_sends_nothing(self):
+        for index, command in enumerate(("/levels BTC", "/banana"), start=140):
+            state = {}
+            updates = [
+                {
+                    "update_id": index,
+                    "message": {
+                        "message_id": index,
+                        "chat": {"id": "-100", "type": "group"},
+                        "from": {"id": 999},
+                        "text": command,
+                    },
+                }
+            ]
+
+            with self.subTest(command=command), patch.object(scanner, "get_telegram_updates", return_value=updates), patch.object(
+                scanner, "send_telegram_message"
+            ) as send_message, patch.object(
+                scanner, "command_allowed_by_active_mode", return_value=True
+            ), patch.object(scanner, "save_state"):
+                scanner.process_telegram_commands(object(), "TOKEN", "999", state)
+
+            send_message.assert_not_called()
+            self.assertEqual(state["__telegram_commands"]["last_update_id"], index)
 
     def test_non_command_private_message_sends_orientation_card(self):
         state = {}
@@ -5094,17 +5111,16 @@ class ScannerLogicTests(unittest.TestCase):
             "send_telegram_message",
             side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
         ):
-            for command in ["/levels BTC", "/snapshot BTC", "/snap BTC"]:
-                scanner.handle_levels_command(
-                    object(),
-                    "TOKEN",
-                    "999",
-                    command,
-                    source_chat={"id": "999", "type": "private"},
-                    from_user={"id": 999},
-                )
+            scanner.handle_levels_command(
+                object(),
+                "TOKEN",
+                "999",
+                "/snapshot BTC",
+                source_chat={"id": "999", "type": "private"},
+                from_user={"id": 999},
+            )
 
-        self.assertEqual(len(sent_messages), 3)
+        self.assertEqual(len(sent_messages), 1)
         for _, text in sent_messages:
             self.assertIn(scanner.poinkle_educational_footer(), text)
 
@@ -6722,7 +6738,7 @@ class ScannerLogicTests(unittest.TestCase):
                     object(),
                     "TOKEN",
                     "-100",
-                    "/levels BTC",
+                    "/snapshot BTC",
                     source_chat={"id": "-100", "type": "supergroup"},
                     from_user={"id": 777},
                 )
@@ -6758,7 +6774,7 @@ class ScannerLogicTests(unittest.TestCase):
                     object(),
                     "TOKEN",
                     "-100",
-                    "/levels BTC",
+                    "/snapshot BTC",
                     source_chat={"id": "-100", "type": "group"},
                     from_user={"id": 777},
                 )
@@ -6770,7 +6786,7 @@ class ScannerLogicTests(unittest.TestCase):
             [
                 (
                     "-100",
-                    "I can't DM you yet. Please start me first: @Poinkle_Bot, then try /levels SYMBOL again.",
+                    "I can't DM you yet. Please start me first: @Poinkle_Bot, then try /snapshot SYMBOL again.",
                 )
             ],
         )
@@ -6789,7 +6805,7 @@ class ScannerLogicTests(unittest.TestCase):
                 object(),
                 "TOKEN",
                 "777",
-                "/levels BTC",
+                "/snapshot BTC",
                 source_chat={"id": "777", "type": "private"},
                 from_user={"id": 777},
             )
@@ -6994,7 +7010,7 @@ class ScannerLogicTests(unittest.TestCase):
             "send_telegram_message",
             side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
         ):
-            for command in ["/levels ZEC", "/levels XMR", "/levels LTC"]:
+            for command in ["/snapshot ZEC", "/snapshot XMR", "/snapshot LTC"]:
                 scanner.handle_levels_command(
                     object(),
                     "TOKEN",
@@ -7151,19 +7167,19 @@ class ScannerLogicTests(unittest.TestCase):
         sent_messages = []
 
         with patch.object(scanner, "send_telegram_message", side_effect=lambda token, chat_id, text: sent_messages.append(text)):
-            scanner.handle_levels_command(object(), "TOKEN", "999", "/levels NOTREAL")
+            scanner.handle_levels_command(object(), "TOKEN", "999", "/snapshot NOTREAL")
 
         self.assertEqual(
             sent_messages[-1],
             (
-                "I don't have NOTREAL in my list yet. Try /levels with one of the coins "
-                "I track — or type /levels on its own to pick from a list."
+                "I don't have NOTREAL in my list yet. Try /snapshot with one of the coins "
+                "I track — or type /snapshot on its own to pick from a list."
             ),
         )
 
         failing_exchange = FakeExchange({}, ticker_price=0, failing_timeframes={scanner.TIMEFRAME})
         with patch.object(scanner, "send_telegram_message", side_effect=lambda token, chat_id, text: sent_messages.append(text)):
-            scanner.handle_levels_command(failing_exchange, "TOKEN", "999", "/levels BTC")
+            scanner.handle_levels_command(failing_exchange, "TOKEN", "999", "/snapshot BTC")
 
         self.assertEqual(sent_messages[-1], "I couldn't build that card just now. Try again in a moment.")
 

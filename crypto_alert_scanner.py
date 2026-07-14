@@ -348,12 +348,9 @@ DEFAULT_BOT_CONFIG = {
 }
 PUBLIC_BOT_COMMANDS = [
     {"command": "snapshot", "description": "Full visual chart and breakdown"},
-    {"command": "snap", "description": "Quick version of snapshot"},
     {"command": "research", "description": "Deeper multi-card research brief"},
     {"command": "whynot", "description": "See why a coin is waiting"},
-    {"command": "why", "description": "Alias for whynot"},
     {"command": "commands", "description": "Open the tappable command panel"},
-    {"command": "levels", "description": "Legacy text-only version"},
     {"command": "alerts", "description": "Set a personal price-zone alert"},
     {"command": "alertlevel", "description": "Choose personal alert noise level"},
     {"command": "myalerts", "description": "View your active alerts"},
@@ -361,12 +358,10 @@ PUBLIC_BOT_COMMANDS = [
     {"command": "unwatch", "description": "Remove a coin from your watchlist"},
     {"command": "clearwatch", "description": "Clear watched coins by number"},
     {"command": "mywatch", "description": "View your watched coins"},
-    {"command": "watching", "description": "View your watched coins"},
     {"command": "mike", "description": "Mike's curated watchlist"},
     {"command": "guide", "description": "Command and coin reference card"},
     {"command": "verify", "description": "Verify a creator account"},
     {"command": "explain", "description": "Learn a market concept"},
-    {"command": "learn", "description": "Learn a market concept"},
     {"command": "coins", "description": "See every coin I track"},
     {"command": "help", "description": "Full help message"},
     {"command": "start", "description": "Welcome message"},
@@ -1875,7 +1870,6 @@ def alpha_onboarding_message():
         "👋 Welcome to Poinkle Alpha.\n\n"
         "Try:\n\n"
         "/snapshot BTC\n"
-        "/snap ETH\n"
         "/help\n\n"
         "Layer 1 helps you read:\n"
         "Trend → Key Levels → Liquidity → Confirmation → Decision\n\n"
@@ -1985,7 +1979,7 @@ def levels_dm_success_message(symbol):
 def levels_dm_failed_message():
     return (
         f"I can't DM you yet. Please start me first: {bot_username_text()}, "
-        "then try /levels SYMBOL again."
+        "then try /snapshot SYMBOL again."
     )
 
 
@@ -5872,8 +5866,6 @@ def coin_picker_target_command(target):
         "watch": "/watch",
         "snapshot": "/snapshot",
         "research": "/research",
-        "levels": "/levels",
-        "chart": "/snapshot",
     }
     return commands.get(str(target or "").strip().lower())
 
@@ -5907,8 +5899,6 @@ def target_coin_picker_text(target):
         "watch": "Which coin do you want to watch?",
         "snapshot": "Which coin?",
         "research": "Which coin?",
-        "levels": "Which coin?",
-        "chart": "Which coin?",
     }
     return labels.get(str(target or "").strip().lower(), "Pick a coin.")
 
@@ -7301,11 +7291,11 @@ def send_research_cards(telegram_token, chat_id, prb_text, symbol=None, chart_da
         return False
 
 
-SNAPSHOT_COMMANDS = ("/snapshot", "/snap", "/levels")
+SNAPSHOT_COMMANDS = ("/snapshot",)
 RESEARCH_COMMANDS = ("/research",)
-WHYNOT_COMMANDS = ("/whynot", "/why")
-REFERENCE_COMMANDS = ("/guide", "/reference")
-EXPLAIN_COMMANDS = ("/explain", "/learn")
+WHYNOT_COMMANDS = ("/whynot",)
+REFERENCE_COMMANDS = ("/guide",)
+EXPLAIN_COMMANDS = ("/explain",)
 
 
 def snapshot_command_name(message_text):
@@ -7371,9 +7361,7 @@ def poinkle_onboarding_text(kind):
         "Poinkle helps teach you what to look at next.\n\n"
         "Start with:\n\n"
         f"📸 /snapshot {primary_example}\n"
-        f"⚡ /snap {secondary_example}\n"
         f"📚 /research {research_example}\n"
-        f"📈 /levels {primary_example} (legacy)\n"
         "❓ /help\n\n"
         "Layer 1 teaches:\n\n"
         "• Trend\n"
@@ -7394,22 +7382,21 @@ def poinkle_onboarding_text(kind):
             "VERIFY\n"
             "/verify — check whether an account really belongs to a creator\n\n"
             "LEARN\n"
-            "/explain, /learn — tap through the concepts Poinkle teaches\n"
-            "/whynot, /why — why a coin hasn't alerted: where it sits, what would confirm\n"
+            "/explain — tap through the concepts Poinkle teaches\n"
+            "/whynot — why a coin hasn't alerted: where it sits, what would confirm\n"
             "/commands — open the tappable command panel\n"
-            "/guide, /reference — command and coin reference card\n"
+            "/guide — command and coin reference card\n"
             "/help — show this message\n\n"
             "WATCH\n"
             "/watch, /unwatch — manage your personal watchlist\n"
-            "/mywatch, /watching — open your watchlist panel\n"
+            "/mywatch — open your watchlist panel\n"
             "Tip: type @Poinkle_Bot followed by a coin in any chat to search all 140.\n"
             "/clearwatch — remove watched coins by number\n"
             "/alerts — set a personal price-zone alert\n"
             "/myalerts — view your active alerts\n"
             "/alertlevel — choose how much you want to hear from Poinkle\n\n"
             "LOOK\n"
-            "/snapshot, /snap — visual chart and breakdown\n"
-            "/levels — legacy text version of snapshot\n"
+            "/snapshot — visual chart and breakdown\n"
             "/research — deeper multi-card research brief\n"
             "/scan — quick Top 100 market scan\n"
             "/mike — Mike's curated watchlist\n"
@@ -8241,9 +8228,8 @@ def reference_text_fallback():
     return (
         "POINKLE - QUICK REFERENCE\n\n"
         "/snapshot BTC - full visual chart + breakdown\n"
-        "/snap ETH - quick version of the same\n"
         "/research SOL - deeper multi-card research brief\n"
-        "/levels BTC - legacy text version\n"
+        "/whynot BTC - why a coin is waiting\n"
         "/alerts XRP support - get DM'd when XRP nears a key zone\n"
         "/myalerts - see your active alerts\n"
         "/help - full command list anytime\n\n"
@@ -8258,8 +8244,7 @@ def concept_menu_text():
     return (
         "Poinkle can explain these market concepts right now:\n\n"
         f"{concepts}\n\n"
-        "Try: /explain rsi\n"
-        "Or: /learn breakout"
+        "Try: /explain rsi"
     )
 
 
@@ -8823,7 +8808,7 @@ def handle_panel_callback(telegram_token, callback_query, payload, exchange=None
         user_id = str(from_user.get("id") or chat_id)
         send_target_coin_picker(telegram_token, chat_id, "snapshot", user_id=user_id)
         return True
-    if action in {"whynot", "snapshot", "research", "levels", "chart"}:
+    if action in {"whynot", "snapshot", "research"}:
         user_id = str(from_user.get("id") or chat_id)
         send_target_coin_picker(telegram_token, chat_id, action, user_id=user_id)
         return True
@@ -8873,8 +8858,8 @@ def handle_coin_pick_callback(telegram_token, callback_query, payload, exchange=
 
     ticker = ticker.upper()
     command_text = f"{command} {ticker}"
-    if target in {"whynot", "research", "snapshot", "chart"}:
-        job_action = "snapshot" if target == "chart" else target
+    if target in {"whynot", "research", "snapshot"}:
+        job_action = target
         if enqueue_telegram_command_job(job_action, chat_id, command_text, source_chat=source_chat, from_user=from_user):
             send_heavy_job_acknowledgment(
                 telegram_token,
@@ -8885,16 +8870,6 @@ def handle_coin_pick_callback(telegram_token, callback_query, payload, exchange=
         return True
     if target == "watch":
         handle_watch_command(
-            exchange,
-            telegram_token,
-            chat_id,
-            command_text,
-            source_chat=source_chat,
-            from_user=from_user,
-        )
-        return True
-    if target == "levels":
-        handle_levels_command(
             exchange,
             telegram_token,
             chat_id,
@@ -9637,14 +9612,13 @@ def handle_levels_command(
 
     if len(parts) < 2:
         log_warn(f"Missing symbol for {command} command")
-        picker_target = "levels" if command == "/levels" else "snapshot"
         send_bare_command_watchlist_panel(
             telegram_token,
             telegram_chat_id,
             source_chat,
             from_user,
             command,
-            picker_target,
+            "snapshot",
             "Snapshot",
             "BTC",
         )
@@ -9998,7 +9972,7 @@ def process_telegram_commands(
                 source_chat=chat,
                 from_user=from_user,
             )
-        elif lower_text.startswith("/mywatch") or lower_text.startswith("/watching"):
+        elif lower_text.startswith("/mywatch"):
             handle_mywatch_command(
                 telegram_token,
                 chat_id,
@@ -10140,6 +10114,8 @@ def process_telegram_commands(
                     source_chat=chat,
                     from_user=from_user,
                 )
+        elif is_private_chat(chat):
+            send_start_orientation_card(telegram_token, chat_id)
 
         command_state["last_update_id"] = update_id
         save_state(state)
