@@ -713,13 +713,13 @@ def generate_reference_levels_chart(
         for start, end, rad in arrows:
             curved_arrow(start, end, rad)
 
-        footer = fig.add_axes([0.040, 0.100, 0.920, 0.105])
+        footer = fig.add_axes([0.040, 0.085, 0.920, 0.150])
         footer.set_xlim(0, 1)
         footer.set_ylim(0, 1)
         footer.axis("off")
-        footer.add_patch(FancyBboxPatch((0, 0.02), 1, 0.86, boxstyle="round,pad=0.012,rounding_size=0.040", facecolor="#143443", edgecolor="#5ee6f4", linewidth=0.65, alpha=0.42, zorder=1))
-        footer.add_patch(FancyBboxPatch((0, 0.02), 1, 0.86, boxstyle="round,pad=0.012,rounding_size=0.040", facecolor="none", edgecolor="#77efff", linewidth=10, alpha=0.026, zorder=0))
-        ft = footer.text(0.50, 0.665, "WHAT WOULD CHANGE THE PICTURE", color="#3bdff4", fontsize=15.2, fontweight="bold", ha="center", va="center", zorder=3)
+        footer.add_patch(FancyBboxPatch((0, 0.03), 1, 0.90, boxstyle="round,pad=0.012,rounding_size=0.040", facecolor="#143443", edgecolor="#5ee6f4", linewidth=0.65, alpha=0.42, zorder=1))
+        footer.add_patch(FancyBboxPatch((0, 0.03), 1, 0.90, boxstyle="round,pad=0.012,rounding_size=0.040", facecolor="none", edgecolor="#77efff", linewidth=10, alpha=0.026, zorder=0))
+        ft = footer.text(0.50, 0.775, "WHAT WOULD CHANGE THE PICTURE", color="#3bdff4", fontsize=16.0, fontweight="bold", ha="center", va="center", zorder=3)
         ft.set_path_effects([pe.withStroke(linewidth=3.0, foreground="#0b6878", alpha=0.44)])
         support_text = format_price(near_supports[0]) if near_supports else format_price(support_level)
         resistance_text = format_price(near_resistances[0]) if near_resistances else format_price(resistance_level)
@@ -728,18 +728,18 @@ def generate_reference_levels_chart(
             "2. A second close - confirmation",
             f"3. Close below {support_text} - same rule",
         ]
-        column_widths = [24, 23, 22]
+        column_widths = [26, 25, 26]
         for idx, (x_pos, item) in enumerate(zip([0.075, 0.395, 0.705], items)):
             wrapped = textwrap.wrap(str(item), width=column_widths[idx])[:2]
             if not wrapped:
                 wrapped = [str(item)]
-            y = 0.475 if len(wrapped) >= 2 else 0.430
+            y = 0.540 if len(wrapped) >= 2 else 0.500
             for line in wrapped:
-                footer.text(x_pos, y, line, color="#dce7ef", fontsize=12.0, ha="left", va="center", zorder=3)
-                y -= 0.170
+                footer.text(x_pos, y, line, color="#dce7ef", fontsize=12.8, ha="left", va="center", zorder=3)
+                y -= 0.145
             if idx < 2:
-                footer.plot([x_pos + 0.292, x_pos + 0.292], [0.29, 0.55], color="#2dd4f0", linewidth=1.0, alpha=0.52, zorder=3)
-        footer.text(0.50, 0.070, "One close is a hypothesis. Two is an answer.", color="#e4fbff", fontsize=11.4, fontweight="bold", ha="center", va="center", zorder=3)
+                footer.plot([x_pos + 0.292, x_pos + 0.292], [0.205, 0.635], color="#2dd4f0", linewidth=1.0, alpha=0.52, zorder=3)
+        footer.text(0.50, 0.155, "One close is a hypothesis. Two is an answer.", color="#e4fbff", fontsize=12.2, fontweight="bold", ha="center", va="center", zorder=3)
 
         canvas.text(0.50, 0.062, "End of Snapshot  \u2022  Keep Watching The Zones", color="#a9b8c5", fontsize=11.2, alpha=0.75, ha="center", va="center", zorder=5)
 
