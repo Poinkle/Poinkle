@@ -5399,7 +5399,7 @@ class ScannerLogicTests(unittest.TestCase):
         source = (PROJECT_DIR / "chart_generator_reference.py").read_text()
 
         self.assertIn("chart_ax.yaxis.tick_right()", source)
-        self.assertIn("labelsize=15.0 if teaching_mode else 12.6", source)
+        self.assertIn("labelsize=15.0 if teaching_mode else 13.5", source)
         self.assertIn("snapshot_ticks = sorted", source)
         self.assertIn("chart_ax.set_yticks(snapshot_ticks)", source)
         self.assertIn("chart_ax.set_yticklabels([format_price(value) for value in snapshot_ticks])", source)

@@ -233,7 +233,7 @@ def draw_wrapped_card_body(ax, body):
     if not lines:
         return
     line_count = len(lines)
-    fontsize = 10.0 if line_count >= 4 or any(len(line) > 18 for line in lines) else 10.8
+    fontsize = 10.8 if line_count >= 4 or any(len(line) > 18 for line in lines) else 11.6
     top_y = 0.435 if line_count >= 4 else 0.390 if line_count == 3 else 0.335
     y = top_y
     for line in lines:
@@ -258,7 +258,7 @@ def draw_ema_label(ax, x_values, values, label, color, x_offset=0.8):
         values[-1],
         label,
         color=color,
-        fontsize=8.4,
+        fontsize=9.2,
         fontweight="bold",
         ha="left",
         va="center",
@@ -353,9 +353,9 @@ def generate_reference_levels_chart(
     title = title or f"{symbol.replace('/', ' / ')} TEACHING YOU WHAT TO LOOK AT NEXT"
     glow_text(canvas, 0.515, 0.950, title, 18.8, ha="center", lw=4.6, alpha=0.58)
     if signal_scope and not teaching_mode:
-        canvas.text(0.515, 0.912, signal_scope, color="#9fb3bf", fontsize=8.6, fontweight="bold", ha="center", va="center", alpha=0.82, zorder=10)
+        canvas.text(0.515, 0.912, signal_scope, color="#9fb3bf", fontsize=11.0, fontweight="bold", ha="center", va="center", alpha=0.82, zorder=10)
     if not teaching_mode:
-        canvas.text(0.966, 0.948, datetime.now().strftime("%b %-d, %Y").upper(), color="#aab7c1", fontsize=9.6, fontweight="bold", ha="right", va="center", zorder=10)
+        canvas.text(0.966, 0.948, datetime.now().strftime("%b %-d, %Y").upper(), color="#aab7c1", fontsize=11.2, fontweight="bold", ha="right", va="center", zorder=10)
 
     card_y, card_h, card_w = 0.758, 0.130, 0.176
     card_lefts = [0.030, 0.215, 0.410, 0.595, 0.795]
@@ -376,7 +376,7 @@ def generate_reference_levels_chart(
             ax.add_patch(FancyBboxPatch((0.02, 0.02), 0.96, 0.96, boxstyle="round,pad=0.018,rounding_size=0.050", facecolor="#132b38", edgecolor="#49dcea", linewidth=0.70, alpha=0.72, zorder=1))
             ax.add_patch(Circle((0.155, 0.690), 0.086, facecolor="#31e2ee", edgecolor="none", alpha=0.96, zorder=3))
             ax.text(0.155, 0.690, str(idx), color="#06141b", fontsize=16, fontweight="bold", ha="center", va="center", zorder=4)
-            t = ax.text(0.275, 0.710, card_title, color="#3ce1f3", fontsize=14.0, fontweight="bold", ha="left", va="center", linespacing=0.90, zorder=4)
+            t = ax.text(0.275, 0.710, card_title, color="#3ce1f3", fontsize=14.6, fontweight="bold", ha="left", va="center", linespacing=0.90, zorder=4)
             t.set_path_effects([pe.withStroke(linewidth=2.6, foreground="#0a6574", alpha=0.46)])
             draw_wrapped_card_body(ax, body)
 
@@ -396,7 +396,7 @@ def generate_reference_levels_chart(
     chart_ax.tick_params(
         axis="y",
         colors="#d6e6ec",
-        labelsize=15.0 if teaching_mode else 12.6,
+        labelsize=15.0 if teaching_mode else 13.5,
         length=0,
         pad=10 if teaching_mode else 8,
     )
@@ -531,7 +531,7 @@ def generate_reference_levels_chart(
             current_price,
             format_price(current_price),
             color="#06141b",
-            fontsize=11.8,
+            fontsize=12.8,
             fontweight="bold",
             ha="right",
             va="center",
@@ -545,7 +545,7 @@ def generate_reference_levels_chart(
             if not y_min <= level <= y_max:
                 continue
             chart_ax.hlines(level, liq_start, liq_end, colors="#cba94a", linewidth=0.9, alpha=0.26, zorder=3)
-            chart_ax.text(liq_end + 1.0, level, "LIQ", color="#cba94a", fontsize=8.2, fontweight="bold", ha="left", va="center", alpha=0.42, zorder=3)
+            chart_ax.text(liq_end + 1.0, level, "LIQ", color="#cba94a", fontsize=9.2, fontweight="bold", ha="left", va="center", alpha=0.42, zorder=3)
 
     for i, candle in enumerate(recent):
         open_, high_, low_, close = candle["open"], candle["high"], candle["low"], candle["close"]
@@ -624,7 +624,7 @@ def generate_reference_levels_chart(
             color = "#73df62" if candle["close"] >= candle["open"] else "#ef5046"
             alpha = 0.60 if candle_volume >= max_volume * 0.70 and max_volume > 0 else 0.34
             volume_ax.bar(i, candle_volume, width=0.62, color=color, edgecolor="none", alpha=alpha, zorder=3)
-        volume_ax.text(0.010, 0.820, "VOLUME", transform=volume_ax.transAxes, color="#9fb3bf", fontsize=7.5, fontweight="bold", ha="left", va="center", alpha=0.80, zorder=4)
+        volume_ax.text(0.010, 0.820, "VOLUME", transform=volume_ax.transAxes, color="#9fb3bf", fontsize=10.0, fontweight="bold", ha="left", va="center", alpha=0.80, zorder=4)
 
     creed = canvas.text(0.50, 0.030, "Prepare. Let price tell you. Patience compounds.", color="#dcebf0", fontsize=10.5, fontfamily="serif", alpha=0.46, ha="center", va="center", zorder=5)
     creed.set_path_effects([pe.withStroke(linewidth=2.0, foreground="#07141b", alpha=0.36)])
@@ -666,11 +666,11 @@ def generate_reference_levels_chart(
                 wrapped = [str(item)]
             y = 0.405 if len(wrapped) >= 3 else 0.355
             for line in wrapped:
-                footer.text(x_pos, y, line, color="#dce7ef", fontsize=11.0, ha="left", va="center", zorder=3)
+                footer.text(x_pos, y, line, color="#dce7ef", fontsize=11.6, ha="left", va="center", zorder=3)
                 y -= 0.145
             if idx < 2:
                 footer.plot([x_pos + 0.292, x_pos + 0.292], [0.20, 0.50], color="#2dd4f0", linewidth=1.0, alpha=0.52, zorder=3)
-        footer.text(0.50, 0.115, "One close is a hypothesis. Two is an answer.", color="#a9dce8", fontsize=10.0, ha="center", va="center", zorder=3)
+        footer.text(0.50, 0.115, "One close is a hypothesis. Two is an answer.", color="#a9dce8", fontsize=10.6, ha="center", va="center", zorder=3)
 
         canvas.text(0.50, 0.062, "End of Snapshot  \u2022  Keep Watching The Zones", color="#a9b8c5", fontsize=11.2, alpha=0.75, ha="center", va="center", zorder=5)
 
