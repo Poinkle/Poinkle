@@ -286,41 +286,49 @@ def draw_ema_label(ax, x_values, values, label, color, x_offset=0.8):
     )
 
 
-def draw_stacked_ema_labels(ax, ema_specs, label_x, y_min, y_max):
+def draw_ema_legend(ax, ema_specs):
     if not ema_specs:
         return
-    y_span = max(y_max - y_min, 0.00000001)
-    min_gap = y_span * 0.060
-    pad = y_span * 0.040
-    placed = []
-    for label, color, value in sorted(ema_specs, key=lambda item: item[2], reverse=True):
-        y = min(max(value, y_min + pad), y_max - pad)
-        if placed:
-            y = min(y, placed[-1]["y"] - min_gap)
-        placed.append({"label": label, "color": color, "y": y})
-    if placed and placed[-1]["y"] < y_min + pad:
-        shift = (y_min + pad) - placed[-1]["y"]
-        for item in placed:
-            item["y"] = min(item["y"] + shift, y_max - pad)
-    for item in placed:
+    legend_x = 0.030
+    legend_y = 0.925
+    row_gap = 0.082
+    ax.add_patch(
+        FancyBboxPatch(
+            (legend_x - 0.012, legend_y - row_gap * max(len(ema_specs), 1) - 0.018),
+            0.160,
+            row_gap * max(len(ema_specs), 1) + 0.048,
+            transform=ax.transAxes,
+            boxstyle="round,pad=0.010,rounding_size=0.018",
+            facecolor="#07141b",
+            edgecolor="#325b66",
+            linewidth=0.55,
+            alpha=0.62,
+            zorder=15,
+        )
+    )
+    for index, (label, color, _value) in enumerate(ema_specs):
+        y = legend_y - row_gap * index
+        ax.plot(
+            [legend_x, legend_x + 0.024],
+            [y, y],
+            transform=ax.transAxes,
+            color=color,
+            linewidth=2.2,
+            alpha=0.95,
+            zorder=16,
+        )
         ax.text(
-            label_x,
-            item["y"],
-            item["label"],
-            color=item["color"],
+            legend_x + 0.034,
+            y,
+            label,
+            transform=ax.transAxes,
+            color=color,
             fontsize=9.2,
             fontweight="bold",
             ha="left",
             va="center",
             alpha=0.96,
-            zorder=15,
-            bbox={
-                "boxstyle": "round,pad=0.20,rounding_size=0.06",
-                "facecolor": "#07141b",
-                "edgecolor": item["color"],
-                "linewidth": 0.55,
-                "alpha": 0.76,
-            },
+            zorder=16,
             path_effects=[pe.withStroke(linewidth=2.0, foreground="#03101a", alpha=0.78)],
         )
 
@@ -669,13 +677,7 @@ def generate_reference_levels_chart(
         chart_ax.plot(ema21_x, ema21_values, color="#e5edf2", linewidth=0.85, alpha=0.66, zorder=7)
         ema_label_specs.append(("EMA 21", "#edf6fa", ema21_values[-1]))
     if not teaching_mode:
-        draw_stacked_ema_labels(
-            chart_ax,
-            ema_label_specs,
-            len(recent) + max(2.0, len(recent) * 0.025),
-            y_min,
-            y_max,
-        )
+        draw_ema_legend(chart_ax, ema_label_specs)
 
     if not teaching_mode:
         volume_ax = fig.add_axes([0.030, 0.250, 0.890, 0.075], sharex=chart_ax)
@@ -727,7 +729,7 @@ def generate_reference_levels_chart(
             f"3. Close below {support_text} - same rule",
         ]
         column_widths = [24, 23, 22]
-        for idx, (x_pos, item) in enumerate(zip([0.065, 0.385, 0.690], items)):
+        for idx, (x_pos, item) in enumerate(zip([0.075, 0.395, 0.705], items)):
             wrapped = textwrap.wrap(str(item), width=column_widths[idx])[:2]
             if not wrapped:
                 wrapped = [str(item)]
@@ -737,7 +739,7 @@ def generate_reference_levels_chart(
                 y -= 0.170
             if idx < 2:
                 footer.plot([x_pos + 0.292, x_pos + 0.292], [0.29, 0.55], color="#2dd4f0", linewidth=1.0, alpha=0.52, zorder=3)
-        footer.text(0.50, 0.070, "One close is a hypothesis. Two is an answer.", color="#a9dce8", fontsize=10.8, ha="center", va="center", zorder=3)
+        footer.text(0.50, 0.070, "One close is a hypothesis. Two is an answer.", color="#e4fbff", fontsize=11.4, fontweight="bold", ha="center", va="center", zorder=3)
 
         canvas.text(0.50, 0.062, "End of Snapshot  \u2022  Keep Watching The Zones", color="#a9b8c5", fontsize=11.2, alpha=0.75, ha="center", va="center", zorder=5)
 
