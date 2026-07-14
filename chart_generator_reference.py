@@ -360,7 +360,7 @@ def generate_reference_levels_chart(
             t.set_path_effects([pe.withStroke(linewidth=2.6, foreground="#0a6574", alpha=0.46)])
             draw_wrapped_card_body(ax, body)
 
-    chart_ax = fig.add_axes([0.030, 0.210 if teaching_mode else 0.330, 0.890, 0.650 if teaching_mode else 0.420])
+    chart_ax = fig.add_axes([0.025, 0.095, 0.895, 0.805] if teaching_mode else [0.030, 0.330, 0.890, 0.420])
     x_right = len(recent) * 1.16 if teaching_mode else len(recent) * 1.12
     future_label_x = len(recent) + max(0.8, len(recent) * 0.015)
     chart_ax.set_facecolor((0, 0, 0, 0))
@@ -374,7 +374,7 @@ def generate_reference_levels_chart(
         chart_ax.spines["right"].set_alpha(0.34)
         chart_ax.yaxis.tick_right()
         chart_ax.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
-        chart_ax.tick_params(axis="y", colors="#d6e6ec", labelsize=12.0, length=0, pad=9)
+        chart_ax.tick_params(axis="y", colors="#d6e6ec", labelsize=15.0, length=0, pad=10)
     else:
         chart_ax.axis("off")
     for grid_y in np.linspace(y_min, y_max, 7)[1:-1]:
@@ -393,10 +393,11 @@ def generate_reference_levels_chart(
         lower = level - thickness * 0.42
         upper = level + thickness * 0.42
         level_ticks.append(level)
-        chart_ax.add_patch(Rectangle((start, lower), end - start, thickness * 0.84, facecolor=color, edgecolor=color, linewidth=0, alpha=alpha, zorder=2 if taught else 1))
+        chart_ax.add_patch(Rectangle((start, lower), end - start, thickness * 0.84, facecolor=color, edgecolor=color, linewidth=0, alpha=alpha, zorder=1))
         if label:
+            label_x = start + max(1.0, len(recent) * 0.018) if taught else future_label_x
             chart_ax.text(
-                future_label_x,
+                label_x,
                 upper + span * 0.018,
                 str(label),
                 color=color,
@@ -425,17 +426,17 @@ def generate_reference_levels_chart(
         for index, level in enumerate(resistance_context):
             if taught_is_resistance and math.isclose(level, taught_level, rel_tol=0, abs_tol=max(span * 0.002, 1e-9)):
                 continue
-            level_bar(level, resistance_thickness * 0.72, "#c7505c", 0.42, len(recent) * 0.34, x_right)
+            level_bar(level, resistance_thickness * 0.72, "#c7505c", 0.16, len(recent) * 0.34, x_right)
         for index, level in enumerate(support_context):
             if not taught_is_resistance and math.isclose(level, taught_level, rel_tol=0, abs_tol=max(span * 0.002, 1e-9)):
                 continue
-            level_bar(level, support_thickness * 0.72, "#2c9c64", 0.42, 2, x_right)
+            level_bar(level, support_thickness * 0.72, "#2c9c64", 0.16, 2, x_right)
         if teaching_zone == "resistance":
             label = str(resistance_label or "Nearest resistance").upper()
-            level_bar(resistance_level, resistance_thickness, "#ff5862", 0.86, len(recent) * 0.34, x_right, label, taught=True)
+            level_bar(resistance_level, resistance_thickness, "#ff5862", 0.32, len(recent) * 0.34, x_right, label, taught=True)
         else:
             label = str(support_label or "Nearest support").upper()
-            level_bar(support_level, support_thickness, "#33d17a", 0.86, 2, x_right, label, taught=True)
+            level_bar(support_level, support_thickness, "#33d17a", 0.32, 2, x_right, label, taught=True)
         teaching_ticks = sorted({round(value, 8): value for value in level_ticks + [current_price]}.values())
         chart_ax.set_yticks(teaching_ticks)
         chart_ax.set_yticklabels([format_price(value) for value in teaching_ticks])
