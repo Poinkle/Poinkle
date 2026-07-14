@@ -200,7 +200,7 @@ def add_logo_watermark(ax, watermark_path=None, opacity=0.06):
     ax_w_in = fig_w * ax_bbox.width
     ax_h_in = fig_h * ax_bbox.height
     axes_aspect = ax_w_in / max(ax_h_in, 0.0001)
-    watermark_height = 0.46
+    watermark_height = 0.68
     watermark_width = min(0.62, watermark_height * image_aspect / max(axes_aspect, 0.0001))
     watermark_height = watermark_width * axes_aspect / max(image_aspect, 0.0001)
     x_center, y_center = 0.50, 0.50
@@ -399,11 +399,14 @@ def generate_reference_levels_chart(
         chart_ax.axis("off")
     for grid_y in np.linspace(y_min, y_max, 7)[1:-1]:
         chart_ax.hlines(grid_y, -1, len(recent), colors="#41616a", linewidth=0.45, alpha=0.10, zorder=0)
-    watermark_drawn = add_logo_watermark(chart_ax, opacity=0.06) if teaching_mode else add_ghost_watermark(chart_ax)
-    if not watermark_drawn:
-        watermark_size = 96 if teaching_mode else 58
-        watermark_alpha = 0.055 if teaching_mode else 0.035
-        chart_ax.text(0.52, 0.50, "POINKLE", transform=chart_ax.transAxes, color="#dffbff", fontsize=watermark_size, fontweight="bold", ha="center", va="center", alpha=watermark_alpha, zorder=0)
+    if teaching_mode:
+        watermark_drawn = add_logo_watermark(chart_ax, opacity=0.06)
+        if not watermark_drawn:
+            chart_ax.text(0.52, 0.50, "POINKLE", transform=chart_ax.transAxes, color="#dffbff", fontsize=96, fontweight="bold", ha="center", va="center", alpha=0.055, zorder=0)
+    else:
+        watermark_drawn = add_ghost_watermark(chart_ax)
+        if not watermark_drawn:
+            chart_ax.text(0.52, 0.50, "POINKLE", transform=chart_ax.transAxes, color="#dffbff", fontsize=58, fontweight="bold", ha="center", va="center", alpha=0.035, zorder=0)
 
     level_ticks = []
 

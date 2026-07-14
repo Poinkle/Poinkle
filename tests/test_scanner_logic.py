@@ -5045,13 +5045,17 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn('labelsize=15.0', source)
         self.assertIn("x_right = len(recent) * 1.16 if teaching_mode else len(recent) * 1.12", source)
         self.assertIn("future_label_x", source)
-        self.assertIn("add_logo_watermark(chart_ax, opacity=0.06) if teaching_mode else add_ghost_watermark(chart_ax)", source)
+        self.assertIn("if teaching_mode:\n        watermark_drawn = add_logo_watermark(chart_ax, opacity=0.06)", source)
+        self.assertIn("else:\n        watermark_drawn = add_ghost_watermark(chart_ax)", source)
         self.assertIn("image_height, image_width = image.shape[:2]", source)
         self.assertIn("image_aspect = image_width / max(image_height, 1)", source)
-        self.assertIn("watermark_height = 0.46", source)
+        self.assertIn("fig_w, fig_h = ax.figure.get_size_inches()", source)
+        self.assertIn("ax_bbox = ax.get_position()", source)
+        self.assertIn("axes_aspect = ax_w_in / max(ax_h_in, 0.0001)", source)
+        self.assertIn("watermark_height = 0.68", source)
         self.assertIn("x_center, y_center = 0.50, 0.50", source)
         self.assertIn("extent=[x0, x1, y0, y1]", source)
-        self.assertIn('aspect="equal"', source)
+        self.assertIn('aspect="auto"', source)
         self.assertIn("if not watermark_drawn:", source)
         self.assertIn("def level_bar(", source)
         self.assertIn('zorder=1', source)
@@ -5075,6 +5079,24 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("if teaching_mode:", source)
         self.assertIn("if teaching_zone == \"resistance\":", source)
         self.assertIn("def zone(level, thickness, color, alpha, start, end, label=None):", source)
+
+    def test_teaching_logo_watermark_success_skips_text_fallback(self):
+        source = (PROJECT_DIR / "chart_generator_reference.py").read_text()
+
+        logo_branch = source[source.index("if teaching_mode:\n        watermark_drawn = add_logo_watermark"):]
+        logo_branch = logo_branch[:logo_branch.index("\n\n    level_ticks = []")]
+
+        self.assertIn("watermark_drawn = add_logo_watermark(chart_ax, opacity=0.06)", logo_branch)
+        self.assertIn("if not watermark_drawn:", logo_branch)
+        self.assertIn('"POINKLE"', logo_branch)
+        self.assertNotIn("chart_ax.text", logo_branch.split("if not watermark_drawn:", 1)[0])
+
+    def test_teaching_logo_watermark_failure_uses_text_fallback(self):
+        source = (PROJECT_DIR / "chart_generator_reference.py").read_text()
+
+        self.assertIn("if teaching_mode:\n        watermark_drawn = add_logo_watermark(chart_ax, opacity=0.06)\n        if not watermark_drawn:\n            chart_ax.text", source)
+        self.assertIn("fontsize=96", source)
+        self.assertIn("alpha=0.055", source)
 
     def test_explain_rsi_with_symbol_still_uses_static_card(self):
         with patch.object(scanner, "handle_live_explain_command", side_effect=AssertionError("RSI must stay static")), patch.object(
