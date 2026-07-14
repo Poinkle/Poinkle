@@ -751,9 +751,9 @@ def generate_matplotlib_levels_chart(symbol, candles, current_price, supports, r
     card_specs = [
         ("READ TREND", "Find higher highs\nand lows.", GREEN),
         ("KEY LEVELS", "Mark support /\nresistance.", BLUE),
-        ("WATCH\nLIQUIDITY", "See sweeps\nabove/below.", BLUE),
-        ("WAIT FOR\nCONFIRMATION", "Demand clean\nbreakouts.", BLUE),
-        ("EXECUTE\nPLAN", "Manage risk.\nStay patient.", BLUE),
+        ("WATCH\nLIQUIDITY", "Watch reactions\nat zones.", BLUE),
+        ("WAIT FOR\nCONFIRMATION", "One close attempts.\nTwo confirms.", BLUE),
+        ("WAIT", "Nothing here\nis a signal.", BLUE),
     ]
     card_axes = [
         fig.add_axes([card_left + i * (card_w + card_gap), card_y, card_w, card_h])
@@ -952,8 +952,8 @@ def generate_poinkle_snapshot_spec_chart(symbol, candles, current_price, support
         ("READ TREND", "Find higher highs and lows."),
         ("KEY LEVELS", "Mark support / resistance."),
         ("WATCH\nLIQUIDITY", "Watch price reaction."),
-        ("WAIT FOR\nCONFIRMATION", "Demand clean breakouts."),
-        ("EXECUTE\nPLAN", "Manage risk.  Stay patient."),
+        ("WAIT FOR\nCONFIRMATION", "One close attempts. Two confirms."),
+        ("WAIT", "Nothing here is a signal. You decide."),
     ]
     for index, (left, (title, body)) in enumerate(zip(card_lefts, card_specs), start=1):
         spec_card(left, index, title, body)
@@ -1131,7 +1131,7 @@ def generate_poinkle_snapshot_spec_chart(symbol, candles, current_price, support
     canvas.text(
         0.50,
         0.062,
-        "End of Snapshot  \u2022  Ready for Next Level",
+        "End of Snapshot  \u2022  Keep Watching The Zones",
         color="#a9b8c5",
         fontsize=10.5,
         alpha=0.78,
@@ -1238,9 +1238,9 @@ def generate_poinkle_reference_snapshot_chart(symbol, candles, current_price, su
     card_specs = [
         ("READ TREND", "Find higher highs and lows."),
         ("KEY LEVELS", "Mark support / resistance."),
-        ("WATCH\nLIQUIDITY", "See sweeps above/below."),
-        ("WAIT FOR\nCONFIRMATION", "Demand clean breakouts."),
-        ("EXECUTE\nPLAN", "Manage risk.  Stay patient."),
+        ("WATCH\nLIQUIDITY", "Watch reactions at zones."),
+        ("WAIT FOR\nCONFIRMATION", "One close attempts. Two confirms."),
+        ("WAIT", "Nothing here is a signal. You decide."),
     ]
     for idx, (left, spec) in enumerate(zip([0.030, 0.215, 0.410, 0.595, 0.795], card_specs), start=1):
         card(left, idx, spec[0], spec[1])
@@ -1333,7 +1333,7 @@ def generate_poinkle_reference_snapshot_chart(symbol, candles, current_price, su
             footer.plot([x_pos + 0.292, x_pos + 0.292], [0.20, 0.50], color="#2dd4f0", linewidth=1.0, alpha=0.52, zorder=3)
     footer.text(0.50, 0.115, "One close is a hypothesis. Two is an answer.", color="#a9dce8", fontsize=9.0, ha="center", va="center", zorder=3)
 
-    canvas.text(0.50, 0.062, "End of Snapshot  \u2022  Ready for Next Level", color="#a9b8c5", fontsize=10.5, alpha=0.74, ha="center", va="center", zorder=5)
+    canvas.text(0.50, 0.062, "End of Snapshot  \u2022  Keep Watching The Zones", color="#a9b8c5", fontsize=10.5, alpha=0.74, ha="center", va="center", zorder=5)
 
     fd, path = tempfile.mkstemp(suffix=".png", prefix=f"{symbol.replace('/', '_')}_poinkle_reference_reset_")
     os.close(fd)

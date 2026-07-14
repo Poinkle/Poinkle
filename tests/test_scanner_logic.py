@@ -5377,6 +5377,8 @@ class ScannerLogicTests(unittest.TestCase):
                 self.assertIn("Second close above it", source)
                 self.assertIn("Daily close below", source)
                 self.assertIn("One close is a hypothesis. Two is an answer.", source)
+                self.assertIn('("WAIT", "Nothing here is a signal. You decide.")', source)
+                self.assertIn("Keep Watching The Zones", source)
                 for banned_phrase in (
                     "buyers step back in",
                     "next leg",
@@ -5384,6 +5386,11 @@ class ScannerLogicTests(unittest.TestCase):
                     "step back in",
                     "can start",
                     "healthy",
+                    "execute",
+                    "demand",
+                    "ready for next level",
+                    "manage risk",
+                    "see sweeps",
                 ):
                     self.assertNotIn(banned_phrase, source.lower())
 

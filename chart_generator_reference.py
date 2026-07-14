@@ -362,9 +362,9 @@ def generate_reference_levels_chart(
     card_specs = card_specs or [
         ("READ TREND", "Find higher highs and lows."),
         ("KEY LEVELS", "Mark support / resistance."),
-        ("WATCH\nLIQUIDITY", "See sweeps above/below."),
-        ("WAIT FOR\nCONFIRMATION", "Demand clean breakouts."),
-        ("EXECUTE\nPLAN", "Manage risk.  Stay patient."),
+        ("WATCH\nLIQUIDITY", "Watch reactions at zones."),
+        ("WAIT FOR\nCONFIRMATION", "One close attempts. Two confirms."),
+        ("WAIT", "Nothing here is a signal. You decide."),
     ]
     if not teaching_mode:
         for idx, (left, (card_title, body)) in enumerate(zip(card_lefts, card_specs), start=1):
@@ -638,7 +638,7 @@ def generate_reference_levels_chart(
                 footer.plot([x_pos + 0.292, x_pos + 0.292], [0.20, 0.50], color="#2dd4f0", linewidth=1.0, alpha=0.52, zorder=3)
         footer.text(0.50, 0.115, "One close is a hypothesis. Two is an answer.", color="#a9dce8", fontsize=9.0, ha="center", va="center", zorder=3)
 
-        canvas.text(0.50, 0.062, "End of Snapshot  \u2022  Ready for Next Level", color="#a9b8c5", fontsize=10.7, alpha=0.75, ha="center", va="center", zorder=5)
+        canvas.text(0.50, 0.062, "End of Snapshot  \u2022  Keep Watching The Zones", color="#a9b8c5", fontsize=10.7, alpha=0.75, ha="center", va="center", zorder=5)
 
     prefix = output_prefix or f"{symbol.replace('/', '_')}_poinkle_reference_"
     fd, path = tempfile.mkstemp(suffix=".png", prefix=prefix)
