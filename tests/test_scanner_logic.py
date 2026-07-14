@@ -5329,7 +5329,7 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("x_right = len(recent) * 1.16 if teaching_mode else len(recent) * 1.12", source)
         self.assertIn("future_label_x", source)
         self.assertIn("if teaching_mode:\n        watermark_drawn = add_logo_watermark(chart_ax, opacity=0.06)", source)
-        self.assertIn("else:\n        watermark_drawn = add_ghost_watermark(chart_ax)", source)
+        self.assertIn("else:\n        watermark_drawn = add_logo_watermark(chart_ax, opacity=0.05)", source)
         self.assertIn("image_height, image_width = image.shape[:2]", source)
         self.assertIn("image_aspect = image_width / max(image_height, 1)", source)
         self.assertIn("fig_w, fig_h = ax.figure.get_size_inches()", source)
@@ -5373,9 +5373,9 @@ class ScannerLogicTests(unittest.TestCase):
         for filename, source in sources.items():
             with self.subTest(filename=filename):
                 self.assertIn("WHAT WOULD CHANGE THE PICTURE", source)
-                self.assertIn("Daily close above", source)
-                self.assertIn("Second close above it", source)
-                self.assertIn("Daily close below", source)
+                self.assertIn("Close above", source)
+                self.assertIn("A second close", source)
+                self.assertIn("Close below", source)
                 self.assertIn("One close is a hypothesis. Two is an answer.", source)
                 self.assertIn('("WAIT", "Nothing here is a signal. You decide.")', source)
                 self.assertNotIn('"EXECUTE PLAN"', source)
@@ -5400,7 +5400,8 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertIn("chart_ax.yaxis.tick_right()", source)
         self.assertIn("labelsize=15.0 if teaching_mode else 13.5", source)
-        self.assertIn("snapshot_ticks = sorted", source)
+        self.assertIn("raw_snapshot_ticks = sorted", source)
+        self.assertIn("separated_snapshot_ticks(raw_snapshot_ticks, current_price, y_max - y_min)", source)
         self.assertIn("chart_ax.set_yticks(snapshot_ticks)", source)
         self.assertIn("chart_ax.set_yticklabels([format_price(value) for value in snapshot_ticks])", source)
         self.assertIn("for value in [support_level, mid_zone, resistance_level, current_price] + liq_levels[:4]", source)
@@ -5408,10 +5409,29 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("bbox={\"boxstyle\": \"round,pad=0.20,rounding_size=0.08\"", source)
         self.assertNotIn('if teaching_mode:\n        chart_ax.spines["left"].set_visible(False)', source)
 
+    def test_snapshot_tick_filter_keeps_current_price_and_drops_close_levels(self):
+        source = (PROJECT_DIR / "chart_generator_reference.py").read_text()
+
+        self.assertIn("def separated_snapshot_ticks(values, current_price, y_span, min_fraction=0.035):", source)
+        self.assertIn("min_gap = max(abs(y_span) * min_fraction", source)
+        self.assertIn("0 if math.isclose(value, current_price", source)
+        self.assertIn("if any(abs(value - existing) < min_gap for existing in kept):", source)
+        self.assertIn("return sorted(kept), min_gap, len(values) - len(kept)", source)
+
+    def test_snapshot_logo_watermark_uses_logo_with_text_fallback(self):
+        source = (PROJECT_DIR / "chart_generator_reference.py").read_text()
+        snapshot_branch = source[source.index("else:\n        watermark_drawn = add_logo_watermark(chart_ax, opacity=0.05)") :]
+        snapshot_branch = snapshot_branch[: snapshot_branch.index("\n\n    level_ticks = []")]
+
+        self.assertIn("watermark_drawn = add_logo_watermark(chart_ax, opacity=0.05)", snapshot_branch)
+        self.assertIn("if not watermark_drawn:", snapshot_branch)
+        self.assertIn('"POINKLE"', snapshot_branch)
+        self.assertNotIn("add_ghost_watermark(chart_ax)", snapshot_branch)
+
     def test_pending_one_close_footer_copy_is_attempt_not_prediction(self):
         source = (PROJECT_DIR / "chart_generator_reference.py").read_text()
 
-        self.assertIn("one close is an attempt", source.lower())
+        self.assertIn("an attempt", source.lower())
         self.assertIn("confirmation", source.lower())
         for banned_word in ("buy", "sell", "enter", "exit", "long", "short", "target"):
             self.assertIsNone(re.search(rf"\b{banned_word}\b", source[source.index("items = footer_items or [") : source.index("canvas.text(0.50, 0.062")].lower()))

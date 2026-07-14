@@ -1117,9 +1117,9 @@ def generate_poinkle_snapshot_spec_chart(symbol, candles, current_price, support
     support_text = format_price(nearby_supports[0]) if nearby_supports else format_price(support_level)
     resistance_text = format_price(nearby_resistances[0]) if nearby_resistances else format_price(resistance_level)
     watch_items = [
-        f"1. Daily close above {resistance_text} - one close is an attempt",
-        "2. Second close above it - confirmation",
-        f"3. Daily close below {support_text} - same rule downward",
+        f"1. Close above {resistance_text} - an attempt",
+        "2. A second close - confirmation",
+        f"3. Close below {support_text} - same rule",
     ]
     footer_x = [0.065, 0.385, 0.690]
     for idx, (x_pos, item) in enumerate(zip(footer_x, watch_items)):
@@ -1323,9 +1323,9 @@ def generate_poinkle_reference_snapshot_chart(symbol, candles, current_price, su
     support_text = format_price(nearby_supports[0]) if nearby_supports else format_price(support_level)
     resistance_text = format_price(nearby_resistances[0]) if nearby_resistances else format_price(resistance_level)
     watch_items = [
-        f"1. Daily close above {resistance_text} - one close is an attempt",
-        "2. Second close above it - confirmation",
-        f"3. Daily close below {support_text} - same rule downward",
+        f"1. Close above {resistance_text} - an attempt",
+        "2. A second close - confirmation",
+        f"3. Close below {support_text} - same rule",
     ]
     for idx, (x_pos, item) in enumerate(zip([0.065, 0.385, 0.690], watch_items)):
         footer.text(x_pos, 0.315, item, color="#dbe7ef", fontsize=10.8, ha="left", va="center", zorder=3)

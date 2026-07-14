@@ -70,6 +70,24 @@ def in_view_level(levels, low, high, fallback):
     return fallback
 
 
+def separated_snapshot_ticks(values, current_price, y_span, min_fraction=0.035):
+    min_gap = max(abs(y_span) * min_fraction, 0.00000001)
+    ordered = sorted(
+        (
+            0 if math.isclose(value, current_price, rel_tol=0, abs_tol=min_gap * 0.25) else 1,
+            abs(value - current_price),
+            value,
+        )
+        for value in values
+    )
+    kept = []
+    for _, _, value in ordered:
+        if any(abs(value - existing) < min_gap for existing in kept):
+            continue
+        kept.append(value)
+    return sorted(kept), min_gap, len(values) - len(kept)
+
+
 def liquidity_levels_from_structure(candles, y_min, y_max, current_price):
     if len(candles) < 20:
         return []
@@ -374,8 +392,8 @@ def generate_reference_levels_chart(
             ax.axis("off")
             ax.add_patch(FancyBboxPatch((0.02, 0.02), 0.96, 0.96, boxstyle="round,pad=0.018,rounding_size=0.050", facecolor="#1b3b4a", edgecolor="#5ee9f8", linewidth=13, alpha=0.040, zorder=0))
             ax.add_patch(FancyBboxPatch((0.02, 0.02), 0.96, 0.96, boxstyle="round,pad=0.018,rounding_size=0.050", facecolor="#132b38", edgecolor="#49dcea", linewidth=0.70, alpha=0.72, zorder=1))
-            ax.add_patch(Circle((0.155, 0.690), 0.086, facecolor="#31e2ee", edgecolor="none", alpha=0.96, zorder=3))
-            ax.text(0.155, 0.690, str(idx), color="#06141b", fontsize=16, fontweight="bold", ha="center", va="center", zorder=4)
+            ax.scatter([0.155], [0.690], s=980, marker="o", transform=ax.transAxes, facecolor="#31e2ee", edgecolor="none", alpha=0.96, zorder=3)
+            ax.text(0.155, 0.690, str(idx), color="#06141b", fontsize=18, fontweight="bold", ha="center", va="center", zorder=4)
             t = ax.text(0.275, 0.710, card_title, color="#3ce1f3", fontsize=14.6, fontweight="bold", ha="left", va="center", linespacing=0.90, zorder=4)
             t.set_path_effects([pe.withStroke(linewidth=2.6, foreground="#0a6574", alpha=0.46)])
             draw_wrapped_card_body(ax, body)
@@ -407,7 +425,7 @@ def generate_reference_levels_chart(
         if not watermark_drawn:
             chart_ax.text(0.52, 0.50, "POINKLE", transform=chart_ax.transAxes, color="#dffbff", fontsize=96, fontweight="bold", ha="center", va="center", alpha=0.055, zorder=0)
     else:
-        watermark_drawn = add_ghost_watermark(chart_ax)
+        watermark_drawn = add_logo_watermark(chart_ax, opacity=0.05)
         if not watermark_drawn:
             chart_ax.text(0.52, 0.50, "POINKLE", transform=chart_ax.transAxes, color="#dffbff", fontsize=58, fontweight="bold", ha="center", va="center", alpha=0.035, zorder=0)
 
@@ -507,13 +525,14 @@ def generate_reference_levels_chart(
         mid_zone = current_price if y_min <= current_price <= y_max else (support_level + resistance_level) / 2
         zone(mid_zone, span * 0.090, "#b8ab6b", 0.080, len(recent) * 0.24, len(recent) * 0.70)
         zone(support_level, span * 0.125, "#2c9c64", 0.22, 2, len(recent) * 0.98, support_label)
-        snapshot_ticks = sorted(
+        raw_snapshot_ticks = sorted(
             {
                 round(value, 8): value
                 for value in [support_level, mid_zone, resistance_level, current_price] + liq_levels[:4]
                 if y_min <= value <= y_max
             }.values()
         )
+        snapshot_ticks, snapshot_tick_min_gap, snapshot_ticks_dropped = separated_snapshot_ticks(raw_snapshot_ticks, current_price, y_max - y_min)
         chart_ax.set_yticks(snapshot_ticks)
         chart_ax.set_yticklabels([format_price(value) for value in snapshot_ticks])
         chart_ax.hlines(
@@ -545,7 +564,7 @@ def generate_reference_levels_chart(
             if not y_min <= level <= y_max:
                 continue
             chart_ax.hlines(level, liq_start, liq_end, colors="#cba94a", linewidth=0.9, alpha=0.26, zorder=3)
-            chart_ax.text(liq_end + 1.0, level, "LIQ", color="#cba94a", fontsize=9.2, fontweight="bold", ha="left", va="center", alpha=0.42, zorder=3)
+            chart_ax.text(liq_end + 1.0, level, "LIQUIDITY", color="#cba94a", fontsize=9.2, fontweight="bold", ha="left", va="center", alpha=0.42, zorder=3)
 
     for i, candle in enumerate(recent):
         open_, high_, low_, close = candle["open"], candle["high"], candle["low"], candle["close"]
@@ -655,22 +674,22 @@ def generate_reference_levels_chart(
         support_text = format_price(near_supports[0]) if near_supports else format_price(support_level)
         resistance_text = format_price(near_resistances[0]) if near_resistances else format_price(resistance_level)
         items = footer_items or [
-            f"1. Daily close above {resistance_text} - one close is an attempt",
-            "2. Second close above it - confirmation",
-            f"3. Daily close below {support_text} - same rule downward",
+            f"1. Close above {resistance_text} - an attempt",
+            "2. A second close - confirmation",
+            f"3. Close below {support_text} - same rule",
         ]
-        column_widths = [25, 24, 23]
+        column_widths = [24, 23, 22]
         for idx, (x_pos, item) in enumerate(zip([0.065, 0.385, 0.690], items)):
-            wrapped = textwrap.wrap(str(item), width=column_widths[idx])[:3]
+            wrapped = textwrap.wrap(str(item), width=column_widths[idx])[:2]
             if not wrapped:
                 wrapped = [str(item)]
-            y = 0.405 if len(wrapped) >= 3 else 0.355
+            y = 0.430 if len(wrapped) >= 2 else 0.385
             for line in wrapped:
-                footer.text(x_pos, y, line, color="#dce7ef", fontsize=11.6, ha="left", va="center", zorder=3)
-                y -= 0.145
+                footer.text(x_pos, y, line, color="#dce7ef", fontsize=12.0, ha="left", va="center", zorder=3)
+                y -= 0.170
             if idx < 2:
-                footer.plot([x_pos + 0.292, x_pos + 0.292], [0.20, 0.50], color="#2dd4f0", linewidth=1.0, alpha=0.52, zorder=3)
-        footer.text(0.50, 0.115, "One close is a hypothesis. Two is an answer.", color="#a9dce8", fontsize=10.6, ha="center", va="center", zorder=3)
+                footer.plot([x_pos + 0.292, x_pos + 0.292], [0.24, 0.52], color="#2dd4f0", linewidth=1.0, alpha=0.52, zorder=3)
+        footer.text(0.50, 0.105, "One close is a hypothesis. Two is an answer.", color="#a9dce8", fontsize=10.8, ha="center", va="center", zorder=3)
 
         canvas.text(0.50, 0.062, "End of Snapshot  \u2022  Keep Watching The Zones", color="#a9b8c5", fontsize=11.2, alpha=0.75, ha="center", va="center", zorder=5)
 
