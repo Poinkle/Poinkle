@@ -5038,8 +5038,14 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("teaching_zone=None", source)
         self.assertIn('chart_ax.yaxis.tick_right()', source)
         self.assertIn('chart_ax.set_yticklabels([format_price(value) for value in np.linspace(y_min, y_max, 6)])', source)
-        self.assertIn('show_price_range=True', source)
+        self.assertIn("x_right = len(recent) * 1.20 if teaching_mode else len(recent) * 1.12", source)
+        self.assertIn("future_label_x", source)
+        self.assertIn("zone_range_text", source)
         self.assertIn('muted=True', source)
+        self.assertIn('f"Next resistance  {zone_range_text(level, resistance_thickness)}"', source)
+        self.assertIn('f"Next support  {zone_range_text(level, support_thickness)}"', source)
+        self.assertIn('f"Current price  {format_price(current_price)}"', source)
+        self.assertIn("chart_ax.hlines(current_price", source)
         footer_guard_index = source.index("if not teaching_mode:\n        arrows =")
         self.assertGreater(source.index("footer = fig.add_axes", footer_guard_index), footer_guard_index)
         self.assertGreater(source.index('"WHAT TO WATCH NEXT"', footer_guard_index), footer_guard_index)
@@ -5047,7 +5053,7 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("if ema21_values and not teaching_mode:", source)
         self.assertIn("if teaching_mode:", source)
         self.assertIn("if teaching_zone == \"resistance\":", source)
-        self.assertIn('zone(support_level, span * 0.125, "#2c9c64", 0.24', source)
+        self.assertIn('zone(support_level, support_thickness, "#2c9c64", 0.24', source)
 
     def test_explain_rsi_with_symbol_still_uses_static_card(self):
         with patch.object(scanner, "handle_live_explain_command", side_effect=AssertionError("RSI must stay static")), patch.object(

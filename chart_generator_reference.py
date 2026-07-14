@@ -329,8 +329,10 @@ def generate_reference_levels_chart(
             draw_wrapped_card_body(ax, body)
 
     chart_ax = fig.add_axes([0.030, 0.210 if teaching_mode else 0.330, 0.890, 0.650 if teaching_mode else 0.420])
+    x_right = len(recent) * 1.20 if teaching_mode else len(recent) * 1.12
+    future_label_x = len(recent) + max(1.2, len(recent) * 0.025)
     chart_ax.set_facecolor((0, 0, 0, 0))
-    chart_ax.set_xlim(-1, len(recent) * 1.12)
+    chart_ax.set_xlim(-1, x_right)
     chart_ax.set_ylim(y_min, y_max)
     if teaching_mode:
         chart_ax.spines["left"].set_visible(False)
@@ -353,6 +355,8 @@ def generate_reference_levels_chart(
     chart_ax.text(0.52, 0.50, "POINKLE", transform=chart_ax.transAxes, color="#dffbff", fontsize=watermark_size, fontweight="bold", ha="center", va="center", alpha=watermark_alpha, zorder=0)
 
     def zone(level, thickness, color, alpha, start, end, label=None, *, muted=False, show_price_range=False):
+        if not y_min <= level <= y_max:
+            return
         lower = level - thickness * 0.42
         upper = level + thickness * 0.42
         edge_alpha = 0.42 if muted else min(alpha + 0.20, 0.62)
@@ -365,11 +369,11 @@ def generate_reference_levels_chart(
             if show_price_range:
                 label_text = f"{label_text}\n{format_price(lower)} - {format_price(upper)}"
             chart_ax.text(
-                end + (0.6 if show_price_range else 0.9),
+                future_label_x if teaching_mode else end + (0.6 if show_price_range else 0.9),
                 level,
                 label_text,
                 color=color,
-                fontsize=12.5 if show_price_range else 7.0,
+                fontsize=12.5 if teaching_mode and not muted else 9.5 if teaching_mode and muted else 12.5 if show_price_range else 7.0,
                 fontweight="bold",
                 ha="left",
                 va="center",
@@ -379,16 +383,54 @@ def generate_reference_levels_chart(
                 path_effects=[pe.withStroke(linewidth=3.0 if show_price_range else 2.2, foreground="#03101a", alpha=0.86 if show_price_range else 0.80)],
             )
 
+    def zone_range_text(level, thickness):
+        lower = level - thickness * 0.42
+        upper = level + thickness * 0.42
+        return f"{format_price(lower)} - {format_price(upper)}"
+
     if teaching_mode:
-        mid_zone = current_price if y_min <= current_price <= y_max else (support_level + resistance_level) / 2
+        support_thickness = span * 0.125
+        resistance_thickness = span * 0.115
+        support_context = [level for level in near_supports[:2] if y_min <= level <= y_max]
+        resistance_context = [level for level in near_resistances[:2] if y_min <= level <= y_max]
+        if support_level not in support_context and y_min <= support_level <= y_max:
+            support_context = (support_context + [support_level])[:2]
+        if resistance_level not in resistance_context and y_min <= resistance_level <= y_max:
+            resistance_context = (resistance_context + [resistance_level])[:2]
+        taught_is_resistance = teaching_zone == "resistance"
+        taught_level = resistance_level if taught_is_resistance else support_level
+        taught_label = resistance_label if taught_is_resistance else support_label
+
+        for index, level in enumerate(resistance_context):
+            if taught_is_resistance and math.isclose(level, taught_level, rel_tol=0, abs_tol=max(span * 0.002, 1e-9)):
+                continue
+            label = f"Next resistance  {zone_range_text(level, resistance_thickness)}"
+            zone(level, resistance_thickness, "#c7505c", 0.050, len(recent) * 0.34, x_right, label, muted=True)
+        for index, level in enumerate(support_context):
+            if not taught_is_resistance and math.isclose(level, taught_level, rel_tol=0, abs_tol=max(span * 0.002, 1e-9)):
+                continue
+            label = f"Next support  {zone_range_text(level, support_thickness)}"
+            zone(level, support_thickness, "#2c9c64", 0.045, 2, x_right, label, muted=True)
         if teaching_zone == "resistance":
-            zone(support_level, span * 0.125, "#2c9c64", 0.045, 2, len(recent) * 0.98, muted=True)
-            zone(mid_zone, span * 0.090, "#b8ab6b", 0.035, len(recent) * 0.24, len(recent) * 0.70, muted=True)
-            zone(resistance_level, span * 0.115, "#c7505c", 0.26, len(recent) * 0.34, len(recent) * 0.94, resistance_label, show_price_range=True)
+            label = str(resistance_label or "Nearest resistance").upper()
+            zone(resistance_level, resistance_thickness, "#c7505c", 0.26, len(recent) * 0.34, x_right, f"{label}  {zone_range_text(resistance_level, resistance_thickness)}", show_price_range=False)
         else:
-            zone(resistance_level, span * 0.115, "#c7505c", 0.050, len(recent) * 0.34, len(recent) * 0.94, muted=True)
-            zone(mid_zone, span * 0.090, "#b8ab6b", 0.035, len(recent) * 0.24, len(recent) * 0.70, muted=True)
-            zone(support_level, span * 0.125, "#2c9c64", 0.24, 2, len(recent) * 0.98, support_label, show_price_range=True)
+            label = str(support_label or "Nearest support").upper()
+            zone(support_level, support_thickness, "#2c9c64", 0.24, 2, x_right, f"{label}  {zone_range_text(support_level, support_thickness)}", show_price_range=False)
+        chart_ax.hlines(current_price, max(len(recent) * 0.08, 0), x_right, colors="#dcebf0", linewidth=1.1, linestyles=(0, (2.0, 3.2)), alpha=0.62, zorder=11)
+        chart_ax.text(
+            future_label_x,
+            current_price,
+            f"Current price  {format_price(current_price)}",
+            color="#dcebf0",
+            fontsize=10.4,
+            fontweight="bold",
+            ha="left",
+            va="center",
+            alpha=0.92,
+            zorder=12,
+            path_effects=[pe.withStroke(linewidth=2.7, foreground="#03101a", alpha=0.86)],
+        )
     else:
         zone(resistance_level, span * 0.115, "#c7505c", 0.24, len(recent) * 0.34, len(recent) * 0.94, resistance_label)
         mid_zone = current_price if y_min <= current_price <= y_max else (support_level + resistance_level) / 2
