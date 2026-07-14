@@ -233,7 +233,7 @@ def draw_wrapped_card_body(ax, body):
     if not lines:
         return
     line_count = len(lines)
-    fontsize = 8.7 if line_count >= 4 or any(len(line) > 18 for line in lines) else 9.8
+    fontsize = 10.0 if line_count >= 4 or any(len(line) > 18 for line in lines) else 10.8
     top_y = 0.435 if line_count >= 4 else 0.390 if line_count == 3 else 0.335
     y = top_y
     for line in lines:
@@ -258,7 +258,7 @@ def draw_ema_label(ax, x_values, values, label, color, x_offset=0.8):
         values[-1],
         label,
         color=color,
-        fontsize=6.2,
+        fontsize=8.4,
         fontweight="bold",
         ha="left",
         va="center",
@@ -376,7 +376,7 @@ def generate_reference_levels_chart(
             ax.add_patch(FancyBboxPatch((0.02, 0.02), 0.96, 0.96, boxstyle="round,pad=0.018,rounding_size=0.050", facecolor="#132b38", edgecolor="#49dcea", linewidth=0.70, alpha=0.72, zorder=1))
             ax.add_patch(Circle((0.155, 0.690), 0.086, facecolor="#31e2ee", edgecolor="none", alpha=0.96, zorder=3))
             ax.text(0.155, 0.690, str(idx), color="#06141b", fontsize=16, fontweight="bold", ha="center", va="center", zorder=4)
-            t = ax.text(0.275, 0.710, card_title, color="#3ce1f3", fontsize=13.0, fontweight="bold", ha="left", va="center", linespacing=0.90, zorder=4)
+            t = ax.text(0.275, 0.710, card_title, color="#3ce1f3", fontsize=14.0, fontweight="bold", ha="left", va="center", linespacing=0.90, zorder=4)
             t.set_path_effects([pe.withStroke(linewidth=2.6, foreground="#0a6574", alpha=0.46)])
             draw_wrapped_card_body(ax, body)
 
@@ -386,17 +386,20 @@ def generate_reference_levels_chart(
     chart_ax.set_facecolor((0, 0, 0, 0))
     chart_ax.set_xlim(-1, x_right)
     chart_ax.set_ylim(y_min, y_max)
-    if teaching_mode:
-        chart_ax.spines["left"].set_visible(False)
-        chart_ax.spines["top"].set_visible(False)
-        chart_ax.spines["bottom"].set_visible(False)
-        chart_ax.spines["right"].set_color("#5f7c86")
-        chart_ax.spines["right"].set_alpha(0.34)
-        chart_ax.yaxis.tick_right()
-        chart_ax.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
-        chart_ax.tick_params(axis="y", colors="#d6e6ec", labelsize=15.0, length=0, pad=10)
-    else:
-        chart_ax.axis("off")
+    chart_ax.spines["left"].set_visible(False)
+    chart_ax.spines["top"].set_visible(False)
+    chart_ax.spines["bottom"].set_visible(False)
+    chart_ax.spines["right"].set_color("#5f7c86")
+    chart_ax.spines["right"].set_alpha(0.34 if teaching_mode else 0.30)
+    chart_ax.yaxis.tick_right()
+    chart_ax.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
+    chart_ax.tick_params(
+        axis="y",
+        colors="#d6e6ec",
+        labelsize=15.0 if teaching_mode else 12.6,
+        length=0,
+        pad=10 if teaching_mode else 8,
+    )
     for grid_y in np.linspace(y_min, y_max, 7)[1:-1]:
         chart_ax.hlines(grid_y, -1, len(recent), colors="#41616a", linewidth=0.45, alpha=0.10, zorder=0)
     if teaching_mode:
@@ -504,6 +507,37 @@ def generate_reference_levels_chart(
         mid_zone = current_price if y_min <= current_price <= y_max else (support_level + resistance_level) / 2
         zone(mid_zone, span * 0.090, "#b8ab6b", 0.080, len(recent) * 0.24, len(recent) * 0.70)
         zone(support_level, span * 0.125, "#2c9c64", 0.22, 2, len(recent) * 0.98, support_label)
+        snapshot_ticks = sorted(
+            {
+                round(value, 8): value
+                for value in [support_level, mid_zone, resistance_level, current_price] + liq_levels[:4]
+                if y_min <= value <= y_max
+            }.values()
+        )
+        chart_ax.set_yticks(snapshot_ticks)
+        chart_ax.set_yticklabels([format_price(value) for value in snapshot_ticks])
+        chart_ax.hlines(
+            current_price,
+            max(len(recent) * 0.08, 0),
+            x_right,
+            colors="#dcebf0",
+            linewidth=1.0,
+            linestyles=(0, (2.0, 3.2)),
+            alpha=0.60,
+            zorder=11,
+        )
+        chart_ax.text(
+            x_right,
+            current_price,
+            format_price(current_price),
+            color="#06141b",
+            fontsize=11.8,
+            fontweight="bold",
+            ha="right",
+            va="center",
+            bbox={"boxstyle": "round,pad=0.20,rounding_size=0.08", "facecolor": "#dcebf0", "edgecolor": "#5ee6f4", "linewidth": 0.75, "alpha": 0.96},
+            zorder=15,
+        )
 
     if not teaching_mode:
         liq_start, liq_end = int(len(recent) * 0.10), int(len(recent) * 0.90)
@@ -511,7 +545,7 @@ def generate_reference_levels_chart(
             if not y_min <= level <= y_max:
                 continue
             chart_ax.hlines(level, liq_start, liq_end, colors="#cba94a", linewidth=0.9, alpha=0.26, zorder=3)
-            chart_ax.text(liq_end + 1.0, level, "LIQ", color="#cba94a", fontsize=5.8, fontweight="bold", ha="left", va="center", alpha=0.36, zorder=3)
+            chart_ax.text(liq_end + 1.0, level, "LIQ", color="#cba94a", fontsize=8.2, fontweight="bold", ha="left", va="center", alpha=0.42, zorder=3)
 
     for i, candle in enumerate(recent):
         open_, high_, low_, close = candle["open"], candle["high"], candle["low"], candle["close"]
@@ -632,13 +666,13 @@ def generate_reference_levels_chart(
                 wrapped = [str(item)]
             y = 0.405 if len(wrapped) >= 3 else 0.355
             for line in wrapped:
-                footer.text(x_pos, y, line, color="#dce7ef", fontsize=10.0, ha="left", va="center", zorder=3)
+                footer.text(x_pos, y, line, color="#dce7ef", fontsize=11.0, ha="left", va="center", zorder=3)
                 y -= 0.145
             if idx < 2:
                 footer.plot([x_pos + 0.292, x_pos + 0.292], [0.20, 0.50], color="#2dd4f0", linewidth=1.0, alpha=0.52, zorder=3)
-        footer.text(0.50, 0.115, "One close is a hypothesis. Two is an answer.", color="#a9dce8", fontsize=9.0, ha="center", va="center", zorder=3)
+        footer.text(0.50, 0.115, "One close is a hypothesis. Two is an answer.", color="#a9dce8", fontsize=10.0, ha="center", va="center", zorder=3)
 
-        canvas.text(0.50, 0.062, "End of Snapshot  \u2022  Keep Watching The Zones", color="#a9b8c5", fontsize=10.7, alpha=0.75, ha="center", va="center", zorder=5)
+        canvas.text(0.50, 0.062, "End of Snapshot  \u2022  Keep Watching The Zones", color="#a9b8c5", fontsize=11.2, alpha=0.75, ha="center", va="center", zorder=5)
 
     prefix = output_prefix or f"{symbol.replace('/', '_')}_poinkle_reference_"
     fd, path = tempfile.mkstemp(suffix=".png", prefix=prefix)

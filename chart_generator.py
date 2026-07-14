@@ -312,7 +312,7 @@ def draw_ema_label(ax, x_values, values, label, color, x_offset=0.8):
         values[-1],
         label,
         color=color,
-        fontsize=6.2,
+        fontsize=8.4,
         fontweight="bold",
         ha="left",
         va="center",
@@ -753,7 +753,7 @@ def generate_matplotlib_levels_chart(symbol, candles, current_price, supports, r
         ("KEY LEVELS", "Mark support /\nresistance.", BLUE),
         ("WATCH\nLIQUIDITY", "Watch reactions\nat zones.", BLUE),
         ("WAIT FOR\nCONFIRMATION", "One close attempts.\nTwo confirms.", BLUE),
-        ("WAIT", "Nothing here\nis a signal.", BLUE),
+        ("WAIT", "Nothing here\nis a signal.\nYou decide.", BLUE),
     ]
     card_axes = [
         fig.add_axes([card_left + i * (card_w + card_gap), card_y, card_w, card_h])

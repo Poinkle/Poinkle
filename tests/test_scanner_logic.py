@@ -5378,6 +5378,7 @@ class ScannerLogicTests(unittest.TestCase):
                 self.assertIn("Daily close below", source)
                 self.assertIn("One close is a hypothesis. Two is an answer.", source)
                 self.assertIn('("WAIT", "Nothing here is a signal. You decide.")', source)
+                self.assertNotIn('"EXECUTE PLAN"', source)
                 self.assertIn("Keep Watching The Zones", source)
                 for banned_phrase in (
                     "buyers step back in",
@@ -5393,6 +5394,19 @@ class ScannerLogicTests(unittest.TestCase):
                     "see sweeps",
                 ):
                     self.assertNotIn(banned_phrase, source.lower())
+
+    def test_snapshot_reference_chart_draws_price_axis_and_current_price_tag(self):
+        source = (PROJECT_DIR / "chart_generator_reference.py").read_text()
+
+        self.assertIn("chart_ax.yaxis.tick_right()", source)
+        self.assertIn("labelsize=15.0 if teaching_mode else 12.6", source)
+        self.assertIn("snapshot_ticks = sorted", source)
+        self.assertIn("chart_ax.set_yticks(snapshot_ticks)", source)
+        self.assertIn("chart_ax.set_yticklabels([format_price(value) for value in snapshot_ticks])", source)
+        self.assertIn("for value in [support_level, mid_zone, resistance_level, current_price] + liq_levels[:4]", source)
+        self.assertIn("chart_ax.hlines(\n            current_price,", source)
+        self.assertIn("bbox={\"boxstyle\": \"round,pad=0.20,rounding_size=0.08\"", source)
+        self.assertNotIn('if teaching_mode:\n        chart_ax.spines["left"].set_visible(False)', source)
 
     def test_pending_one_close_footer_copy_is_attempt_not_prediction(self):
         source = (PROJECT_DIR / "chart_generator_reference.py").read_text()
