@@ -286,7 +286,8 @@ TELEGRAM_JOB_BUDGET_SECONDS_PER_CHUNK = 8
 TELEGRAM_JOB_LIGHT = "light"
 TELEGRAM_JOB_HEAVY = "heavy"
 TELEGRAM_LIGHT_JOB_ESTIMATE_SECONDS = 1.0
-HEAVY_TELEGRAM_JOB_ACTIONS = {"snapshot", "research", "whynot"}
+LIVE_EXPLAIN_CONCEPTS = {"support", "resistance", "confirmation"}
+HEAVY_TELEGRAM_JOB_ACTIONS = {"snapshot", "research", "whynot", "explain"}
 ALERT_SEVERITY_PREFERENCE_KEY = "alert_severity_min"
 ALERT_SEVERITY_DEVELOPING = "developing"
 ALERT_SEVERITY_BUILDING = "building"
@@ -1663,6 +1664,8 @@ def heavy_command_action_for_text(message_text):
         return "research"
     if is_whynot_command(message_text):
         return "whynot"
+    if is_explain_command(message_text) and is_live_explain_command(message_text):
+        return "explain"
     return ""
 
 
@@ -1683,6 +1686,9 @@ def telegram_command_job_estimate_seconds(job):
 
 def telegram_command_job_ticker(message_text):
     parts = str(message_text or "").strip().split()
+    if is_explain_command(message_text) and len(parts) >= 3:
+        symbol = normalize_trade_symbol_input(parts[2])
+        return base_symbol(symbol) if symbol else str(parts[2]).strip().upper()
     if len(parts) < 2:
         return ""
     symbol = normalize_trade_symbol_input(parts[1])
@@ -1691,6 +1697,9 @@ def telegram_command_job_ticker(message_text):
 
 def heavy_job_ack_message(action, message_text):
     ticker = telegram_command_job_ticker(message_text)
+    if action == "explain":
+        concept = live_explain_concept_key(message_text) or "concept"
+        return f"Building your {ticker} {concept} teaching chart - one moment."
     if action == "research":
         return f"Building your {ticker} research brief - one moment."
     if action == "snapshot":
@@ -1827,6 +1836,17 @@ def run_telegram_command_job(exchange, telegram_token, job, state=None):
             message_text,
             source_chat=source_chat,
             from_user=from_user,
+            state=state,
+        )
+        return True
+    if action == "explain":
+        handle_explain_command(
+            telegram_token,
+            telegram_chat_id,
+            message_text,
+            source_chat=source_chat,
+            from_user=from_user,
+            exchange=exchange,
             state=state,
         )
         return True
@@ -5414,6 +5434,7 @@ WATCH_LETTER_CALLBACK_PREFIX = "watchletter"
 COIN_PICKER_BUTTONS_PER_ROW = 3
 COIN_PICK_TYPE_DIFFERENT_SYMBOL = "__type__"
 COMMAND_PANEL_ACTIONS = (
+    ("🌱 I'm new — where should I start?", "onboard:ask"),
     ("📍 Where is this coin right now?", "where"),
     ("🤔 Why isn't it alerting?", "whynot"),
     ("🔍 Tell me more about a coin", "research"),
@@ -5717,6 +5738,47 @@ def start_orientation_keyboard():
         "inline_keyboard": [
             [
                 {
+                    "text": "📍 Show me Bitcoin",
+                    "callback_data": f"{COIN_PICK_CALLBACK_PREFIX}:snapshot:BTC",
+                }
+            ],
+            [
+                {
+                    "text": "📍 Show me another coin",
+                    "callback_data": f"{PANEL_CALLBACK_PREFIX}:where",
+                }
+            ],
+            [
+                {
+                    "text": "📚 Teach me something",
+                    "callback_data": f"{PANEL_CALLBACK_PREFIX}:explain",
+                }
+            ],
+            [
+                {
+                    "text": "🔍 Verify a creator",
+                    "callback_data": f"{PANEL_CALLBACK_PREFIX}:verify",
+                }
+            ],
+            [
+                {
+                    "text": "⚡ Everything else",
+                    "callback_data": f"{PANEL_CALLBACK_PREFIX}:open",
+                }
+            ],
+        ]
+    }
+
+
+def onboarding_question_text():
+    return "Before I throw anything at you — where are you at?"
+
+
+def onboarding_question_keyboard():
+    return {
+        "inline_keyboard": [
+            [
+                {
                     "text": "🌱 Total beginner — I don't know what a candle is",
                     "callback_data": f"{ONBOARD_CALLBACK_PREFIX}:beginner",
                 }
@@ -5739,12 +5801,7 @@ def start_orientation_keyboard():
                     "callback_data": f"{ONBOARD_CALLBACK_PREFIX}:browsing",
                 }
             ],
-            [
-                {
-                    "text": "🔍 Verify a creator's account",
-                    "callback_data": f"{PANEL_CALLBACK_PREFIX}:verify",
-                }
-            ],
+            [{"text": "⬅️ Back", "callback_data": f"{PANEL_CALLBACK_PREFIX}:open"}],
         ]
     }
 
@@ -5809,7 +5866,7 @@ def command_panel_keyboard():
             [
                 {
                     "text": label,
-                    "callback_data": f"{PANEL_CALLBACK_PREFIX}:{action}",
+                    "callback_data": action if ":" in action else f"{PANEL_CALLBACK_PREFIX}:{action}",
                 }
             ]
             for label, action in COMMAND_PANEL_ACTIONS
@@ -7405,8 +7462,7 @@ def start_orientation_text():
         "Hi — I'm Poinkle.\n\n"
         "I watch the zones on a chart and tell you when one actually breaks — "
         "confirmed by two daily closes, not one.\n\n"
-        "I never tell you what to do. No entries, no stops, no targets, no calls.\n\n"
-        "Before I throw anything at you — where are you at?"
+        "I never tell you what to do. No entries, no stops, no targets, no calls."
     )
 
 
@@ -8180,12 +8236,49 @@ def unknown_concept_text():
     )
 
 
+def explain_command_args(message_text):
+    parts = str(message_text or "").strip().split()
+    return parts[1:] if len(parts) > 1 else []
+
+
+def explain_command_parts(message_text):
+    args = explain_command_args(message_text)
+    if not args:
+        return "", ""
+
+    for end in range(len(args), 0, -1):
+        candidate = " ".join(args[:end])
+        if normalize_concept_key(candidate):
+            return candidate, " ".join(args[end:])
+    return " ".join(args), ""
+
+
+def explain_command_requested_concept(message_text):
+    concept, _symbol = explain_command_parts(message_text)
+    return concept
+
+
+def explain_command_requested_symbol(message_text):
+    _concept, symbol = explain_command_parts(message_text)
+    return symbol
+
+
+def live_explain_concept_key(message_text):
+    concept_key = normalize_concept_key(explain_command_requested_concept(message_text))
+    if concept_key in LIVE_EXPLAIN_CONCEPTS and explain_command_requested_symbol(message_text):
+        return concept_key
+    return None
+
+
+def is_live_explain_command(message_text):
+    return bool(live_explain_concept_key(message_text))
+
+
 def build_explain_command_message(message_text, skill_level=None):
-    parts = message_text.strip().split(maxsplit=1)
-    if len(parts) < 2 or not parts[1].strip():
+    concept = explain_command_requested_concept(message_text)
+    if not concept:
         return concept_menu_text()
 
-    concept = parts[1].strip()
     explanation = explain_concept(concept, skill_level)
     if explanation is None:
         return unknown_concept_text()
@@ -8195,11 +8288,10 @@ def build_explain_command_message(message_text, skill_level=None):
 
 
 def explain_command_concept_key(message_text):
-    parts = message_text.strip().split(maxsplit=1)
-    if len(parts) < 2 or not parts[1].strip():
+    concept = explain_command_requested_concept(message_text)
+    if not concept:
         return None
 
-    concept = parts[1].strip()
     if explain_concept(concept) is None:
         return None
     return normalize_concept_key(concept)
@@ -8235,6 +8327,225 @@ def send_explain_command_response(telegram_token, response_chat_id, message, con
         return
 
     send_telegram_message(telegram_token, response_chat_id, message)
+
+
+def zone_midpoint_text(zone):
+    if not zone:
+        return "that zone"
+    return format_zone(zone)
+
+
+def live_zone_distance_text(current_price, zone, side):
+    if not zone or not is_real_number(current_price) or current_price <= 0:
+        return "nearby"
+    low, high = zone
+    if low <= current_price <= high:
+        return "inside it"
+    if side == "support":
+        if current_price > high:
+            return f"{((current_price - high) / current_price * 100):.1f}% above it"
+        return f"{((low - current_price) / current_price * 100):.1f}% below it"
+    if current_price < low:
+        return f"{((low - current_price) / current_price * 100):.1f}% below it"
+    return f"{((current_price - high) / current_price * 100):.1f}% above it"
+
+
+def live_explain_pending_setup(state, symbol, current_price):
+    setup = whynot_pending_setup(state, symbol, current_price)
+    if not setup:
+        return None
+    symbol_state = (state or {}).get(symbol, {})
+    pending_setups = symbol_state.get("pending_setups", {})
+    full_setup = pending_setups.get(setup.get("setup_key"), {}) if isinstance(pending_setups, dict) else {}
+    merged = dict(full_setup)
+    merged.update(setup)
+    return merged
+
+
+def live_explain_static_fallback(telegram_token, response_chat_id, concept_key, reason, skill_level=None):
+    message = build_explain_command_message(f"/explain {concept_key}", skill_level=skill_level)
+    if reason:
+        message = f"{message}\n\n{html.escape(reason)}"
+    send_explain_command_response(
+        telegram_token,
+        response_chat_id,
+        message,
+        concept_key=concept_key,
+    )
+
+
+def live_explain_chart_path(symbol, chart_data, title, support_label=None, resistance_label=None, chart_annotations=None):
+    if generate_levels_chart is None:
+        raise RuntimeError("Chart generator unavailable")
+    return generate_levels_chart(
+        symbol,
+        chart_data["candles"],
+        chart_data["current_price"],
+        chart_data["supports"],
+        chart_data["resistances"],
+        ema21=chart_data.get("ema21"),
+        ema55=chart_data.get("ema55"),
+        ema200=chart_data.get("ema200"),
+        title=title,
+        output_prefix=f"{symbol.replace('/', '_')}_live_explain_",
+        signal_scope=chart_data_status_label(
+            chart_data.get("price_source"),
+            chart_data.get("last_updated_label"),
+        ),
+        support_label=support_label,
+        resistance_label=resistance_label,
+        chart_annotations=chart_annotations,
+    )
+
+
+def live_support_caption(symbol, snapshot):
+    ticker = base_symbol(symbol)
+    zone = (snapshot.get("support_zones") or [None])[0]
+    price = snapshot.get("current_price")
+    distance_text = live_zone_distance_text(price, zone, "support")
+    arrival_text = (
+        "Price is inside the zone now, so the reaction matters."
+        if distance_text == "inside it"
+        else "It only matters when price ARRIVES there. Right now, it hasn't."
+    )
+    return (
+        f"📊 <b>SUPPORT — on {html.escape(ticker)}, right now</b>\n\n"
+        f"The shaded band is {html.escape(ticker)}'s nearest support zone: around {html.escape(zone_midpoint_text(zone))}.\n"
+        f"Price is currently {html.escape(distance_text)}.\n\n"
+        "Support is where buyers have stepped in before. It's a ZONE, not a line —\n"
+        "price can wick through it and still hold.\n\n"
+        f"{arrival_text}\n\n"
+        "Honest limit: support can break. A zone holding in the past does not mean it\n"
+        "holds again."
+    )
+
+
+def live_resistance_caption(symbol, snapshot):
+    ticker = base_symbol(symbol)
+    zone = (snapshot.get("resistance_zones") or [None])[0]
+    price = snapshot.get("current_price")
+    distance_text = live_zone_distance_text(price, zone, "resistance")
+    arrival_text = "Price is inside the zone now, so the reaction matters.\n\n" if distance_text == "inside it" else ""
+    return (
+        f"📊 <b>RESISTANCE — on {html.escape(ticker)}, right now</b>\n\n"
+        f"The shaded band is {html.escape(ticker)}'s nearest resistance zone: around {html.escape(zone_midpoint_text(zone))}.\n"
+        f"Price is currently {html.escape(distance_text)}.\n\n"
+        "Resistance is where sellers have stepped in before. It's a ZONE, not a line —\n"
+        "price can wick above it and still get rejected.\n\n"
+        f"{arrival_text}"
+        "Honest limit: resistance can break. A zone holding in the past does not mean it\n"
+        "holds again."
+    )
+
+
+def live_confirmation_caption(symbol, snapshot, pending_setup=None):
+    ticker = base_symbol(symbol)
+    support_zone = (snapshot.get("support_zones") or [None])[0]
+    resistance_zone = (snapshot.get("resistance_zones") or [None])[0]
+    if pending_setup:
+        direction = pending_setup.get("direction")
+        word = "below" if direction == "breakdown" else "above"
+        level = html.escape(format_zone_price(float(pending_setup.get("level", 0))))
+        return (
+            f"📊 <b>CONFIRMATION — on {html.escape(ticker)}, right now</b>\n\n"
+            f"{html.escape(ticker)} closed {word} the {level} zone once — that candle, marked above.\n\n"
+            "That's an ATTEMPT. It is not confirmation.\n\n"
+            "Confirmation needs a SECOND consecutive daily close beyond the zone. That candle\n"
+            "hasn't closed yet.\n\n"
+            "One close is a hypothesis. Two is an answer."
+        )
+
+    return (
+        f"📊 <b>CONFIRMATION — on {html.escape(ticker)}, right now</b>\n\n"
+        f"{html.escape(ticker)} hasn't closed beyond a zone. There's nothing to confirm.\n\n"
+        f"Nearest support: around {html.escape(zone_midpoint_text(support_zone))}\n"
+        f"Nearest resistance: around {html.escape(zone_midpoint_text(resistance_zone))}\n\n"
+        "When price closes beyond one of these, that's an ATTEMPT. A SECOND consecutive\n"
+        "daily close is CONFIRMATION.\n\n"
+        "One close is a hypothesis. Two is an answer."
+    )
+
+
+def handle_live_explain_command(exchange, telegram_token, response_chat_id, symbol, concept_key, state=None, skill_level=None):
+    snapshot = build_levels_scan_snapshot(exchange, symbol)
+    chart_data = snapshot.get("chart_data") or {}
+    if concept_key == "support":
+        if not snapshot.get("support_zones"):
+            live_explain_static_fallback(
+                telegram_token,
+                response_chat_id,
+                concept_key,
+                "I couldn't find a clean current support zone for that coin, so I sent the static teaching card instead.",
+                skill_level=skill_level,
+            )
+            return True
+        chart_path = live_explain_chart_path(
+            symbol,
+            chart_data,
+            f"{symbol.replace('/', ' / ')} SUPPORT — RIGHT NOW",
+            support_label="Nearest support",
+        )
+        if send_telegram_photo(telegram_token, response_chat_id, chart_path, caption=live_support_caption(symbol, snapshot)):
+            return True
+        raise RuntimeError("support live chart send failed")
+
+    if concept_key == "resistance":
+        if not snapshot.get("resistance_zones"):
+            live_explain_static_fallback(
+                telegram_token,
+                response_chat_id,
+                concept_key,
+                "I couldn't find a clean current resistance zone for that coin, so I sent the static teaching card instead.",
+                skill_level=skill_level,
+            )
+            return True
+        chart_path = live_explain_chart_path(
+            symbol,
+            chart_data,
+            f"{symbol.replace('/', ' / ')} RESISTANCE — RIGHT NOW",
+            resistance_label="Nearest resistance",
+        )
+        if send_telegram_photo(telegram_token, response_chat_id, chart_path, caption=live_resistance_caption(symbol, snapshot)):
+            return True
+        raise RuntimeError("resistance live chart send failed")
+
+    if concept_key == "confirmation":
+        pending_setup = live_explain_pending_setup(state, symbol, snapshot.get("current_price"))
+        annotations = []
+        support_label = "Nearest support"
+        resistance_label = "Nearest resistance"
+        if pending_setup:
+            direction = pending_setup.get("direction")
+            if direction == "breakdown":
+                support_label = "Attempt zone"
+            elif direction == "breakout":
+                resistance_label = "Attempt zone"
+            if pending_setup.get("first_candle"):
+                annotations.append(
+                    {
+                        "time": pending_setup.get("first_candle"),
+                        "price": pending_setup.get("first_candle_close") or pending_setup.get("level"),
+                        "label": "First close — attempt",
+                    }
+                )
+        chart_path = live_explain_chart_path(
+            symbol,
+            chart_data,
+            f"{symbol.replace('/', ' / ')} CONFIRMATION — RIGHT NOW",
+            support_label=support_label,
+            resistance_label=resistance_label,
+            chart_annotations=annotations,
+        )
+        if send_telegram_photo(
+            telegram_token,
+            response_chat_id,
+            chart_path,
+            caption=live_confirmation_caption(symbol, snapshot, pending_setup=pending_setup),
+        ):
+            return True
+        raise RuntimeError("confirmation live chart send failed")
+
+    return False
 
 
 def handle_snapshot_look_order_callback(telegram_token, callback_query):
@@ -8525,6 +8836,14 @@ def callback_reply_markup_contains(callback_query, callback_data):
     return False
 
 
+def callback_query_has_start_orientation_keyboard(callback_query):
+    return (
+        callback_reply_markup_contains(callback_query, f"{COIN_PICK_CALLBACK_PREFIX}:snapshot:BTC")
+        and callback_reply_markup_contains(callback_query, f"{PANEL_CALLBACK_PREFIX}:open")
+        and callback_reply_markup_contains(callback_query, f"{PANEL_CALLBACK_PREFIX}:where")
+    )
+
+
 def update_watch_toggle_keyboard(telegram_token, callback_query, user_id, symbol):
     if callback_reply_markup_contains(callback_query, f"{PANEL_CALLBACK_PREFIX}:open"):
         return edit_callback_message_reply_markup(
@@ -8657,6 +8976,17 @@ def handle_onboard_callback(telegram_token, callback_query, payload, exchange=No
     chat = message.get("chat") or {}
     chat_id = str(chat.get("id") or "")
     user_id = str(((callback_query or {}).get("from") or {}).get("id") or chat_id)
+    if route == "ask":
+        if not chat_id:
+            return False
+        send_telegram_message(
+            telegram_token,
+            chat_id,
+            onboarding_question_text(),
+            reply_markup=onboarding_question_keyboard(),
+        )
+        return True
+
     route_text = onboard_route_text(route)
     route_keyboard = onboard_route_keyboard(route)
     if not chat_id or not route_text or not route_keyboard:
@@ -8730,7 +9060,8 @@ def handle_coin_pick_callback(telegram_token, callback_query, payload, exchange=
     callback_query_id = (callback_query or {}).get("id")
     if callback_query_id:
         answer_telegram_callback(telegram_token, callback_query_id)
-        clear_callback_message_keyboard(telegram_token, callback_query)
+        if not callback_query_has_start_orientation_keyboard(callback_query):
+            clear_callback_message_keyboard(telegram_token, callback_query)
 
     parts = str(payload or "").split(":", 1)
     if len(parts) != 2:
@@ -8831,7 +9162,7 @@ def handle_telegram_callback_query(exchange, telegram_token, callback_query):
     return bool(handled)
 
 
-def handle_explain_command(telegram_token, telegram_chat_id, message_text, source_chat=None, from_user=None):
+def handle_explain_command(telegram_token, telegram_chat_id, message_text, source_chat=None, from_user=None, exchange=None, state=None):
     source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
     from_user = from_user or {}
     response_chat_id = str(source_chat.get("id", telegram_chat_id))
@@ -8848,6 +9179,39 @@ def handle_explain_command(telegram_token, telegram_chat_id, message_text, sourc
     is_private = is_private_chat(source_chat)
     user_id = str(from_user.get("id") or response_chat_id if is_private else from_user.get("id") or "")
     skill_level = user_skill_level(user_id) if user_id else None
+    concept_key = live_explain_concept_key(message_text)
+    if concept_key:
+        raw_symbol = explain_command_requested_symbol(message_text)
+        symbol = validate_tradeable_symbol(exchange, raw_symbol) if exchange is not None else normalize_trade_symbol_input(raw_symbol)
+        if symbol is None:
+            send_telegram_message(
+                telegram_token,
+                response_chat_id,
+                unknown_symbol_command_message(raw_symbol, "/explain", has_picker=False),
+            )
+            return
+        try:
+            if handle_live_explain_command(
+                exchange,
+                telegram_token,
+                response_chat_id,
+                symbol,
+                concept_key,
+                state=state,
+                skill_level=skill_level,
+            ):
+                return
+        except Exception as error:
+            log_warn(f"{symbol}: /explain {concept_key} live chart unavailable: {error}")
+            live_explain_static_fallback(
+                telegram_token,
+                response_chat_id,
+                concept_key,
+                "I couldn't build the live teaching chart just now, so I sent the static teaching card instead.",
+                skill_level=skill_level,
+            )
+            return
+
     send_explain_command_response(
         telegram_token,
         response_chat_id,
@@ -9757,13 +10121,24 @@ def process_telegram_commands(
                 source_chat=chat,
             )
         elif is_explain_command(text):
-            handle_explain_command(
-                telegram_token,
-                chat_id,
-                text,
-                source_chat=chat,
-                from_user=from_user,
-            )
+            if defer_heavy_commands and should_enqueue_heavy_command(text):
+                if enqueue_telegram_command_job("explain", chat_id, text, source_chat=chat, from_user=from_user):
+                    send_heavy_job_acknowledgment(
+                        telegram_token,
+                        alert_dm_chat_id(chat, from_user, chat_id),
+                        "explain",
+                        text,
+                    )
+            else:
+                handle_explain_command(
+                    telegram_token,
+                    chat_id,
+                    text,
+                    source_chat=chat,
+                    from_user=from_user,
+                    exchange=exchange,
+                    state=state,
+                )
         elif is_whynot_command(text):
             if defer_heavy_commands and should_enqueue_heavy_command(text):
                 if enqueue_telegram_command_job("whynot", chat_id, text, source_chat=chat, from_user=from_user):

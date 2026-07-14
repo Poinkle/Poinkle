@@ -790,7 +790,7 @@ def generate_matplotlib_levels_chart(symbol, candles, current_price, supports, r
     for spine in chart_ax.spines.values():
         spine.set_visible(False)
     chart_ax.text(0.50, 0.43, "POINKLE", transform=chart_ax.transAxes, color=WHITE, fontsize=56, alpha=0.020, ha="center", va="center", fontweight="bold", zorder=0)
-    chart_ax.text(0.935, 0.280, "Prepare.\nLet price tell you.\nPatience compounds.", transform=chart_ax.transAxes, color=TEXT, fontsize=18, alpha=0.34, ha="right", va="center", zorder=6)
+    guide_ax.text(0.50, 0.030, "Prepare. Let price tell you. Patience compounds.", color=TEXT, fontsize=9.5, alpha=0.44, ha="center", va="center", fontfamily="serif", zorder=6)
 
     x0, x1 = -1, len(recent)
     draw_liquidity_band(chart_ax, current_price, x0, x1, current_price)
@@ -1043,18 +1043,17 @@ def generate_poinkle_snapshot_spec_chart(symbol, candles, current_price, support
         chart_ax.plot(ema55_x, ema55_values, color="#d1a94a", linewidth=1.10, alpha=0.58, zorder=6)
         draw_ema_label(chart_ax, ema55_x, ema55_values, "EMA 55", "#e8c76a")
 
-    # Creed on the right, outside the candle path.
+    # Creed in the lower brand margin, outside the chart geometry.
     canvas.text(
-        0.950,
-        0.330,
-        "Prepare.\nLet price tell you.\nPatience compounds.",
+        0.50,
+        0.030,
+        "Prepare. Let price tell you. Patience compounds.",
         color="#d7e7ef",
-        fontsize=27,
+        fontsize=10.2,
         fontfamily="serif",
-        alpha=0.255,
-        ha="right",
+        alpha=0.42,
+        ha="center",
         va="center",
-        linespacing=1.28,
         zorder=6,
     )
 
@@ -1131,7 +1130,7 @@ def generate_poinkle_snapshot_spec_chart(symbol, candles, current_price, support
     canvas.text(
         0.50,
         0.062,
-        "End of Snapshot  \u2022  Patience Compounds  \u2022  Ready for Next Level",
+        "End of Snapshot  \u2022  Ready for Next Level",
         color="#a9b8c5",
         fontsize=10.5,
         alpha=0.78,
@@ -1295,7 +1294,7 @@ def generate_poinkle_reference_snapshot_chart(symbol, candles, current_price, su
         chart_ax.plot(ema55_x, ema55_values, color="#d1a94a", linewidth=1.10, alpha=0.58, zorder=6)
         draw_ema_label(chart_ax, ema55_x, ema55_values, "EMA 55", "#e8c76a")
 
-    creed = canvas.text(0.950, 0.330, "Prepare.\nLet price tell you.\nPatience compounds.", color="#d8e8ef", fontsize=28, fontfamily="serif", alpha=0.30, ha="right", va="center", linespacing=1.28, zorder=6)
+    creed = canvas.text(0.50, 0.030, "Prepare. Let price tell you. Patience compounds.", color="#d8e8ef", fontsize=10.2, fontfamily="serif", alpha=0.44, ha="center", va="center", zorder=5)
     creed.set_path_effects([pe.withStroke(linewidth=2.0, foreground="#0b1c25", alpha=0.35)])
 
     def curved_arrow(start, end, rad):
@@ -1332,7 +1331,7 @@ def generate_poinkle_reference_snapshot_chart(symbol, candles, current_price, su
         if idx < 2:
             footer.plot([x_pos + 0.292, x_pos + 0.292], [0.20, 0.50], color="#2dd4f0", linewidth=1.0, alpha=0.52, zorder=3)
 
-    canvas.text(0.50, 0.062, "End of Snapshot  \u2022  Patience Compounds  \u2022  Ready for Next Level", color="#a9b8c5", fontsize=10.5, alpha=0.74, ha="center", va="center", zorder=5)
+    canvas.text(0.50, 0.062, "End of Snapshot  \u2022  Ready for Next Level", color="#a9b8c5", fontsize=10.5, alpha=0.74, ha="center", va="center", zorder=5)
 
     fd, path = tempfile.mkstemp(suffix=".png", prefix=f"{symbol.replace('/', '_')}_poinkle_reference_reset_")
     os.close(fd)
@@ -1355,6 +1354,9 @@ def generate_levels_chart(
     title=None,
     output_prefix=None,
     signal_scope=None,
+    support_label=None,
+    resistance_label=None,
+    chart_annotations=None,
 ):
     from chart_generator_reference import generate_reference_levels_chart
 
@@ -1372,4 +1374,7 @@ def generate_levels_chart(
         title=title,
         output_prefix=output_prefix,
         signal_scope=signal_scope,
+        support_label=support_label,
+        resistance_label=resistance_label,
+        chart_annotations=chart_annotations,
     )

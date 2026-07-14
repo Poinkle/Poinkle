@@ -171,6 +171,35 @@ class ScannerLogicTests(unittest.TestCase):
             spec.loader.exec_module(module)
         return module
 
+    def live_explain_snapshot(self, current_price=110):
+        candles = [
+            {
+                "time": 1_700_000_000_000 + index * scanner.TIMEFRAME_MS,
+                "open": 100 + index,
+                "high": 103 + index,
+                "low": 98 + index,
+                "close": 101 + index,
+                "volume": 1000 + index,
+            }
+            for index in range(8)
+        ]
+        return {
+            "current_price": current_price,
+            "support_zones": [(95, 100)],
+            "resistance_zones": [(120, 125)],
+            "chart_data": {
+                "candles": candles,
+                "current_price": current_price,
+                "supports": [97.5],
+                "resistances": [122.5],
+                "ema21": [105 for _ in candles],
+                "ema55": [103 for _ in candles],
+                "ema200": None,
+                "price_source": "ticker",
+                "last_updated_label": "as of 9:30 AM ET",
+            },
+        }
+
     def setUp(self):
         self.original_test_mode = scanner.TEST_MODE
         self.original_key_levels = scanner.KEY_LEVELS.copy()
@@ -4778,6 +4807,189 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("<b>RSI</b>", send_response.call_args.args[2])
         self.assertEqual(send_response.call_args.kwargs["concept_key"], "rsi")
 
+    def test_live_explain_support_coin_sends_chart_and_support_caption(self):
+        sent_photos = []
+        snapshot = self.live_explain_snapshot(current_price=110)
+
+        with patch.object(scanner, "validate_tradeable_symbol", return_value="BTC/USD") as validate_symbol, patch.object(
+            scanner, "build_levels_scan_snapshot", return_value=snapshot
+        ) as build_snapshot, patch.object(
+            scanner, "live_explain_chart_path", return_value="/tmp/btc-support.png"
+        ) as chart_path, patch.object(
+            scanner,
+            "send_telegram_photo",
+            side_effect=lambda token, chat_id, path, caption="": sent_photos.append((str(chat_id), path, caption)) or True,
+        ), patch.object(scanner, "send_explain_command_response") as static_response:
+            scanner.handle_explain_command(
+                "TOKEN",
+                "777",
+                "/explain support BTC",
+                source_chat={"id": "777", "type": "private"},
+                from_user={"id": 777},
+                exchange=object(),
+                state={},
+            )
+
+        validate_symbol.assert_called_once()
+        build_snapshot.assert_called_once()
+        chart_path.assert_called_once()
+        self.assertEqual(sent_photos[0][0:2], ("777", "/tmp/btc-support.png"))
+        self.assertIn("<b>SUPPORT — on BTC, right now</b>", sent_photos[0][2])
+        self.assertIn("nearest support zone", sent_photos[0][2])
+        self.assertIn("Honest limit", sent_photos[0][2])
+        static_response.assert_not_called()
+
+    def test_live_explain_resistance_coin_sends_chart_and_resistance_caption(self):
+        sent_photos = []
+        snapshot = self.live_explain_snapshot(current_price=110)
+
+        with patch.object(scanner, "validate_tradeable_symbol", return_value="BTC/USD"), patch.object(
+            scanner, "build_levels_scan_snapshot", return_value=snapshot
+        ), patch.object(
+            scanner, "live_explain_chart_path", return_value="/tmp/btc-resistance.png"
+        ) as chart_path, patch.object(
+            scanner,
+            "send_telegram_photo",
+            side_effect=lambda token, chat_id, path, caption="": sent_photos.append((str(chat_id), path, caption)) or True,
+        ):
+            scanner.handle_explain_command(
+                "TOKEN",
+                "777",
+                "/explain resistance BTC",
+                source_chat={"id": "777", "type": "private"},
+                from_user={"id": 777},
+                exchange=object(),
+                state={},
+            )
+
+        self.assertEqual(chart_path.call_args.kwargs["resistance_label"], "Nearest resistance")
+        self.assertEqual(sent_photos[0][0:2], ("777", "/tmp/btc-resistance.png"))
+        self.assertIn("<b>RESISTANCE — on BTC, right now</b>", sent_photos[0][2])
+        self.assertIn("nearest resistance zone", sent_photos[0][2])
+        self.assertIn("Honest limit", sent_photos[0][2])
+
+    def test_live_explain_confirmation_with_pending_setup_marks_attempt_caption(self):
+        sent_photos = []
+        snapshot = self.live_explain_snapshot(current_price=94)
+        pending_setup = {
+            "direction": "breakdown",
+            "level": 95,
+            "first_candle": snapshot["chart_data"]["candles"][3]["time"],
+            "first_candle_close": 94,
+            "expected_confirmation_candle": snapshot["chart_data"]["candles"][4]["time"],
+        }
+        state = {"BTC/USD": {"pending_setups": {"breakdown:95": pending_setup}}}
+
+        with patch.object(scanner, "validate_tradeable_symbol", return_value="BTC/USD"), patch.object(
+            scanner, "build_levels_scan_snapshot", return_value=snapshot
+        ), patch.object(
+            scanner, "live_explain_chart_path", return_value="/tmp/btc-confirmation.png"
+        ) as chart_path, patch.object(
+            scanner,
+            "send_telegram_photo",
+            side_effect=lambda token, chat_id, path, caption="": sent_photos.append((str(chat_id), path, caption)) or True,
+        ):
+            scanner.handle_explain_command(
+                "TOKEN",
+                "777",
+                "/explain confirmation BTC",
+                source_chat={"id": "777", "type": "private"},
+                from_user={"id": 777},
+                exchange=object(),
+                state=state,
+            )
+
+        self.assertEqual(chart_path.call_args.kwargs["support_label"], "Attempt zone")
+        self.assertEqual(chart_path.call_args.kwargs["chart_annotations"][0]["label"], "First close — attempt")
+        self.assertIn("BTC closed below the 95.00 zone once", sent_photos[0][2])
+        self.assertIn("That's an ATTEMPT", sent_photos[0][2])
+        self.assertIn("SECOND consecutive daily close", sent_photos[0][2])
+
+    def test_live_explain_confirmation_without_pending_setup_sends_no_setup_caption(self):
+        sent_photos = []
+        snapshot = self.live_explain_snapshot(current_price=110)
+
+        with patch.object(scanner, "validate_tradeable_symbol", return_value="BTC/USD"), patch.object(
+            scanner, "build_levels_scan_snapshot", return_value=snapshot
+        ), patch.object(
+            scanner, "live_explain_chart_path", return_value="/tmp/btc-confirmation.png"
+        ) as chart_path, patch.object(
+            scanner,
+            "send_telegram_photo",
+            side_effect=lambda token, chat_id, path, caption="": sent_photos.append((str(chat_id), path, caption)) or True,
+        ):
+            scanner.handle_explain_command(
+                "TOKEN",
+                "777",
+                "/explain confirmation BTC",
+                source_chat={"id": "777", "type": "private"},
+                from_user={"id": 777},
+                exchange=object(),
+                state={},
+            )
+
+        self.assertEqual(chart_path.call_args.kwargs["chart_annotations"], [])
+        self.assertIn("BTC hasn't closed beyond a zone", sent_photos[0][2])
+        self.assertIn("Nearest support", sent_photos[0][2])
+        self.assertIn("Nearest resistance", sent_photos[0][2])
+
+    def test_explain_rsi_with_symbol_still_uses_static_card(self):
+        with patch.object(scanner, "handle_live_explain_command", side_effect=AssertionError("RSI must stay static")), patch.object(
+            scanner, "send_explain_command_response"
+        ) as send_response:
+            scanner.handle_explain_command(
+                "TOKEN",
+                "777",
+                "/explain rsi BTC",
+                source_chat={"id": "777", "type": "private"},
+                from_user={"id": 777},
+                exchange=object(),
+                state={},
+            )
+
+        self.assertIn("<b>RSI</b>", send_response.call_args.args[2])
+        self.assertEqual(send_response.call_args.kwargs["concept_key"], "rsi")
+
+    def test_bare_explain_support_stays_static_and_does_not_fetch(self):
+        with patch.object(scanner, "build_levels_scan_snapshot", side_effect=AssertionError("bare static explain should not fetch")), patch.object(
+            scanner, "send_explain_command_response"
+        ) as send_response:
+            scanner.handle_explain_command(
+                "TOKEN",
+                "777",
+                "/explain support",
+                source_chat={"id": "777", "type": "private"},
+                from_user={"id": 777},
+                exchange=object(),
+                state={},
+            )
+
+        self.assertIn("<b>Support</b>", send_response.call_args.args[2])
+        self.assertEqual(send_response.call_args.kwargs["concept_key"], "support")
+
+    def test_live_explain_unknown_symbol_replies_instead_of_dropping(self):
+        sent_messages = []
+
+        with patch.object(scanner, "validate_tradeable_symbol", return_value=None), patch.object(
+            scanner, "handle_live_explain_command", side_effect=AssertionError("unknown symbol should not render live chart")
+        ), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
+        ):
+            scanner.handle_explain_command(
+                "TOKEN",
+                "777",
+                "/explain support NOTREAL",
+                source_chat={"id": "777", "type": "private"},
+                from_user={"id": 777},
+                exchange=object(),
+                state={},
+            )
+
+        self.assertEqual(sent_messages[0][0], "777")
+        self.assertIn("I don't have NOTREAL in my list yet", sent_messages[0][1])
+
     def test_unknown_private_command_sends_orientation_card(self):
         deleted_commands = (
             "/levels BTC",
@@ -5012,7 +5224,7 @@ class ScannerLogicTests(unittest.TestCase):
             },
         ]
 
-        def fake_handle(token, chat_id, text, source_chat=None, from_user=None):
+        def fake_handle(token, chat_id, text, source_chat=None, from_user=None, **kwargs):
             sent_messages.append((chat_id, text, source_chat, from_user))
 
         with patch.object(scanner, "get_telegram_updates", return_value=updates), patch.object(

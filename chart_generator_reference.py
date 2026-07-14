@@ -238,6 +238,9 @@ def generate_reference_levels_chart(
     title=None,
     output_prefix=None,
     signal_scope=None,
+    support_label=None,
+    resistance_label=None,
+    chart_annotations=None,
 ):
     if not candles:
         raise ValueError("No candles provided")
@@ -330,15 +333,29 @@ def generate_reference_levels_chart(
     add_ghost_watermark(chart_ax)
     chart_ax.text(0.55, 0.43, "POINKLE", transform=chart_ax.transAxes, color="#dffbff", fontsize=58, fontweight="bold", ha="center", va="center", alpha=0.035, zorder=0)
 
-    def zone(level, thickness, color, alpha, start, end):
+    def zone(level, thickness, color, alpha, start, end, label=None):
         chart_ax.add_patch(Rectangle((start, level - thickness * 0.42), end - start, thickness * 0.84, facecolor=color, edgecolor="none", alpha=alpha, zorder=1))
         chart_ax.add_patch(Rectangle((start, level - thickness * 0.64), end - start, thickness * 0.22, facecolor=color, edgecolor="none", alpha=alpha * 0.28, zorder=1))
         chart_ax.add_patch(Rectangle((start, level + thickness * 0.42), end - start, thickness * 0.22, facecolor=color, edgecolor="none", alpha=alpha * 0.28, zorder=1))
+        if label:
+            chart_ax.text(
+                end + 0.9,
+                level,
+                str(label),
+                color=color,
+                fontsize=7.0,
+                fontweight="bold",
+                ha="left",
+                va="center",
+                alpha=0.92,
+                zorder=12,
+                path_effects=[pe.withStroke(linewidth=2.2, foreground="#03101a", alpha=0.80)],
+            )
 
-    zone(resistance_level, span * 0.115, "#c7505c", 0.24, len(recent) * 0.34, len(recent) * 0.94)
+    zone(resistance_level, span * 0.115, "#c7505c", 0.24, len(recent) * 0.34, len(recent) * 0.94, resistance_label)
     mid_zone = current_price if y_min <= current_price <= y_max else (support_level + resistance_level) / 2
     zone(mid_zone, span * 0.090, "#b8ab6b", 0.080, len(recent) * 0.24, len(recent) * 0.70)
-    zone(support_level, span * 0.125, "#2c9c64", 0.22, 2, len(recent) * 0.98)
+    zone(support_level, span * 0.125, "#2c9c64", 0.22, 2, len(recent) * 0.98, support_label)
 
     liq_start, liq_end = int(len(recent) * 0.10), int(len(recent) * 0.90)
     for level in liq_levels[:4]:
@@ -354,6 +371,46 @@ def generate_reference_levels_chart(
         body_low = min(open_, close)
         body_h = abs(close - open_) or span * 0.003
         chart_ax.add_patch(Rectangle((i - 0.27, body_low), 0.54, body_h, facecolor=color, edgecolor=color, linewidth=0.22, alpha=0.93, zorder=9))
+
+    time_to_index = {candle.get("time"): index for index, candle in enumerate(recent)}
+    for annotation in chart_annotations or []:
+        candle_index = time_to_index.get(annotation.get("time"))
+        if candle_index is None:
+            continue
+        candle = recent[candle_index]
+        label = str(annotation.get("label") or "").strip()
+        if not label:
+            continue
+        y_value = float(annotation.get("price") or candle.get("close") or current_price)
+        chart_ax.scatter(
+            [candle_index],
+            [y_value],
+            s=46,
+            facecolor="#38dff2",
+            edgecolor="#03101a",
+            linewidth=1.1,
+            alpha=0.96,
+            zorder=13,
+        )
+        y_offset = span * 0.20 if y_value < (y_min + y_max) / 2 else -span * 0.20
+        chart_ax.annotate(
+            label,
+            xy=(candle_index, y_value),
+            xytext=(min(candle_index + 5, len(recent) * 0.96), y_value + y_offset),
+            color="#dffbff",
+            fontsize=7.2,
+            fontweight="bold",
+            ha="left",
+            va="center",
+            arrowprops={
+                "arrowstyle": "->",
+                "color": "#38dff2",
+                "lw": 1.0,
+                "alpha": 0.82,
+            },
+            path_effects=[pe.withStroke(linewidth=2.4, foreground="#03101a", alpha=0.82)],
+            zorder=14,
+        )
 
     if ema200_values:
         ema200_x = x[-len(ema200_values):]
@@ -383,7 +440,7 @@ def generate_reference_levels_chart(
         volume_ax.bar(i, candle_volume, width=0.62, color=color, edgecolor="none", alpha=alpha, zorder=3)
     volume_ax.text(0.010, 0.820, "VOLUME", transform=volume_ax.transAxes, color="#9fb3bf", fontsize=7.5, fontweight="bold", ha="left", va="center", alpha=0.80, zorder=4)
 
-    creed = canvas.text(0.965, 0.330, "Prepare.\nLet price tell you.\nPatience compounds.", color="#dcebf0", fontsize=26, fontfamily="serif", alpha=0.27, ha="right", va="center", linespacing=1.28, zorder=7)
+    creed = canvas.text(0.50, 0.030, "Prepare. Let price tell you. Patience compounds.", color="#dcebf0", fontsize=10.5, fontfamily="serif", alpha=0.46, ha="center", va="center", zorder=5)
     creed.set_path_effects([pe.withStroke(linewidth=2.0, foreground="#07141b", alpha=0.36)])
 
     def curved_arrow(start, end, rad):
@@ -427,7 +484,7 @@ def generate_reference_levels_chart(
         if idx < 2:
             footer.plot([x_pos + 0.292, x_pos + 0.292], [0.20, 0.50], color="#2dd4f0", linewidth=1.0, alpha=0.52, zorder=3)
 
-    canvas.text(0.50, 0.062, "End of Snapshot  \u2022  Patience Compounds  \u2022  Ready for Next Level", color="#a9b8c5", fontsize=10.7, alpha=0.75, ha="center", va="center", zorder=5)
+    canvas.text(0.50, 0.062, "End of Snapshot  \u2022  Ready for Next Level", color="#a9b8c5", fontsize=10.7, alpha=0.75, ha="center", va="center", zorder=5)
 
     prefix = output_prefix or f"{symbol.replace('/', '_')}_poinkle_reference_"
     fd, path = tempfile.mkstemp(suffix=".png", prefix=prefix)
