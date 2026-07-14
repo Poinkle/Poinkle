@@ -1,6 +1,7 @@
 import json
 import math
 import os
+import shutil
 import sys
 import time
 import html
@@ -55,6 +56,8 @@ class ScanSymbolResult(NamedTuple):
     signal_state: dict
 
 PROJECT_DIR = Path(__file__).resolve().parent
+DATA_DIR = Path(os.getenv("POINKLE_DATA_DIR", str(PROJECT_DIR)))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
@@ -304,13 +307,22 @@ TRADE_TRACK_MAX_MINUTES = 60
 TRADE_TRACKING_TELEGRAM_ENABLED = False
 SECONDARY_TIMEFRAME_BASE = "1h"
 SECONDARY_TIMEFRAME_1H_LIMIT = 480
-STATE_FILE = PROJECT_DIR / "scanner_state.json"
-DIAGNOSTICS_FILE = PROJECT_DIR / "diagnostics" / "alert_diagnostics.jsonl"
-USER_ALERTS_FILE = PROJECT_DIR / "user_alerts.json"
-USER_WATCHLISTS_FILE = PROJECT_DIR / "user_watchlists.json"
-USER_PROFILES_FILE = PROJECT_DIR / "user_profiles.json"
-CREATORS_FILE = PROJECT_DIR / "creators.json"
-BOT_CONFIG_FILE = PROJECT_DIR / "bot_config.json"
+STATE_FILE = DATA_DIR / "scanner_state.json"
+DIAGNOSTICS_FILE = DATA_DIR / "diagnostics" / "alert_diagnostics.jsonl"
+USER_ALERTS_FILE = DATA_DIR / "user_alerts.json"
+USER_WATCHLISTS_FILE = DATA_DIR / "user_watchlists.json"
+USER_PROFILES_FILE = DATA_DIR / "user_profiles.json"
+CREATORS_FILE = DATA_DIR / "creators.json"
+BOT_CONFIG_FILE = DATA_DIR / "bot_config.json"
+RUNTIME_DATA_FILES = (
+    ("scanner state", "scanner_state.json"),
+    ("user alerts", "user_alerts.json"),
+    ("user watchlists", "user_watchlists.json"),
+    ("user profiles", "user_profiles.json"),
+    ("creators", "creators.json"),
+    ("bot config", "bot_config.json"),
+    ("alert diagnostics", "diagnostics/alert_diagnostics.jsonl"),
+)
 ERROR_COOLDOWN_SECONDS = 300
 ALERT_COOLDOWN_SECONDS = 3600
 SCAN_ALERT_COOLDOWN_SECONDS = 86400
@@ -448,6 +460,26 @@ def log_warn(message):
 
 def log_error(message):
     print(f"[ERROR] {message}")
+
+
+def migrate_runtime_data_files():
+    if DATA_DIR.resolve() == PROJECT_DIR.resolve():
+        return []
+
+    copied = []
+    for label, relative_path in RUNTIME_DATA_FILES:
+        source_path = PROJECT_DIR / relative_path
+        destination_path = DATA_DIR / relative_path
+        if destination_path.exists() or not source_path.exists():
+            continue
+        try:
+            destination_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source_path, destination_path)
+            copied.append(str(destination_path))
+            log_info(f"Seeded {label} data file: {source_path} -> {destination_path}")
+        except Exception as error:
+            log_warn(f"Could not seed {label} data file from {source_path} to {destination_path}: {error}")
+    return copied
 
 
 def throttled_log_warn(symbol, error_key, message):
@@ -11450,6 +11482,8 @@ def main():
         raise SystemExit(
             "Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID. Add them to your .env file."
         )
+
+    migrate_runtime_data_files()
 
     try:
         ensure_diagnostics_dir()

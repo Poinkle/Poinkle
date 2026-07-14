@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import os
 import re
 import tempfile
 import unittest
@@ -161,6 +162,15 @@ class FakeExchange:
 
 
 class ScannerLogicTests(unittest.TestCase):
+    def load_scanner_with_data_dir(self, data_dir=None):
+        env = {} if data_dir is None else {"POINKLE_DATA_DIR": str(data_dir)}
+        with patch.dict(os.environ, env, clear=True):
+            module_name = f"crypto_alert_scanner_data_dir_test_{id(data_dir)}"
+            spec = importlib.util.spec_from_file_location(module_name, SCANNER_PATH)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+        return module
+
     def setUp(self):
         self.original_test_mode = scanner.TEST_MODE
         self.original_key_levels = scanner.KEY_LEVELS.copy()
@@ -1611,6 +1621,66 @@ class ScannerLogicTests(unittest.TestCase):
             ],
         )
         self.assertEqual(sorted(kwargs["files"].keys()), ["photo0", "photo1"])
+
+    def test_runtime_data_paths_default_to_project_dir_when_env_unset(self):
+        module = self.load_scanner_with_data_dir()
+
+        self.assertEqual(module.DATA_DIR, module.PROJECT_DIR)
+        self.assertEqual(module.STATE_FILE, module.PROJECT_DIR / "scanner_state.json")
+        self.assertEqual(module.USER_ALERTS_FILE, module.PROJECT_DIR / "user_alerts.json")
+        self.assertEqual(module.USER_WATCHLISTS_FILE, module.PROJECT_DIR / "user_watchlists.json")
+        self.assertEqual(module.USER_PROFILES_FILE, module.PROJECT_DIR / "user_profiles.json")
+        self.assertEqual(module.CREATORS_FILE, module.PROJECT_DIR / "creators.json")
+        self.assertEqual(module.BOT_CONFIG_FILE, module.PROJECT_DIR / "bot_config.json")
+        self.assertEqual(module.DIAGNOSTICS_FILE, module.PROJECT_DIR / "diagnostics" / "alert_diagnostics.jsonl")
+
+    def test_runtime_data_paths_follow_configured_data_dir(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir) / "poinkle-data"
+            module = self.load_scanner_with_data_dir(data_dir)
+
+            self.assertEqual(module.DATA_DIR, data_dir)
+            self.assertTrue(data_dir.exists())
+            self.assertEqual(module.STATE_FILE, data_dir / "scanner_state.json")
+            self.assertEqual(module.USER_ALERTS_FILE, data_dir / "user_alerts.json")
+            self.assertEqual(module.USER_WATCHLISTS_FILE, data_dir / "user_watchlists.json")
+            self.assertEqual(module.USER_PROFILES_FILE, data_dir / "user_profiles.json")
+            self.assertEqual(module.CREATORS_FILE, data_dir / "creators.json")
+            self.assertEqual(module.BOT_CONFIG_FILE, data_dir / "bot_config.json")
+            self.assertEqual(module.DIAGNOSTICS_FILE, data_dir / "diagnostics" / "alert_diagnostics.jsonl")
+
+    def test_runtime_data_migration_copies_project_file_when_data_dir_empty(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_dir = Path(tmpdir) / "project"
+            data_dir = Path(tmpdir) / "data"
+            project_dir.mkdir()
+            data_dir.mkdir()
+            (project_dir / "creators.json").write_text('{"mike_knows": {}}')
+
+            with patch.object(scanner, "PROJECT_DIR", project_dir), patch.object(
+                scanner, "DATA_DIR", data_dir
+            ), patch.object(scanner, "RUNTIME_DATA_FILES", (("creators", "creators.json"),)):
+                copied = scanner.migrate_runtime_data_files()
+
+            self.assertEqual(copied, [str(data_dir / "creators.json")])
+            self.assertEqual((data_dir / "creators.json").read_text(), '{"mike_knows": {}}')
+
+    def test_runtime_data_migration_does_not_overwrite_existing_data_file(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_dir = Path(tmpdir) / "project"
+            data_dir = Path(tmpdir) / "data"
+            project_dir.mkdir()
+            data_dir.mkdir()
+            (project_dir / "creators.json").write_text('{"project": true}')
+            (data_dir / "creators.json").write_text('{"data": true}')
+
+            with patch.object(scanner, "PROJECT_DIR", project_dir), patch.object(
+                scanner, "DATA_DIR", data_dir
+            ), patch.object(scanner, "RUNTIME_DATA_FILES", (("creators", "creators.json"),)):
+                copied = scanner.migrate_runtime_data_files()
+
+            self.assertEqual(copied, [])
+            self.assertEqual((data_dir / "creators.json").read_text(), '{"data": true}')
 
     def test_register_bot_commands_posts_public_command_list(self):
         posted = []

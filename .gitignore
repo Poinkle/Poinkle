@@ -3,16 +3,14 @@ __pycache__/
 *.pyc
 .env
 TELEGRAM_BOT_TOKEN=
+
+# Runtime state lives in POINKLE_DATA_DIR on deployed workers.
 scanner_state.json
 user_alerts.json
+user_watchlists.json
+user_profiles.json
+creators.json
+bot_config.json
+diagnostics/*.jsonl
 snapshots/
-
-scanner_state.json
-
-diagnostics/*.jsonl
-
-diagnostics/*.jsonl
-.env
-.DS_Store
-.env
 .DS_Store
