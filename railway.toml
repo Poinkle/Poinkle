@@ -1,0 +1,2 @@
+[deploy]
+startCommand = "python crypto_alert_scanner.py"
