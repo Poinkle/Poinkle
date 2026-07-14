@@ -113,6 +113,60 @@ EXPLANATION_REGISTRY = {
             "confluence is noise control, not probability."
         ),
     },
+    "dominance": {
+        "beginner": (
+            "<b>WHAT IT IS</b>\n"
+            "Dominance = one coin's market cap divided by the total crypto market "
+            "cap, as a percent. BTC.D is Bitcoin's share. USDT.D is Tether's share.\n\n"
+            "<b>THE PART MOST PEOPLE MISS</b>\n"
+            "It is a RATIO — one number built from two moving parts. It can rise "
+            "two ways: Bitcoin's share grew, or everything else shrank around it. "
+            "BTC.D rising can "
+            "mean Bitcoin gained — or it can mean everything else fell harder. Same "
+            "number. Different picture. The number alone cannot tell you which. The "
+            "charts can.\n\n"
+            "<b>WHAT USDT.D IS ACTUALLY SHOWING</b>\n"
+            "Tether is a stablecoin — it does not move with the market. Its share of "
+            "the pie grows when money sits in it instead of in coins. Rising USDT.D "
+            "= more capital parked, not deployed. Falling USDT.D = capital leaving "
+            "the sidelines. It is a measure of WHERE MONEY IS SITTING, not a forecast.\n\n"
+            "<b>HONEST LIMITS</b>\n"
+            "- Dominance describes the market's shape right now. It does not predict "
+            "the next move.\n"
+            "- A single day's reading is noise. Structure on any chart needs "
+            "confirmation before it means anything — one close is an attempt, two "
+            "is confirmation. The same discipline applies here.\n"
+            "- Poinkle currently shows you the CURRENT number only, not its trend. "
+            "Reading dominance properly means reading its chart over time — go look "
+            "at it yourself."
+        ),
+        "experienced": (
+            "<b>WHAT IT IS</b>\n"
+            "Dominance = one coin's market cap divided by the total crypto market "
+            "cap, as a percent. BTC.D is Bitcoin's share. USDT.D is Tether's share.\n\n"
+            "<b>THE PART MOST PEOPLE MISS</b>\n"
+            "It is a RATIO — one number built from two moving parts. It can rise "
+            "two ways: Bitcoin's share grew, or everything else shrank around it. "
+            "BTC.D rising can "
+            "mean Bitcoin gained — or it can mean everything else fell harder. Same "
+            "number. Different picture. The number alone cannot tell you which. The "
+            "charts can.\n\n"
+            "<b>WHAT USDT.D IS ACTUALLY SHOWING</b>\n"
+            "Tether is a stablecoin — it does not move with the market. Its share of "
+            "the pie grows when money sits in it instead of in coins. Rising USDT.D "
+            "= more capital parked, not deployed. Falling USDT.D = capital leaving "
+            "the sidelines. It is a measure of WHERE MONEY IS SITTING, not a forecast.\n\n"
+            "<b>HONEST LIMITS</b>\n"
+            "- Dominance describes the market's shape right now. It does not predict "
+            "the next move.\n"
+            "- A single day's reading is noise. Structure on any chart needs "
+            "confirmation before it means anything — one close is an attempt, two "
+            "is confirmation. The same discipline applies here.\n"
+            "- Poinkle currently shows you the CURRENT number only, not its trend. "
+            "Reading dominance properly means reading its chart over time — go look "
+            "at it yourself."
+        ),
+    },
     "trend": {
         "beginner": (
             "The overall direction the price is moving — like the flow of a river. It "
@@ -354,6 +408,18 @@ EXPLANATION_ALIASES = {
     "breakdown": "breakdown",
     "break down": "breakdown",
     "confluence": "confluence",
+    "dominance": "dominance",
+    "btc.d": "dominance",
+    "btcd": "dominance",
+    "btc dominance": "dominance",
+    "bitcoin dominance": "dominance",
+    "usdt.d": "dominance",
+    "usdtd": "dominance",
+    "usdt dominance": "dominance",
+    "tether dominance": "dominance",
+    "market dominance": "dominance",
+    "alt season": "dominance",
+    "altseason": "dominance",
     "trend": "trend",
     "market trend": "trend",
     "confirmation": "confirmation",
@@ -425,6 +491,7 @@ CONCEPT_DISPLAY_NAMES = {
     "breakout": "Breakout",
     "breakdown": "Breakdown",
     "confluence": "Confluence",
+    "dominance": "Dominance",
     "trend": "Trend",
     "confirmation": "Confirmation",
     "candle": "Candle",

@@ -32,6 +32,30 @@ class FakeTelegramSession:
         return FakeTelegramResponse()
 
 
+class FakeCoingeckoResponse:
+    status_code = 200
+    text = "OK"
+
+    def __init__(self, payload):
+        self.payload = payload
+
+    def json(self):
+        return self.payload
+
+    def raise_for_status(self):
+        return None
+
+
+class FakeCoingeckoSession:
+    def __init__(self, payload):
+        self.payload = payload
+        self.gets = []
+
+    def get(self, url, **kwargs):
+        self.gets.append((url, kwargs))
+        return FakeCoingeckoResponse(self.payload)
+
+
 def candle(timestamp, open_price, high, low, close, volume):
     return [timestamp, open_price, high, low, close, volume]
 
@@ -4635,6 +4659,116 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(scanner.normalize_concept_key("zone"), "key_level")
         self.assertEqual(scanner.normalize_concept_key("illiquid"), "liquidity")
 
+    def test_dominance_explanation_aliases_resolve(self):
+        aliases = (
+            "dominance",
+            "btc.d",
+            "btcd",
+            "btc dominance",
+            "bitcoin dominance",
+            "usdt.d",
+            "usdtd",
+            "usdt dominance",
+            "tether dominance",
+            "market dominance",
+            "alt season",
+            "altseason",
+        )
+
+        for alias in aliases:
+            with self.subTest(alias=alias):
+                self.assertEqual(scanner.normalize_concept_key(alias), "dominance")
+
+    def test_explain_dominance_returns_card_for_aliases(self):
+        aliases = ("dominance", "btc.d", "btc dominance", "usdt.d", "altseason")
+
+        with patch.object(scanner, "fetch_coingecko_global_data", return_value=None):
+            for alias in aliases:
+                with self.subTest(alias=alias):
+                    message = scanner.build_explain_command_message(f"/explain {alias}")
+                    self.assertIn("<b>Dominance</b>", message)
+                    self.assertIn("<b>WHAT IT IS</b>", message)
+                    self.assertIn("<b>HONEST LIMITS</b>", message)
+
+    def test_dominance_card_avoids_banned_language(self):
+        with patch.object(scanner, "fetch_coingecko_global_data", return_value=None):
+            message = scanner.build_explain_command_message("/explain dominance").lower()
+
+        banned_phrases = (
+            "will",
+            "expect",
+            "likely",
+            "means alts",
+            "alt season is",
+            "rotate",
+            "rotation into",
+            "next leg",
+            "signals that",
+            "indicates that",
+            "bullish",
+            "bearish",
+            "top",
+            "bottom",
+        )
+        for banned_phrase in banned_phrases:
+            with self.subTest(banned_phrase=banned_phrase):
+                self.assertNotIn(banned_phrase, message)
+        for banned_word in ("buy", "sell"):
+            with self.subTest(banned_word=banned_word):
+                self.assertIsNone(re.search(rf"\b{banned_word}\b", message))
+
+    def test_dominance_live_block_renders_when_global_data_available(self):
+        with patch.object(
+            scanner,
+            "fetch_coingecko_global_data",
+            return_value={"btc_dominance": 62.345, "eth_dominance": 9.87, "usdt_dominance": 4.321},
+        ):
+            message = scanner.build_explain_command_message("/explain dominance")
+
+        self.assertIn("<b>RIGHT NOW</b>", message)
+        self.assertIn("BTC.D: 62.3%", message)
+        self.assertIn("ETH.D: 9.9%", message)
+        self.assertIn("USDT.D: 4.32%", message)
+
+    def test_dominance_live_block_absent_when_global_data_missing(self):
+        with patch.object(scanner, "fetch_coingecko_global_data", return_value=None):
+            message = scanner.build_explain_command_message("/explain dominance")
+
+        self.assertNotIn("<b>RIGHT NOW</b>", message)
+        self.assertNotIn("0.0%", message)
+        self.assertIn("<b>Dominance</b>", message)
+
+    def test_coingecko_global_data_cache_uses_one_http_request_inside_ttl(self):
+        payload = {
+            "data": {
+                "market_cap_percentage": {
+                    "btc": 62.3,
+                    "eth": 9.8,
+                    "usdt": 4.2,
+                }
+            }
+        }
+        fake_session = FakeCoingeckoSession(payload)
+
+        scanner.COINGECKO_GLOBAL_DATA_CACHE.clear()
+        with patch.dict(os.environ, {"COINGECKO_API_KEY": "demo-key"}), patch.object(
+            scanner, "requests", object()
+        ), patch.object(scanner, "TELEGRAM_HTTP_SESSION", fake_session):
+            first = scanner.fetch_coingecko_global_data()
+            second = scanner.fetch_coingecko_global_data()
+        scanner.COINGECKO_GLOBAL_DATA_CACHE.clear()
+
+        self.assertEqual(first, second)
+        self.assertEqual(first["btc_dominance"], 62.3)
+        self.assertEqual(len(fake_session.gets), 1)
+        self.assertTrue(fake_session.gets[0][0].endswith("/global"))
+        self.assertEqual(fake_session.gets[0][1]["headers"], {"x-cg-demo-api-key": "demo-key"})
+
+    def test_explain_dominance_uses_heavy_job_queue_without_live_chart_route(self):
+        self.assertFalse(scanner.is_live_explain_command("/explain dominance"))
+        self.assertEqual(scanner.heavy_command_action_for_text("/explain dominance"), "explain")
+        self.assertTrue(scanner.should_enqueue_heavy_command("/explain dominance"))
+
     def test_stage_three_explanation_concepts_resolve_for_beginner_and_experienced(self):
         expected_phrases = {
             "market_structure": ("overall shape of how price rises and falls", "sequence of swing highs/lows"),
@@ -4834,10 +4968,10 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(sent_messages[0][0], "777")
         self.assertIn("What do you want to understand?", sent_messages[0][1])
         rows = sent_messages[0][2]["inline_keyboard"]
-        self.assertEqual(len(rows), 6)
-        self.assertEqual([len(row) for row in rows], [1, 1, 1, 1, 1, 1])
+        self.assertEqual(len(rows), 7)
+        self.assertEqual([len(row) for row in rows], [1, 1, 1, 1, 1, 1, 1])
         self.assertEqual(rows[0][0]["callback_data"], "xgroup:0")
-        self.assertEqual(rows[-2][0]["callback_data"], "xgroup:4")
+        self.assertEqual(rows[-2][0]["callback_data"], "xgroup:5")
         self.assertEqual(rows[-1][0]["callback_data"], "panel:open")
 
     def test_explain_group_callback_sends_concepts_three_per_row(self):
@@ -4885,6 +5019,30 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(send_response.call_args.args[0:2], ("TOKEN", "777"))
         self.assertIn("<b>Volume Spike</b>", send_response.call_args.args[2])
         self.assertEqual(send_response.call_args.kwargs["concept_key"], "volume_spike")
+
+    def test_explain_dominance_callback_queues_heavy_job(self):
+        callback_query = {
+            "id": "callback-1",
+            "message": {"chat": {"id": "777"}, "message_id": 44},
+            "from": {"id": 777},
+        }
+
+        scanner.TELEGRAM_COMMAND_JOB_QUEUE.clear()
+        with patch.object(scanner, "answer_telegram_callback") as answer_callback, patch.object(
+            scanner, "send_heavy_job_acknowledgment"
+        ) as ack_job, patch.object(scanner, "send_explain_command_response") as send_response, patch.object(
+            scanner, "clear_callback_message_keyboard"
+        ) as clear_keyboard:
+            handled = scanner.handle_explain_concept_callback("TOKEN", callback_query, "dominance")
+        queued_job = scanner.TELEGRAM_COMMAND_JOB_QUEUE.popleft()
+
+        self.assertTrue(handled)
+        answer_callback.assert_called_once_with("TOKEN", "callback-1")
+        clear_keyboard.assert_called_once_with("TOKEN", callback_query)
+        self.assertEqual(queued_job["action"], "explain")
+        self.assertEqual(queued_job["message_text"], "/explain dominance")
+        ack_job.assert_called_once_with("TOKEN", "777", "explain", "/explain dominance")
+        send_response.assert_not_called()
 
     def test_same_picker_button_double_tap_sends_once_and_acks_second_tap(self):
         state = {}
@@ -5135,7 +5293,7 @@ class ScannerLogicTests(unittest.TestCase):
             for concept_key in concept_keys
         ]
 
-        self.assertEqual(len(scanner.available_concepts()), 21)
+        self.assertEqual(len(scanner.available_concepts()), 22)
         self.assertNotIn("trade_plan", scanner.available_concepts())
         self.assertNotIn("market_score", scanner.available_concepts())
         self.assertNotIn("trade_plan", grouped_keys)
@@ -5145,9 +5303,10 @@ class ScannerLogicTests(unittest.TestCase):
         for concept_key in scanner.available_concepts():
             for skill_level in ("beginner", "experienced"):
                 with self.subTest(concept_key=concept_key, skill_level=skill_level):
-                    self.assertIn(
-                        "Honest limit",
-                        scanner.explain_concept(concept_key, skill_level),
+                    explanation = scanner.explain_concept(concept_key, skill_level)
+                    self.assertTrue(
+                        "Honest limit" in explanation or "HONEST LIMITS" in explanation,
+                        explanation,
                     )
 
     def test_indicator_explanations_do_not_imply_they_trigger_alerts(self):

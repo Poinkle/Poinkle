@@ -38,6 +38,7 @@ LAST_RESEARCH_CARD_DATA = {}
 TELEGRAM_COMMAND_JOB_QUEUE = deque()
 TELEGRAM_HTTP_SESSION = None
 COINGECKO_COIN_METADATA_CACHE = {}
+COINGECKO_GLOBAL_DATA_CACHE = {}
 
 
 class ScanSymbolResult(NamedTuple):
@@ -117,6 +118,7 @@ SYMBOL_ALIASES = {
 }
 COINGECKO_DEMO_API_BASE_URL = "https://api.coingecko.com/api/v3"
 COINGECKO_COIN_METADATA_TTL_SECONDS = 6 * 60 * 60
+COINGECKO_GLOBAL_CACHE_TTL_SECONDS = 30 * 60
 COINGECKO_COIN_IDS = {
     "BTC": "bitcoin",
     "ETH": "ethereum",
@@ -1708,6 +1710,8 @@ def heavy_command_action_for_text(message_text):
         return "whynot"
     if is_whatnow_command(message_text):
         return "whatnow"
+    if is_explain_command(message_text) and normalize_concept_key(explain_command_requested_concept(message_text)) == "dominance":
+        return "explain"
     if is_explain_command(message_text) and is_live_explain_command(message_text):
         return "explain"
     return ""
@@ -5509,6 +5513,7 @@ CONCEPT_GROUPS = (
     ("📊 Price & Structure", ("candle", "support", "resistance", "range", "key_level", "trend", "market_structure")),
     ("⚡ The Event", ("breakout", "breakdown", "confirmation", "retest", "follow_through")),
     ("📈 The Indicators", ("rsi", "ema", "volume_spike", "confluence", "liquidity")),
+    ("🌐 Market Context", ("dominance",)),
     ("🎯 Your Plan", ("accumulation", "patience_grade")),
     ("🔢 Poinkle's Labels", ("setup_quality", "break_strength_score")),
 )
@@ -6793,6 +6798,72 @@ def cached_coingecko_coin_metadata(coin_id):
 
 def store_coingecko_coin_metadata(coin_id, data):
     COINGECKO_COIN_METADATA_CACHE[coingecko_metadata_cache_key(coin_id)] = (time.time(), data)
+
+
+def cached_coingecko_global_data():
+    cached = COINGECKO_GLOBAL_DATA_CACHE.get("global")
+    if not cached:
+        return None
+    fetched_at, data = cached
+    if time.time() - fetched_at > COINGECKO_GLOBAL_CACHE_TTL_SECONDS:
+        COINGECKO_GLOBAL_DATA_CACHE.pop("global", None)
+        return None
+    return data
+
+
+def store_coingecko_global_data(data):
+    COINGECKO_GLOBAL_DATA_CACHE["global"] = (time.time(), data)
+
+
+def extract_coingecko_global_data(payload):
+    data = (payload or {}).get("data") or {}
+    market_cap_percentage = data.get("market_cap_percentage") or {}
+    return {
+        "btc_dominance": numeric_market_value(market_cap_percentage.get("btc")),
+        "eth_dominance": numeric_market_value(market_cap_percentage.get("eth")),
+        "usdt_dominance": numeric_market_value(market_cap_percentage.get("usdt")),
+    }
+
+
+def fetch_coingecko_global_data():
+    cached = cached_coingecko_global_data()
+    if cached is not None:
+        return cached
+
+    api_key = coingecko_api_key()
+    if not api_key:
+        throttled_log_warn(
+            "coingecko-global",
+            "coingecko:global-missing-key",
+            "CoinGecko global data unavailable; missing COINGECKO_API_KEY.",
+        )
+        return None
+
+    if requests is None:
+        throttled_log_warn(
+            "coingecko-global",
+            "coingecko:global-requests-unavailable",
+            "CoinGecko global data unavailable; requests is not installed.",
+        )
+        return None
+
+    try:
+        response = telegram_http_session().get(
+            f"{COINGECKO_DEMO_API_BASE_URL}/global",
+            headers={"x-cg-demo-api-key": api_key},
+            timeout=10,
+        )
+        response.raise_for_status()
+        data = extract_coingecko_global_data(response.json())
+        store_coingecko_global_data(data)
+        return data
+    except Exception as error:
+        throttled_log_warn(
+            "coingecko-global",
+            "coingecko:global",
+            f"CoinGecko global data unavailable. Dominance card will omit live numbers. {error}",
+        )
+        return None
 
 
 def clean_coingecko_description(description, max_length=280):
@@ -8343,6 +8414,30 @@ def is_live_explain_command(message_text):
     return bool(live_explain_concept_key(message_text))
 
 
+def format_dominance_percent(value, decimals=1):
+    value = numeric_market_value(value)
+    if value is None:
+        return ""
+    return f"{value:.{decimals}f}%"
+
+
+def dominance_live_block():
+    data = fetch_coingecko_global_data()
+    if not data:
+        return ""
+
+    btc = format_dominance_percent(data.get("btc_dominance"), decimals=1)
+    eth = format_dominance_percent(data.get("eth_dominance"), decimals=1)
+    usdt = format_dominance_percent(data.get("usdt_dominance"), decimals=2)
+    if not btc or not eth or not usdt:
+        return ""
+
+    return (
+        "\n\n<b>RIGHT NOW</b>\n"
+        f"BTC.D: {btc}   ETH.D: {eth}   USDT.D: {usdt}"
+    )
+
+
 def build_explain_command_message(message_text, skill_level=None):
     concept = explain_command_requested_concept(message_text)
     if not concept:
@@ -8353,7 +8448,8 @@ def build_explain_command_message(message_text, skill_level=None):
         return unknown_concept_text()
 
     resolved_key = normalize_concept_key(concept) or concept.lower()
-    return f"<b>{concept_display_name(resolved_key)}</b>\n\n{explanation}"
+    live_block = dominance_live_block() if resolved_key == "dominance" else ""
+    return f"<b>{concept_display_name(resolved_key)}</b>\n\n{explanation}{live_block}"
 
 
 def explain_command_concept_key(message_text):
@@ -8715,6 +8811,16 @@ def handle_explain_concept_callback(telegram_token, callback_query, payload, exc
 
     user_id = str(((callback_query or {}).get("from") or {}).get("id") or "")
     skill_level = user_skill_level(user_id) if user_id else None
+    if concept_key == "dominance":
+        if enqueue_telegram_command_job("explain", chat_id, f"/explain {concept_key}", source_chat=chat, from_user=(callback_query or {}).get("from")):
+            send_heavy_job_acknowledgment(
+                telegram_token,
+                chat_id,
+                "explain",
+                f"/explain {concept_key}",
+            )
+        return True
+
     send_explain_command_response(
         telegram_token,
         chat_id,
