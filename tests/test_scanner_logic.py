@@ -1251,6 +1251,60 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("Nearest support: around 95.00 (5.0% below)", message)
         self.assertIn("Price isn't at a zone. There's nothing to confirm yet.", message)
 
+    def test_whatnow_opens_with_refusal(self):
+        with patch.object(scanner, "scan_symbol", return_value=self.whynot_scan_result()):
+            message = scanner.build_whatnow_command_message(object(), "BTC/USD", state={})
+
+        self.assertTrue(message.startswith("<b>I can't make that decision for you.</b>"))
+
+    def test_whatnow_card_avoids_action_language(self):
+        with patch.object(scanner, "scan_symbol", return_value=self.whynot_scan_result()):
+            message = scanner.build_whatnow_command_message(object(), "BTC/USD", state={})
+
+        for forbidden_word in ("buy", "sell", "enter", "exit", "long", "short", "target"):
+            self.assertNotRegex(message.lower(), rf"\b{forbidden_word}\b")
+
+    def test_whatnow_shows_nearest_zones_with_distances(self):
+        with patch.object(scanner, "scan_symbol", return_value=self.whynot_scan_result()):
+            message = scanner.build_whatnow_command_message(object(), "BTC/USD", state={})
+
+        self.assertIn("Nearest support: 95.00  (5.0% below)", message)
+        self.assertIn("Nearest resistance: 110.00  (10.0% above)", message)
+        self.assertNotIn("95.00 - 95.00", message)
+        self.assertNotIn("110.00 - 110.00", message)
+
+    def test_whatnow_names_two_close_rule_and_honest_limit(self):
+        with patch.object(scanner, "scan_symbol", return_value=self.whynot_scan_result()):
+            message = scanner.build_whatnow_command_message(object(), "BTC/USD", state={})
+
+        self.assertIn("Two consecutive daily closes below 95.00 - or above 110.00.", message)
+        self.assertIn("One close is an attempt; two is confirmation.", message)
+        self.assertTrue(
+            message.endswith(
+                "Honest limit: zones break. Confirmation can fail. This describes right now, not what comes next."
+            )
+        )
+
+    def test_whatnow_renders_pending_setup_when_present(self):
+        state = {
+            "BTC/USD": {
+                "pending_setups": {
+                    "live:breakdown:95.0": {
+                        "level": 95.0,
+                        "direction": "breakdown",
+                    }
+                }
+            }
+        }
+
+        with patch.object(scanner, "scan_symbol", return_value=self.whynot_scan_result()):
+            message = scanner.build_whatnow_command_message(object(), "BTC/USD", state=state)
+
+        self.assertIn(
+            "<b>BTC closed below the 95.00 zone once. That's an attempt, not confirmation.</b>",
+            message,
+        )
+
     def test_whynot_still_renders_rsi_extreme_reading(self):
         signal_state = self.whynot_scan_result().signal_state.copy()
         signal_state["scorecard"] = [
@@ -2785,6 +2839,7 @@ class ScannerLogicTests(unittest.TestCase):
             "help",
             "verify",
             "explain",
+            "whatnow",
             "snapshot",
             "research",
             "whynot",
@@ -3387,6 +3442,7 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(
             labels,
             [
+                "🤷 Should I buy or sell?",
                 "🌱 I'm new — where should I start?",
                 "📍 Where is this coin right now?",
                 "🤔 Why isn't it alerting?",
@@ -3401,6 +3457,7 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(
             callbacks,
             [
+                "panel:whatnow",
                 "onboard:ask",
                 "panel:where",
                 "panel:whynot",
@@ -3454,6 +3511,7 @@ class ScannerLogicTests(unittest.TestCase):
             scanner.target_coin_picker_keyboard("snapshot", user_id="777"),
             scanner.target_coin_picker_keyboard("research", user_id="777"),
             scanner.target_coin_picker_keyboard("whynot", user_id="777"),
+            scanner.target_coin_picker_keyboard("whatnow", user_id="777"),
         ]
 
         labels = [
@@ -3501,7 +3559,13 @@ class ScannerLogicTests(unittest.TestCase):
                 if other_name != handler_name:
                     handler.assert_not_called()
 
-        for payload, expected_target in (("where", "snapshot"), ("whynot", "whynot"), ("watch", "watch"), ("research", "research")):
+        for payload, expected_target in (
+            ("whatnow", "whatnow"),
+            ("where", "snapshot"),
+            ("whynot", "whynot"),
+            ("watch", "watch"),
+            ("research", "research"),
+        ):
             sent_messages = []
             with self.subTest(payload=payload), patch.object(scanner, "answer_telegram_callback"), patch.object(
                 scanner, "clear_callback_message_keyboard"
@@ -3838,6 +3902,29 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(sent_messages[0][1], scanner.target_coin_picker_text("whynot"))
         self.assertEqual(sent_messages[0][2], scanner.target_coin_picker_keyboard("whynot", user_id="777"))
 
+    def test_bare_whatnow_opens_coin_picker(self):
+        sent_messages = []
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            scanner, "USER_WATCHLISTS_FILE", Path(tmpdir) / "missing_user_watchlists.json"
+        ), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                (str(chat_id), text, reply_markup)
+            ),
+        ):
+            scanner.handle_whatnow_command(
+                object(),
+                "TOKEN",
+                "777",
+                "/whatnow",
+                source_chat={"id": "777", "type": "private"},
+                from_user={"id": 777},
+            )
+
+        self.assertEqual(sent_messages[0][1], scanner.target_coin_picker_text("whatnow"))
+        self.assertEqual(sent_messages[0][2], scanner.target_coin_picker_keyboard("whatnow", user_id="777"))
+
     def test_bare_unwatch_opens_toggle_picker(self):
         sent_messages = []
         with tempfile.TemporaryDirectory() as tmpdir, patch.object(
@@ -3886,6 +3973,14 @@ class ScannerLogicTests(unittest.TestCase):
                 source_chat={"id": "777", "type": "private"},
                 from_user={"id": 777},
             ),
+            lambda: scanner.handle_whatnow_command(
+                object(),
+                "TOKEN",
+                "777",
+                "/whatnow",
+                source_chat={"id": "777", "type": "private"},
+                from_user={"id": 777},
+            ),
             lambda: scanner.handle_unwatch_command(
                 "TOKEN",
                 "777",
@@ -3927,6 +4022,7 @@ class ScannerLogicTests(unittest.TestCase):
 
         for target, action, command in (
             ("whynot", "whynot", "/whynot BTC"),
+            ("whatnow", "whatnow", "/whatnow BTC"),
             ("research", "research", "/research BTC"),
             ("snapshot", "snapshot", "/snapshot BTC"),
         ):

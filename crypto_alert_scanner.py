@@ -287,7 +287,7 @@ TELEGRAM_JOB_LIGHT = "light"
 TELEGRAM_JOB_HEAVY = "heavy"
 TELEGRAM_LIGHT_JOB_ESTIMATE_SECONDS = 1.0
 LIVE_EXPLAIN_CONCEPTS = {"support", "resistance", "confirmation"}
-HEAVY_TELEGRAM_JOB_ACTIONS = {"snapshot", "research", "whynot", "explain"}
+HEAVY_TELEGRAM_JOB_ACTIONS = {"snapshot", "research", "whynot", "whatnow", "explain"}
 ALERT_SEVERITY_PREFERENCE_KEY = "alert_severity_min"
 ALERT_SEVERITY_DEVELOPING = "developing"
 ALERT_SEVERITY_BUILDING = "building"
@@ -361,6 +361,7 @@ PUBLIC_BOT_COMMANDS = [
     {"command": "snapshot", "description": "Full visual chart and breakdown"},
     {"command": "research", "description": "Deeper multi-card research brief"},
     {"command": "whynot", "description": "See why a coin is waiting"},
+    {"command": "whatnow", "description": "Turn the big question into a chart read"},
     {"command": "alerts", "description": "Set a personal price-zone alert"},
     {"command": "alertlevel", "description": "Choose personal alert noise level"},
     {"command": "myalerts", "description": "View your active alerts"},
@@ -1705,6 +1706,8 @@ def heavy_command_action_for_text(message_text):
         return "research"
     if is_whynot_command(message_text):
         return "whynot"
+    if is_whatnow_command(message_text):
+        return "whatnow"
     if is_explain_command(message_text) and is_live_explain_command(message_text):
         return "explain"
     return ""
@@ -1747,6 +1750,8 @@ def heavy_job_ack_message(action, message_text):
         return f"Building your {ticker} chart - one moment."
     if action == "whynot":
         return f"Checking {ticker} now - one moment."
+    if action == "whatnow":
+        return f"Reading {ticker} now - one moment."
     return "Building that for you - one moment."
 
 
@@ -1871,6 +1876,17 @@ def run_telegram_command_job(exchange, telegram_token, job, state=None):
         return True
     if action == "whynot":
         handle_whynot_command(
+            exchange,
+            telegram_token,
+            telegram_chat_id,
+            message_text,
+            source_chat=source_chat,
+            from_user=from_user,
+            state=state,
+        )
+        return True
+    if action == "whatnow":
+        handle_whatnow_command(
             exchange,
             telegram_token,
             telegram_chat_id,
@@ -5475,6 +5491,7 @@ WATCH_LETTER_CALLBACK_PREFIX = "watchletter"
 COIN_PICKER_BUTTONS_PER_ROW = 3
 COIN_PICK_TYPE_DIFFERENT_SYMBOL = "__type__"
 COMMAND_PANEL_ACTIONS = (
+    ("🤷 Should I buy or sell?", "whatnow"),
     ("🌱 I'm new — where should I start?", "onboard:ask"),
     ("📍 Where is this coin right now?", "where"),
     ("🤔 Why isn't it alerting?", "whynot"),
@@ -5943,6 +5960,7 @@ def coin_picker_target_command(target):
         "watch": "/watch",
         "snapshot": "/snapshot",
         "research": "/research",
+        "whatnow": "/whatnow",
     }
     return commands.get(str(target or "").strip().lower())
 
@@ -5976,6 +5994,7 @@ def target_coin_picker_text(target):
         "watch": "Which coin do you want to watch?",
         "snapshot": "Which coin?",
         "research": "Which coin?",
+        "whatnow": "Which coin?",
     }
     return labels.get(str(target or "").strip().lower(), "Pick a coin.")
 
@@ -7371,6 +7390,7 @@ def send_research_cards(telegram_token, chat_id, prb_text, symbol=None, chart_da
 SNAPSHOT_COMMANDS = ("/snapshot",)
 RESEARCH_COMMANDS = ("/research",)
 WHYNOT_COMMANDS = ("/whynot",)
+WHATNOW_COMMANDS = ("/whatnow",)
 EXPLAIN_COMMANDS = ("/explain",)
 
 
@@ -7388,6 +7408,10 @@ def is_research_command(message_text):
 
 def is_whynot_command(message_text):
     return snapshot_command_name(message_text) in WHYNOT_COMMANDS
+
+
+def is_whatnow_command(message_text):
+    return snapshot_command_name(message_text) in WHATNOW_COMMANDS
 
 
 def is_explain_command(message_text):
@@ -7455,6 +7479,7 @@ def poinkle_onboarding_text(kind):
             "/verify — check whether an account really belongs to a creator\n\n"
             "LEARN\n"
             "/explain — tap through the concepts Poinkle teaches\n"
+            "/whatnow — turn the big question into a chart read\n"
             "/whynot — why a coin hasn't alerted: where it sits, what would confirm\n"
             "/help — show this message\n\n"
             "WATCH\n"
@@ -9095,7 +9120,7 @@ def handle_panel_callback(telegram_token, callback_query, payload, exchange=None
         user_id = str(from_user.get("id") or chat_id)
         send_target_coin_picker(telegram_token, chat_id, "snapshot", user_id=user_id)
         return True
-    if action in {"whynot", "snapshot", "research"}:
+    if action in {"whynot", "whatnow", "snapshot", "research"}:
         user_id = str(from_user.get("id") or chat_id)
         send_target_coin_picker(telegram_token, chat_id, action, user_id=user_id)
         return True
@@ -9146,7 +9171,7 @@ def handle_coin_pick_callback(telegram_token, callback_query, payload, exchange=
 
     ticker = ticker.upper()
     command_text = f"{command} {ticker}"
-    if target in {"whynot", "research", "snapshot"}:
+    if target in {"whynot", "whatnow", "research", "snapshot"}:
         job_action = target
         if enqueue_telegram_command_job(job_action, chat_id, command_text, source_chat=source_chat, from_user=from_user):
             send_heavy_job_acknowledgment(
@@ -10215,6 +10240,25 @@ def process_telegram_commands(
                     from_user=from_user,
                     state=state,
                 )
+        elif is_whatnow_command(text):
+            if defer_heavy_commands and should_enqueue_heavy_command(text):
+                if enqueue_telegram_command_job("whatnow", chat_id, text, source_chat=chat, from_user=from_user):
+                    send_heavy_job_acknowledgment(
+                        telegram_token,
+                        alert_dm_chat_id(chat, from_user, chat_id),
+                        "whatnow",
+                        text,
+                    )
+            else:
+                handle_whatnow_command(
+                    exchange,
+                    telegram_token,
+                    chat_id,
+                    text,
+                    source_chat=chat,
+                    from_user=from_user,
+                    state=state,
+                )
         elif is_research_command(text):
             if defer_heavy_commands and should_enqueue_heavy_command(text):
                 if enqueue_telegram_command_job("research", chat_id, text, source_chat=chat, from_user=from_user):
@@ -10736,6 +10780,129 @@ def build_whynot_command_message(exchange, symbol, state=None):
         ]
     )
     return "\n".join(lines)
+
+
+def whatnow_zone_line(label, level, distance_pct, side):
+    if level is None:
+        return f"{label}: unavailable"
+    level_text = format_zone_price(float(level))
+    distance = format_whynot_zone_distance(distance_pct, side)
+    distance_text = f"  ({distance})" if distance else ""
+    return f"{label}: {level_text}{distance_text}"
+
+
+def build_whatnow_command_message(exchange, symbol, state=None):
+    scorecard = evaluate_whynot_scorecard(exchange, symbol, state=state)
+    ticker = html.escape(base_symbol(symbol))
+    current_price = float(scorecard["candle"][4])
+    nearest_support = scorecard.get("nearest_support")
+    nearest_resistance = scorecard.get("nearest_resistance")
+    support_text = format_zone_price(float(nearest_support)) if nearest_support is not None else "support"
+    resistance_text = format_zone_price(float(nearest_resistance)) if nearest_resistance is not None else "resistance"
+    pending_setup = scorecard.get("pending_setup")
+
+    lines = [
+        "<b>I can't make that decision for you.</b>",
+        "",
+        "I never will. That's not what I'm for, and anyone who pretends to know is guessing.",
+        "",
+        f"But here's the picture on {html.escape(symbol)} right now:",
+        "",
+        f"Price: {html.escape(format_zone_price(current_price))}",
+        html.escape(whatnow_zone_line("Nearest support", nearest_support, scorecard.get("support_distance_pct"), "below")),
+        html.escape(whatnow_zone_line("Nearest resistance", nearest_resistance, scorecard.get("resistance_distance_pct"), "above")),
+        "",
+    ]
+
+    if pending_setup:
+        side_word = "below" if pending_setup.get("direction") == "breakdown" else "above"
+        level_text = html.escape(format_zone_price(float(pending_setup.get("level", 0))))
+        lines.extend(
+            [
+                f"<b>{ticker} closed {side_word} the {level_text} zone once. That's an attempt, not confirmation.</b>",
+                "",
+            ]
+        )
+    else:
+        lines.extend(["<b>Nothing has broken. Nothing has confirmed.</b>", ""])
+
+    lines.extend(
+        [
+            "<b>What would change the picture:</b>",
+            f"Two consecutive daily closes below {html.escape(support_text)} - or above {html.escape(resistance_text)}.",
+            "Not one. Two. One close is an attempt; two is confirmation.",
+            "",
+            "That does not tell you to do anything. It means the picture changed.",
+            "",
+            "<b>Your plan decides what you do. I just tell you when the picture changed.</b>",
+        ]
+    )
+
+    failed_attempt = scorecard.get("failed_level_attempt")
+    if failed_attempt:
+        lines.extend(["", render_whynot_failed_attempt_line(ticker, failed_attempt)])
+
+    lines.extend(
+        [
+            "",
+            "Honest limit: zones break. Confirmation can fail. This describes right now, not what comes next.",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def handle_whatnow_command(
+    exchange,
+    telegram_token,
+    telegram_chat_id,
+    message_text,
+    source_chat=None,
+    from_user=None,
+    state=None,
+):
+    parts = message_text.strip().split()
+    command = snapshot_command_name(message_text) or "/whatnow"
+    log_info(f"Received {message_text.strip()}")
+    source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
+    from_user = from_user or {}
+    response_chat_id = str(source_chat.get("id", telegram_chat_id))
+
+    if len(parts) < 2:
+        send_bare_command_watchlist_panel(
+            telegram_token,
+            telegram_chat_id,
+            source_chat,
+            from_user,
+            command,
+            "whatnow",
+            "What now?",
+            "BTC",
+        )
+        return
+
+    symbol = validate_tradeable_symbol(exchange, parts[1])
+    log_info(f"Mapped {command} symbol: {symbol or 'UNKNOWN'}")
+    if symbol is None:
+        send_telegram_message(
+            telegram_token,
+            response_chat_id,
+            unknown_symbol_command_message(parts[1], command),
+        )
+        return
+
+    try:
+        message = build_whatnow_command_message(exchange, symbol, state=state)
+    except Exception as error:
+        log_warn(f"{symbol}: {command} unavailable: {error}")
+        send_telegram_message(
+            telegram_token,
+            response_chat_id,
+            "I couldn't build that picture right now. Try again in a bit.",
+        )
+        return
+
+    send_telegram_message(telegram_token, response_chat_id, message)
+    log_info(f"Answered {command} command for {symbol}")
 
 
 def current_time_ms():
