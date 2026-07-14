@@ -4038,6 +4038,34 @@ class ScannerLogicTests(unittest.TestCase):
             self.assertEqual(enqueue_job.call_args.args[:3], (action, "777", command))
             send_ack.assert_called_once()
 
+    def test_whatnow_heavy_job_executes_whatnow_card(self):
+        class FakeExchange:
+            def load_markets(self):
+                return {"BTC/USD": {}}
+
+        sent_messages = []
+        job = {
+            "action": "whatnow",
+            "telegram_chat_id": "777",
+            "message_text": "/whatnow BTC",
+            "source_chat": {"id": "777", "type": "private"},
+            "from_user": {"id": 777},
+        }
+
+        with patch.object(scanner, "scan_symbol", return_value=self.whynot_scan_result()), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append((str(chat_id), text, reply_markup)),
+        ), patch.object(
+            scanner, "handle_levels_command", side_effect=AssertionError("whatnow job must not execute snapshot")
+        ):
+            handled = scanner.run_telegram_command_job(FakeExchange(), "TOKEN", job, state={})
+
+        self.assertTrue(handled)
+        self.assertEqual(sent_messages[0][0], "777")
+        self.assertTrue(sent_messages[0][1].startswith("<b>I can't make that decision for you.</b>"))
+        self.assertIn("Nothing has broken. Nothing has confirmed.", sent_messages[0][1])
+
     def test_coin_picker_type_fallback_is_not_the_primary_whynot_action(self):
         keyboard = scanner.target_coin_picker_keyboard("whynot")
         callbacks = [
@@ -4398,6 +4426,42 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertEqual(sent_messages[0][0:3], ("999", "/research eth", "ETH/USD"))
         self.assertEqual(state["__telegram_commands"]["last_update_id"], 124)
+
+    def test_process_telegram_commands_routes_whatnow_to_refusal_card(self):
+        class FakeExchange:
+            def load_markets(self):
+                return {"BTC/USD": {}}
+
+        state = {}
+        sent_messages = []
+        updates = [
+            {
+                "update_id": 125,
+                "message": {
+                    "chat": {"id": "999", "type": "private"},
+                    "from": {"id": 999},
+                    "text": "/whatnow BTC",
+                },
+            }
+        ]
+
+        with patch.object(scanner, "get_telegram_updates", return_value=updates), patch.object(
+            scanner, "scan_symbol", return_value=self.whynot_scan_result()
+        ), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append((str(chat_id), text, reply_markup)),
+        ), patch.object(
+            scanner, "handle_levels_command", side_effect=AssertionError("/whatnow must not route to snapshot")
+        ), patch.object(
+            scanner, "command_allowed_by_active_mode", return_value=True
+        ), patch.object(scanner, "save_state"):
+            scanner.process_telegram_commands(FakeExchange(), "TOKEN", "999", state)
+
+        self.assertEqual(sent_messages[0][0], "999")
+        self.assertTrue(sent_messages[0][1].startswith("<b>I can't make that decision for you.</b>"))
+        self.assertIn("Nearest support: 95.00  (5.0% below)", sent_messages[0][1])
+        self.assertEqual(state["__telegram_commands"]["last_update_id"], 125)
 
     def test_process_telegram_commands_routes_scan_and_status_for_owner(self):
         cases = (
