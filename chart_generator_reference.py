@@ -195,9 +195,14 @@ def add_logo_watermark(ax, watermark_path=None, opacity=0.06):
         return False
     image_height, image_width = image.shape[:2]
     image_aspect = image_width / max(image_height, 1)
+    fig_w, fig_h = ax.figure.get_size_inches()
+    ax_bbox = ax.get_position()
+    ax_w_in = fig_w * ax_bbox.width
+    ax_h_in = fig_h * ax_bbox.height
+    axes_aspect = ax_w_in / max(ax_h_in, 0.0001)
     watermark_height = 0.46
-    watermark_width = min(0.62, watermark_height * image_aspect)
-    watermark_height = watermark_width / max(image_aspect, 0.0001)
+    watermark_width = min(0.62, watermark_height * image_aspect / max(axes_aspect, 0.0001))
+    watermark_height = watermark_width * axes_aspect / max(image_aspect, 0.0001)
     x_center, y_center = 0.50, 0.50
     x0, x1 = x_center - watermark_width / 2, x_center + watermark_width / 2
     y0, y1 = y_center - watermark_height / 2, y_center + watermark_height / 2
@@ -206,7 +211,7 @@ def add_logo_watermark(ax, watermark_path=None, opacity=0.06):
         extent=[x0, x1, y0, y1],
         transform=ax.transAxes,
         origin="upper",
-        aspect="equal",
+        aspect="auto",
         alpha=opacity,
         zorder=0.35,
     )
