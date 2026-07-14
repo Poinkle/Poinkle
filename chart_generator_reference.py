@@ -15,6 +15,10 @@ GHOST_WATERMARK_PATHS = (
     os.path.join("assets", "poinkle_pig_silhouette.png"),
     os.path.join("assets", "poinkle_silhouette_logo.png"),
 )
+POINKLE_LOGO_WATERMARK_PATHS = (
+    os.path.join("assets", "poinkle_logo_full.png"),
+    os.path.join("assets", "poinkle_prb_logo.png"),
+)
 
 
 def format_price(price):
@@ -165,6 +169,33 @@ def add_ghost_watermark(ax, watermark_path=None, opacity=GHOST_WATERMARK_OPACITY
     ax.imshow(
         image,
         extent=[0.18, 0.82, 0.08, 0.92],
+        transform=ax.transAxes,
+        origin="upper",
+        aspect="auto",
+        alpha=opacity,
+        zorder=0.35,
+    )
+    return True
+
+
+def logo_watermark_path():
+    for path in POINKLE_LOGO_WATERMARK_PATHS:
+        if os.path.exists(path):
+            return path
+    return None
+
+
+def add_logo_watermark(ax, watermark_path=None, opacity=0.06):
+    path = watermark_path or logo_watermark_path()
+    if not path:
+        return False
+    try:
+        image = plt.imread(path)
+    except Exception:
+        return False
+    ax.imshow(
+        image,
+        extent=[0.16, 0.70, 0.18, 0.78],
         transform=ax.transAxes,
         origin="upper",
         aspect="auto",
@@ -329,8 +360,8 @@ def generate_reference_levels_chart(
             draw_wrapped_card_body(ax, body)
 
     chart_ax = fig.add_axes([0.030, 0.210 if teaching_mode else 0.330, 0.890, 0.650 if teaching_mode else 0.420])
-    x_right = len(recent) * 1.20 if teaching_mode else len(recent) * 1.12
-    future_label_x = len(recent) + max(1.2, len(recent) * 0.025)
+    x_right = len(recent) * 1.16 if teaching_mode else len(recent) * 1.12
+    future_label_x = len(recent) + max(0.8, len(recent) * 0.015)
     chart_ax.set_facecolor((0, 0, 0, 0))
     chart_ax.set_xlim(-1, x_right)
     chart_ax.set_ylim(y_min, y_max)
@@ -349,10 +380,11 @@ def generate_reference_levels_chart(
         chart_ax.axis("off")
     for grid_y in np.linspace(y_min, y_max, 7)[1:-1]:
         chart_ax.hlines(grid_y, -1, len(recent), colors="#41616a", linewidth=0.45, alpha=0.10, zorder=0)
-    add_ghost_watermark(chart_ax)
-    watermark_size = 96 if teaching_mode else 58
-    watermark_alpha = 0.055 if teaching_mode else 0.035
-    chart_ax.text(0.52, 0.50, "POINKLE", transform=chart_ax.transAxes, color="#dffbff", fontsize=watermark_size, fontweight="bold", ha="center", va="center", alpha=watermark_alpha, zorder=0)
+    watermark_drawn = add_logo_watermark(chart_ax, opacity=0.06) if teaching_mode else add_ghost_watermark(chart_ax)
+    if not watermark_drawn:
+        watermark_size = 96 if teaching_mode else 58
+        watermark_alpha = 0.055 if teaching_mode else 0.035
+        chart_ax.text(0.52, 0.50, "POINKLE", transform=chart_ax.transAxes, color="#dffbff", fontsize=watermark_size, fontweight="bold", ha="center", va="center", alpha=watermark_alpha, zorder=0)
 
     def zone(level, thickness, color, alpha, start, end, label=None, *, muted=False, show_price_range=False):
         if not y_min <= level <= y_max:
@@ -413,10 +445,10 @@ def generate_reference_levels_chart(
             zone(level, support_thickness, "#2c9c64", 0.045, 2, x_right, label, muted=True)
         if teaching_zone == "resistance":
             label = str(resistance_label or "Nearest resistance").upper()
-            zone(resistance_level, resistance_thickness, "#c7505c", 0.26, len(recent) * 0.34, x_right, f"{label}  {zone_range_text(resistance_level, resistance_thickness)}", show_price_range=False)
+            zone(resistance_level, resistance_thickness, "#c7505c", 0.26, len(recent) * 0.34, x_right, f"{label}\n{zone_range_text(resistance_level, resistance_thickness)}", show_price_range=False)
         else:
             label = str(support_label or "Nearest support").upper()
-            zone(support_level, support_thickness, "#2c9c64", 0.24, 2, x_right, f"{label}  {zone_range_text(support_level, support_thickness)}", show_price_range=False)
+            zone(support_level, support_thickness, "#2c9c64", 0.24, 2, x_right, f"{label}\n{zone_range_text(support_level, support_thickness)}", show_price_range=False)
         chart_ax.hlines(current_price, max(len(recent) * 0.08, 0), x_right, colors="#dcebf0", linewidth=1.1, linestyles=(0, (2.0, 3.2)), alpha=0.62, zorder=11)
         chart_ax.text(
             future_label_x,
