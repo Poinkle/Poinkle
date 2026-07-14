@@ -301,6 +301,13 @@ def generate_reference_levels_chart(
     near_resistances = nearest_levels(resistances, current_price, "resistance", 3)
     support_level = in_view_level(near_supports, y_min, y_max, low + span * 0.08)
     resistance_level = in_view_level(near_resistances, y_min, y_max, high - span * 0.06)
+    if teaching_mode:
+        teaching_levels = near_supports[:2] + near_resistances[:2] + [current_price]
+        visible_low = min([low] + teaching_levels)
+        visible_high = max([high] + teaching_levels)
+        span = max(visible_high - visible_low, min_span)
+        y_min = max(visible_low - span * 0.08, 0)
+        y_max = visible_high + span * 0.10
     liq_levels = liquidity_levels_from_structure(recent, y_min, y_max, current_price)
 
     fig = plt.figure(figsize=(12.96, 8.56), dpi=100)
@@ -398,13 +405,13 @@ def generate_reference_levels_chart(
             label_x = start + max(1.0, len(recent) * 0.018) if taught else future_label_x
             chart_ax.text(
                 label_x,
-                upper + span * 0.018,
+                level,
                 str(label),
                 color=color,
                 fontsize=12.0,
                 fontweight="bold",
                 ha="left",
-                va="bottom",
+                va="center",
                 alpha=0.98,
                 zorder=12,
                 path_effects=[pe.withStroke(linewidth=2.8, foreground="#03101a", alpha=0.86)],
@@ -426,17 +433,17 @@ def generate_reference_levels_chart(
         for index, level in enumerate(resistance_context):
             if taught_is_resistance and math.isclose(level, taught_level, rel_tol=0, abs_tol=max(span * 0.002, 1e-9)):
                 continue
-            level_bar(level, resistance_thickness * 0.72, "#c7505c", 0.16, len(recent) * 0.34, x_right)
+            level_bar(level, resistance_thickness * 0.72, "#ff4d5a", 0.28, len(recent) * 0.34, x_right)
         for index, level in enumerate(support_context):
             if not taught_is_resistance and math.isclose(level, taught_level, rel_tol=0, abs_tol=max(span * 0.002, 1e-9)):
                 continue
-            level_bar(level, support_thickness * 0.72, "#2c9c64", 0.16, 2, x_right)
+            level_bar(level, support_thickness * 0.72, "#34d978", 0.24, 2, x_right)
         if teaching_zone == "resistance":
             label = str(resistance_label or "Nearest resistance").upper()
-            level_bar(resistance_level, resistance_thickness, "#ff5862", 0.32, len(recent) * 0.34, x_right, label, taught=True)
+            level_bar(resistance_level, resistance_thickness, "#ff5260", 0.34, len(recent) * 0.34, x_right, label, taught=True)
         else:
             label = str(support_label or "Nearest support").upper()
-            level_bar(support_level, support_thickness, "#33d17a", 0.32, 2, x_right, label, taught=True)
+            level_bar(support_level, support_thickness, "#36e27b", 0.34, 2, x_right, label, taught=True)
         teaching_ticks = sorted({round(value, 8): value for value in level_ticks + [current_price]}.values())
         chart_ax.set_yticks(teaching_ticks)
         chart_ax.set_yticklabels([format_price(value) for value in teaching_ticks])
