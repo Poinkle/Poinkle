@@ -1625,7 +1625,21 @@ class ScannerLogicTests(unittest.TestCase):
             [item["command"] for item in scanner.PUBLIC_BOT_COMMANDS],
         )
         self.assertIn("verify", command_names)
-        for deleted_command in ("levels", "snap", "why", "learn", "watching", "reference"):
+        for deleted_command in (
+            "commands",
+            "levels",
+            "snap",
+            "why",
+            "learn",
+            "watching",
+            "reference",
+            "guide",
+            "coins",
+            "clearwatch",
+            "mywatch",
+            "scan",
+            "status",
+        ):
             self.assertNotIn(deleted_command, command_names)
         self.assertNotIn("devmode", command_names)
         self.assertNotIn("maintenance", command_names)
@@ -2470,19 +2484,23 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("👀 LOOK ORDER", message)
         self.assertIn(scanner.poinkle_educational_footer(), message)
 
-    def test_help_command_is_short_and_points_to_learning_and_coins(self):
+    def test_help_command_sends_question_panel(self):
         sent_messages = []
 
         with patch.object(
             scanner,
             "send_telegram_message",
-            side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append((str(chat_id), text, reply_markup)),
         ):
             scanner.handle_help_command("TOKEN", "999")
 
-        message = sent_messages[0][1]
+        self.assertEqual(sent_messages, [("999", scanner.command_panel_text(), scanner.command_panel_keyboard())])
+
+    def test_poinkle_info_text_is_short_and_points_to_learning_and_coins(self):
+        message = scanner.poinkle_onboarding_text("help")
+
         self.assertIn("Poinkle watches the zones", message)
-        self.assertIn("You don't have to remember any of these. Just send /commands and tap.", message)
+        self.assertIn("You don't have to remember any of these. Just send /help and tap.", message)
         self.assertIn("VERIFY\n/verify", message)
         self.assertIn("/explain", message)
         self.assertIn("/whynot", message)
@@ -2499,6 +2517,7 @@ class ScannerLogicTests(unittest.TestCase):
             "/mywatch",
             "/scan",
             "/status",
+            "/commands",
         ):
             self.assertIsNone(re.search(rf"{re.escape(deleted_command)}(?:\s|,|—|$)", message))
         self.assertNotIn("Current Supported Coins", message)
@@ -2513,6 +2532,7 @@ class ScannerLogicTests(unittest.TestCase):
     def test_no_user_facing_removed_command_message_exists(self):
         scanner_source = (PROJECT_DIR / "crypto_alert_scanner.py").read_text()
 
+        self.assertNotIn("send /commands", scanner_source)
         self.assertNotIn("doesn't exist anymore", scanner_source)
         self.assertNotIn("no longer exists", scanner_source)
         self.assertNotIn("command was removed", scanner_source)
@@ -2540,7 +2560,6 @@ class ScannerLogicTests(unittest.TestCase):
 
         expected_commands = {
             "start",
-            "commands",
             "help",
             "verify",
             "explain",
@@ -2556,6 +2575,30 @@ class ScannerLogicTests(unittest.TestCase):
         }
 
         self.assertEqual(set(re.findall(r"/([a-z]+)", message)), expected_commands)
+
+    def test_panel_help_sends_poinkle_info_text_with_command_list(self):
+        callback_query = {
+            "id": "callback-1",
+            "message": {"chat": {"id": "777", "type": "private"}, "message_id": 44},
+            "from": {"id": 777},
+        }
+        sent_messages = []
+
+        with patch.object(scanner, "answer_telegram_callback"), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                (str(chat_id), text, reply_markup)
+            ),
+        ):
+            handled = scanner.handle_panel_callback("TOKEN", callback_query, "help", exchange=object())
+
+        self.assertTrue(handled)
+        self.assertEqual(sent_messages[0][0], "777")
+        self.assertIn("Poinkle watches the zones", sent_messages[0][1])
+        self.assertIn("/snapshot", sent_messages[0][1])
+        self.assertIn("/mike", sent_messages[0][1])
+        self.assertIsNone(sent_messages[0][2])
 
     def test_verify_registered_handle_returns_verified(self):
         sent_messages = []
@@ -3056,7 +3099,7 @@ class ScannerLogicTests(unittest.TestCase):
             ["onboard:beginner", "onboard:basics", "onboard:trader", "onboard:browsing", "panel:verify"],
         )
 
-    def test_command_panel_opens_from_callback_and_commands_command(self):
+    def test_command_panel_opens_from_callback_and_help_command(self):
         callback_query = {
             "id": "callback-1",
             "message": {"chat": {"id": "777", "type": "private"}, "message_id": 44},
@@ -3074,7 +3117,7 @@ class ScannerLogicTests(unittest.TestCase):
             ),
         ):
             handled = scanner.handle_panel_callback("TOKEN", callback_query, "open")
-            scanner.handle_commands_command("TOKEN", "777")
+            scanner.handle_help_command("TOKEN", "777")
 
         self.assertTrue(handled)
         answer_callback.assert_called_once_with("TOKEN", "callback-1")
@@ -3134,7 +3177,7 @@ class ScannerLogicTests(unittest.TestCase):
             ("verify", "handle_verify_command"),
             ("explain", "handle_explain_command"),
             ("alertlevel", "handle_alertlevel_command"),
-            ("help", "handle_help_command"),
+            ("help", "send_poinkle_info_text"),
         ]
         for payload, handler_name in cases:
             with self.subTest(payload=payload), patch.object(scanner, "answer_telegram_callback"), patch.object(
@@ -3142,8 +3185,8 @@ class ScannerLogicTests(unittest.TestCase):
             ), patch.object(scanner, "handle_verify_command") as verify_handler, patch.object(
                 scanner, "handle_explain_command"
             ) as explain_handler, patch.object(scanner, "handle_alertlevel_command") as alertlevel_handler, patch.object(
-                scanner, "handle_help_command"
-            ) as help_handler:
+                scanner, "send_poinkle_info_text"
+            ) as info_handler:
                 handled = scanner.handle_panel_callback("TOKEN", callback_query, payload, exchange=object())
 
             self.assertTrue(handled)
@@ -3151,7 +3194,7 @@ class ScannerLogicTests(unittest.TestCase):
                 "handle_verify_command": verify_handler,
                 "handle_explain_command": explain_handler,
                 "handle_alertlevel_command": alertlevel_handler,
-                "handle_help_command": help_handler,
+                "send_poinkle_info_text": info_handler,
             }
             handlers[handler_name].assert_called_once()
             for other_name, handler in handlers.items():
@@ -4672,6 +4715,7 @@ class ScannerLogicTests(unittest.TestCase):
             "/coins",
             "/clearwatch",
             "/mywatch",
+            "/commands",
             "/banana",
         )
         for index, command in enumerate(deleted_commands, start=126):
@@ -4747,6 +4791,7 @@ class ScannerLogicTests(unittest.TestCase):
             "/coins",
             "/clearwatch",
             "/mywatch",
+            "/commands",
             "/banana",
         )
         for index, command in enumerate(deleted_commands, start=140):

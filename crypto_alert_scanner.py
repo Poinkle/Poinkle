@@ -348,7 +348,6 @@ PUBLIC_BOT_COMMANDS = [
     {"command": "snapshot", "description": "Full visual chart and breakdown"},
     {"command": "research", "description": "Deeper multi-card research brief"},
     {"command": "whynot", "description": "See why a coin is waiting"},
-    {"command": "commands", "description": "Open the tappable command panel"},
     {"command": "alerts", "description": "Set a personal price-zone alert"},
     {"command": "alertlevel", "description": "Choose personal alert noise level"},
     {"command": "myalerts", "description": "View your active alerts"},
@@ -7321,13 +7320,12 @@ def poinkle_onboarding_text(kind):
             "You already made your plan. Poinkle just tells you when you're at the "
             "place you said you'd be watching.\n\n"
             "Price is truth. Indicators only reinforce what price already shows you.\n\n"
-            "You don't have to remember any of these. Just send /commands and tap.\n\n"
+            "You don't have to remember any of these. Just send /help and tap.\n\n"
             "VERIFY\n"
             "/verify — check whether an account really belongs to a creator\n\n"
             "LEARN\n"
             "/explain — tap through the concepts Poinkle teaches\n"
             "/whynot — why a coin hasn't alerted: where it sits, what would confirm\n"
-            "/commands — open the tappable command panel\n"
             "/help — show this message\n\n"
             "WATCH\n"
             "/watch, /unwatch — manage your personal watchlist\n"
@@ -7569,11 +7567,11 @@ def set_user_experience(user_id, experience):
 
 
 def handle_help_command(telegram_token, telegram_chat_id):
-    send_telegram_message(telegram_token, telegram_chat_id, poinkle_onboarding_text("help"))
-
-
-def handle_commands_command(telegram_token, telegram_chat_id):
     send_command_panel(telegram_token, telegram_chat_id)
+
+
+def send_poinkle_info_text(telegram_token, telegram_chat_id):
+    send_telegram_message(telegram_token, telegram_chat_id, poinkle_onboarding_text("help"))
 
 
 def send_verify_handle_response(telegram_token, response_chat_id, handle, creators=None):
@@ -8612,7 +8610,7 @@ def handle_start_orientation_callback(telegram_token, callback_query, payload, e
         )
         return True
     if payload == "help":
-        handle_help_command(telegram_token, chat_id)
+        send_poinkle_info_text(telegram_token, chat_id)
         return True
     return False
 
@@ -8691,7 +8689,7 @@ def handle_panel_callback(telegram_token, callback_query, payload, exchange=None
         )
         return True
     if action == "help":
-        handle_help_command(telegram_token, chat_id)
+        send_poinkle_info_text(telegram_token, chat_id)
         return True
     return False
 
@@ -9725,11 +9723,6 @@ def process_telegram_commands(
                 telegram_token,
                 chat_id,
                 source_chat=chat,
-            )
-        elif lower_text.startswith("/commands"):
-            handle_commands_command(
-                telegram_token,
-                chat_id,
             )
         elif is_explain_command(text):
             handle_explain_command(
