@@ -130,20 +130,28 @@ EXPLANATION_REGISTRY = {
     },
     "confirmation": {
         "beginner": (
-            "When price doesn't just touch a level but actually finishes the time "
-            "period beyond it — showing the move is more likely to be real, not just a "
-            "quick poke. Think of a breakout: price might jump above resistance for a "
-            "second, then fall right back. Waiting for confirmation means waiting for "
-            "the full period to finish above the level before trusting it. Poinkle "
-            "only uses confirmed breaks for this reason — patience compounds. The "
-            "tradeoff: you get in at a slightly worse price, but with a better chance "
-            "the move is real. Honest limit: even confirmed breaks can fail."
+            "<b>Real breakout or fakeout?</b>\n\n"
+            "A price break is not an event. A price break that HOLDS is an event.\n\n"
+            "One daily close beyond a zone is an ATTEMPT. Two consecutive daily "
+            "closes beyond it is CONFIRMATION.\n\n"
+            "A fakeout is a break that never got its second close. Price pokes "
+            "through, everyone reacts, and it closes back inside. That's not a "
+            "signal failing — that's a signal that never happened.\n\n"
+            "This is why Poinkle waits. It would rather be late than wrong.\n\n"
+            "Honest limit: even a confirmed break can fail. Two closes raises the "
+            "odds it was real. It does not make it certain."
         ),
         "experienced": (
-            "Confirmation — a candle CLOSE beyond a level (not an intraday wick). "
-            "Filters fakeouts by requiring the period to finish past the level. "
-            "Poinkle uses two consecutive daily closes beyond the zone. Honest limit: "
-            "confirmation reduces fakeouts; it does not remove them."
+            "<b>Real breakout or fakeout?</b>\n\n"
+            "A price break is not an event. A price break that HOLDS is an event.\n\n"
+            "One daily close beyond a zone is an ATTEMPT. Two consecutive daily "
+            "closes beyond it is CONFIRMATION.\n\n"
+            "A fakeout is a break that never got its second close. Price pokes "
+            "through, everyone reacts, and it closes back inside. That's not a "
+            "signal failing — that's a signal that never happened.\n\n"
+            "This is why Poinkle waits. It would rather be late than wrong.\n\n"
+            "Honest limit: even a confirmed break can fail. Two closes raises the "
+            "odds it was real. It does not make it certain."
         ),
     },
     "candle": {
@@ -352,6 +360,10 @@ EXPLANATION_ALIASES = {
     "confirmed": "confirmation",
     "confirm": "confirmation",
     "confirmed break": "confirmation",
+    "fakeout": "confirmation",
+    "fake breakout": "confirmation",
+    "real breakout": "confirmation",
+    "false breakout": "confirmation",
     "candle": "candle",
     "candlestick": "candle",
     "candles": "candle",

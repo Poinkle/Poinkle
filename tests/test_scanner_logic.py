@@ -3446,6 +3446,7 @@ class ScannerLogicTests(unittest.TestCase):
                 "🌱 I'm new — where should I start?",
                 "📍 Where is this coin right now?",
                 "🤔 Why isn't it alerting?",
+                "🎭 Real breakout or fakeout?",
                 "🔍 Tell me more about a coin",
                 "👀 Watch a coin for me",
                 "📚 Teach me a concept",
@@ -3461,6 +3462,7 @@ class ScannerLogicTests(unittest.TestCase):
                 "onboard:ask",
                 "panel:where",
                 "panel:whynot",
+                "panel:fakeout",
                 "panel:research",
                 "panel:watch",
                 "panel:explain",
@@ -3512,6 +3514,7 @@ class ScannerLogicTests(unittest.TestCase):
             scanner.target_coin_picker_keyboard("research", user_id="777"),
             scanner.target_coin_picker_keyboard("whynot", user_id="777"),
             scanner.target_coin_picker_keyboard("whatnow", user_id="777"),
+            scanner.target_coin_picker_keyboard("fakeout", user_id="777"),
         ]
 
         labels = [
@@ -3563,6 +3566,7 @@ class ScannerLogicTests(unittest.TestCase):
             ("whatnow", "whatnow"),
             ("where", "snapshot"),
             ("whynot", "whynot"),
+            ("fakeout", "fakeout"),
             ("watch", "watch"),
             ("research", "research"),
         ):
@@ -4023,6 +4027,7 @@ class ScannerLogicTests(unittest.TestCase):
         for target, action, command in (
             ("whynot", "whynot", "/whynot BTC"),
             ("whatnow", "whatnow", "/whatnow BTC"),
+            ("fakeout", "explain", "/explain confirmation BTC"),
             ("research", "research", "/research BTC"),
             ("snapshot", "snapshot", "/snapshot BTC"),
         ):
@@ -4606,7 +4611,7 @@ class ScannerLogicTests(unittest.TestCase):
 
     def test_new_explanation_concepts_resolve_for_beginner_and_experienced(self):
         expected_phrases = {
-            "confirmation": ("finishes the time period beyond it", "candle CLOSE beyond a level"),
+            "confirmation": ("Real breakout or fakeout?", "Real breakout or fakeout?"),
             "candle": ("one chunk of time", "OHLC for one period"),
             "range": ("box", "price bounded between horizontal support and resistance"),
             "key_level": ("A price that matters", "price with a history of reaction"),
@@ -4620,6 +4625,9 @@ class ScannerLogicTests(unittest.TestCase):
 
     def test_new_explanation_aliases_resolve(self):
         self.assertEqual(scanner.normalize_concept_key("confirmed break"), "confirmation")
+        for alias in ("fakeout", "fake breakout", "real breakout", "false breakout"):
+            with self.subTest(alias=alias):
+                self.assertEqual(scanner.normalize_concept_key(alias), "confirmation")
         self.assertEqual(scanner.normalize_concept_key("candlestick"), "candle")
         self.assertEqual(scanner.normalize_concept_key("body"), "candle")
         self.assertEqual(scanner.normalize_concept_key("range bound"), "range")
@@ -5168,6 +5176,21 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("<b>RSI</b>", send_response.call_args.args[2])
         self.assertEqual(send_response.call_args.kwargs["concept_key"], "rsi")
 
+    def test_explain_fakeout_sends_confirmation_card(self):
+        with patch.object(scanner, "send_explain_command_response") as send_response:
+            scanner.handle_explain_command(
+                "TOKEN",
+                "777",
+                "/explain fakeout",
+                source_chat={"id": "777", "type": "private"},
+                from_user={"id": 777},
+            )
+
+        self.assertIn("<b>Confirmation</b>", send_response.call_args.args[2])
+        self.assertIn("Real breakout or fakeout?", send_response.call_args.args[2])
+        self.assertIn("A fakeout is a break that never got its second close", send_response.call_args.args[2])
+        self.assertEqual(send_response.call_args.kwargs["concept_key"], "confirmation")
+
     def test_live_explain_support_coin_sends_chart_and_support_caption(self):
         sent_photos = []
         snapshot = self.live_explain_snapshot(current_price=110)
@@ -5286,6 +5309,42 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("That's an ATTEMPT", sent_photos[0][2])
         self.assertIn("SECOND consecutive daily close", sent_photos[0][2])
 
+    def test_live_explain_fakeout_alias_sends_confirmation_chart(self):
+        sent_photos = []
+        snapshot = self.live_explain_snapshot(current_price=94)
+        pending_setup = {
+            "direction": "breakdown",
+            "level": 95,
+            "first_candle": snapshot["chart_data"]["candles"][3]["time"],
+            "first_candle_close": 94,
+            "expected_confirmation_candle": snapshot["chart_data"]["candles"][4]["time"],
+        }
+        state = {"BTC/USD": {"pending_setups": {"breakdown:95": pending_setup}}}
+
+        with patch.object(scanner, "validate_tradeable_symbol", return_value="BTC/USD"), patch.object(
+            scanner, "build_levels_scan_snapshot", return_value=snapshot
+        ), patch.object(
+            scanner, "live_explain_chart_path", return_value="/tmp/btc-confirmation.png"
+        ) as chart_path, patch.object(
+            scanner,
+            "send_telegram_photo",
+            side_effect=lambda token, chat_id, path, caption="": sent_photos.append((str(chat_id), path, caption)) or True,
+        ):
+            scanner.handle_explain_command(
+                "TOKEN",
+                "777",
+                "/explain fakeout BTC",
+                source_chat={"id": "777", "type": "private"},
+                from_user={"id": 777},
+                exchange=object(),
+                state=state,
+            )
+
+        self.assertEqual(chart_path.call_args.kwargs["chart_annotations"][0]["label"], "First close — attempt")
+        self.assertEqual(chart_path.call_args.kwargs["teaching_zone"], "support")
+        self.assertIn("BTC closed below the 95.00 zone once", sent_photos[0][2])
+        self.assertIn("That's an ATTEMPT", sent_photos[0][2])
+
     def test_live_explain_confirmation_without_pending_setup_sends_no_setup_caption(self):
         sent_photos = []
         snapshot = self.live_explain_snapshot(current_price=110)
@@ -5310,9 +5369,11 @@ class ScannerLogicTests(unittest.TestCase):
             )
 
         self.assertEqual(chart_path.call_args.kwargs["chart_annotations"], [])
-        self.assertIn("BTC hasn't closed beyond a zone", sent_photos[0][2])
+        self.assertIn("REAL BREAKOUT OR FAKEOUT", sent_photos[0][2])
+        self.assertIn("BTC hasn't closed beyond a zone. There's nothing to confirm and nothing to fake.", sent_photos[0][2])
         self.assertIn("Nearest support", sent_photos[0][2])
         self.assertIn("Nearest resistance", sent_photos[0][2])
+        self.assertIn("A break that never gets its second close is a FAKEOUT.", sent_photos[0][2])
 
     def test_teaching_reference_chart_keeps_prices_and_context_without_dashboard_footer(self):
         source = (PROJECT_DIR / "chart_generator_reference.py").read_text()

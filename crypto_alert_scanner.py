@@ -5495,6 +5495,7 @@ COMMAND_PANEL_ACTIONS = (
     ("🌱 I'm new — where should I start?", "onboard:ask"),
     ("📍 Where is this coin right now?", "where"),
     ("🤔 Why isn't it alerting?", "whynot"),
+    ("🎭 Real breakout or fakeout?", "fakeout"),
     ("🔍 Tell me more about a coin", "research"),
     ("👀 Watch a coin for me", "watch"),
     ("📚 Teach me a concept", "explain"),
@@ -5961,6 +5962,7 @@ def coin_picker_target_command(target):
         "snapshot": "/snapshot",
         "research": "/research",
         "whatnow": "/whatnow",
+        "fakeout": "/explain confirmation",
     }
     return commands.get(str(target or "").strip().lower())
 
@@ -5995,6 +5997,7 @@ def target_coin_picker_text(target):
         "snapshot": "Which coin?",
         "research": "Which coin?",
         "whatnow": "Which coin?",
+        "fakeout": "Which coin?",
     }
     return labels.get(str(target or "").strip().lower(), "Pick a coin.")
 
@@ -8532,12 +8535,13 @@ def live_confirmation_caption(symbol, snapshot, pending_setup=None):
         )
 
     return (
-        f"📊 <b>CONFIRMATION — on {html.escape(ticker)}, right now</b>\n\n"
-        f"{html.escape(ticker)} hasn't closed beyond a zone. There's nothing to confirm.\n\n"
+        f"📊 <b>REAL BREAKOUT OR FAKEOUT — on {html.escape(ticker)}, right now</b>\n\n"
+        f"{html.escape(ticker)} hasn't closed beyond a zone. There's nothing to confirm and nothing to fake.\n\n"
         f"Nearest support: around {html.escape(zone_midpoint_text(support_zone))}\n"
         f"Nearest resistance: around {html.escape(zone_midpoint_text(resistance_zone))}\n\n"
-        "When price closes beyond one of these, that's an ATTEMPT. A SECOND consecutive\n"
-        "daily close is CONFIRMATION.\n\n"
+        "When price closes beyond one of these, that's an ATTEMPT.\n"
+        "A SECOND consecutive daily close is CONFIRMATION.\n"
+        "A break that never gets its second close is a FAKEOUT.\n\n"
         "One close is a hypothesis. Two is an answer."
     )
 
@@ -9120,7 +9124,7 @@ def handle_panel_callback(telegram_token, callback_query, payload, exchange=None
         user_id = str(from_user.get("id") or chat_id)
         send_target_coin_picker(telegram_token, chat_id, "snapshot", user_id=user_id)
         return True
-    if action in {"whynot", "whatnow", "snapshot", "research"}:
+    if action in {"whynot", "whatnow", "fakeout", "snapshot", "research"}:
         user_id = str(from_user.get("id") or chat_id)
         send_target_coin_picker(telegram_token, chat_id, action, user_id=user_id)
         return True
@@ -9171,6 +9175,16 @@ def handle_coin_pick_callback(telegram_token, callback_query, payload, exchange=
 
     ticker = ticker.upper()
     command_text = f"{command} {ticker}"
+    if target == "fakeout":
+        job_action = "explain"
+        if enqueue_telegram_command_job(job_action, chat_id, command_text, source_chat=source_chat, from_user=from_user):
+            send_heavy_job_acknowledgment(
+                telegram_token,
+                alert_dm_chat_id(source_chat, from_user, chat_id),
+                job_action,
+                command_text,
+            )
+        return True
     if target in {"whynot", "whatnow", "research", "snapshot"}:
         job_action = target
         if enqueue_telegram_command_job(job_action, chat_id, command_text, source_chat=source_chat, from_user=from_user):
