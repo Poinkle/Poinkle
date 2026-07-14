@@ -3177,26 +3177,52 @@ class ScannerLogicTests(unittest.TestCase):
             ]
             self.assertIn("panel:open", flat_buttons)
 
-    def test_orientation_card_shows_where_are_you_buttons(self):
+    def test_orientation_card_first_button_shows_bitcoin(self):
         keyboard = scanner.start_orientation_keyboard()
         labels = [row[0]["text"] for row in keyboard["inline_keyboard"]]
         callbacks = [row[0]["callback_data"] for row in keyboard["inline_keyboard"]]
 
-        self.assertIn("Before I throw anything at you", scanner.start_orientation_text())
+        self.assertNotIn("Before I throw anything at you", scanner.start_orientation_text())
         self.assertEqual(
             labels,
             [
-                "🌱 Total beginner — I don't know what a candle is",
-                "📈 I know the basics, I want to read charts better",
-                "🎯 I trade already, I want a second set of eyes",
-                "🤷 Just looking around",
-                "🔍 Verify a creator's account",
+                "📍 Show me Bitcoin",
+                "📍 Show me another coin",
+                "📚 Teach me something",
+                "🔍 Verify a creator",
+                "⚡ Everything else",
             ],
         )
         self.assertEqual(
             callbacks,
-            ["onboard:beginner", "onboard:basics", "onboard:trader", "onboard:browsing", "panel:verify"],
+            ["coinpick:snapshot:BTC", "panel:where", "panel:explain", "panel:verify", "panel:open"],
         )
+
+    def test_orientation_bitcoin_button_queues_btc_snapshot_and_keeps_keyboard(self):
+        callback_query = {
+            "id": "callback-1",
+            "data": "coinpick:snapshot:BTC",
+            "message": {
+                "chat": {"id": "777", "type": "private"},
+                "message_id": 44,
+                "reply_markup": scanner.start_orientation_keyboard(),
+            },
+            "from": {"id": 777},
+        }
+
+        with patch.object(scanner, "answer_telegram_callback") as answer_callback, patch.object(
+            scanner, "clear_callback_message_keyboard"
+        ) as clear_keyboard, patch.object(scanner, "enqueue_telegram_command_job", return_value=True) as enqueue_job, patch.object(
+            scanner, "send_heavy_job_acknowledgment"
+        ) as send_ack:
+            handled = scanner.handle_coin_pick_callback("TOKEN", callback_query, "snapshot:BTC", exchange=object())
+
+        self.assertTrue(handled)
+        answer_callback.assert_called_once_with("TOKEN", "callback-1")
+        clear_keyboard.assert_not_called()
+        enqueue_job.assert_called_once()
+        self.assertEqual(enqueue_job.call_args.args[0:3], ("snapshot", "777", "/snapshot BTC"))
+        send_ack.assert_called_once_with("TOKEN", "777", "snapshot", "/snapshot BTC")
 
     def test_command_panel_opens_from_callback_and_help_command(self):
         callback_query = {
@@ -3238,6 +3264,7 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(
             labels,
             [
+                "🌱 I'm new — where should I start?",
                 "📍 Where is this coin right now?",
                 "🤔 Why isn't it alerting?",
                 "🔍 Tell me more about a coin",
@@ -3251,6 +3278,7 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(
             callbacks,
             [
+                "onboard:ask",
                 "panel:where",
                 "panel:whynot",
                 "panel:research",
@@ -3264,6 +3292,56 @@ class ScannerLogicTests(unittest.TestCase):
         joined_labels = "\n".join(labels)
         for command_name in ("Research a coin", "Daily snapshot", "Key levels"):
             self.assertNotIn(command_name, joined_labels)
+
+    def test_onboarding_question_is_reachable_from_command_panel(self):
+        callback_query = {
+            "id": "callback-1",
+            "message": {"chat": {"id": "777", "type": "private"}, "message_id": 44},
+            "from": {"id": 777},
+        }
+        sent_messages = []
+
+        with patch.object(scanner, "answer_telegram_callback") as answer_callback, patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append(
+                (str(chat_id), text, reply_markup)
+            ),
+        ):
+            handled = scanner.handle_onboard_callback("TOKEN", callback_query, "ask")
+
+        self.assertTrue(handled)
+        answer_callback.assert_called_once_with("TOKEN", "callback-1")
+        self.assertEqual(sent_messages[0], ("777", scanner.onboarding_question_text(), scanner.onboarding_question_keyboard()))
+        callbacks = [
+            button["callback_data"]
+            for row in sent_messages[0][2]["inline_keyboard"]
+            for button in row
+        ]
+        self.assertEqual(
+            callbacks,
+            ["onboard:beginner", "onboard:basics", "onboard:trader", "onboard:browsing", "panel:open"],
+        )
+
+    def test_no_button_label_uses_snapshot_language(self):
+        keyboards = [
+            scanner.start_orientation_keyboard(),
+            scanner.command_panel_keyboard(),
+            scanner.onboarding_question_keyboard(),
+            scanner.target_coin_picker_keyboard("snapshot", user_id="777"),
+            scanner.target_coin_picker_keyboard("research", user_id="777"),
+            scanner.target_coin_picker_keyboard("whynot", user_id="777"),
+        ]
+
+        labels = [
+            button["text"]
+            for keyboard in keyboards
+            for row in keyboard["inline_keyboard"]
+            for button in row
+        ]
+
+        for label in labels:
+            self.assertNotIn("snapshot", label.lower())
 
     def test_panel_buttons_open_existing_paths_or_coin_picker(self):
         callback_query = {

@@ -1703,7 +1703,7 @@ def heavy_job_ack_message(action, message_text):
     if action == "research":
         return f"Building your {ticker} research brief - one moment."
     if action == "snapshot":
-        return f"Building your {ticker} snapshot - one moment."
+        return f"Building your {ticker} chart - one moment."
     if action == "whynot":
         return f"Checking {ticker} now - one moment."
     return "Building that for you - one moment."
