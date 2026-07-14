@@ -1547,6 +1547,22 @@ def send_status_update(telegram_token, telegram_chat_id, state, indicator=None, 
         log_warn(f"Could not send status update: {error}")
 
 
+def send_startup_status_update(telegram_token, state):
+    startup_ping = str(os.getenv("POINKLE_STARTUP_PING", "off")).strip().lower()
+    if startup_ping in {"", "off"}:
+        return
+    if startup_ping != "owner":
+        log_warn(f"Unsupported POINKLE_STARTUP_PING value: {startup_ping!r}; startup Telegram ping suppressed.")
+        return
+
+    owner_chat_id = owner_telegram_id()
+    if not owner_chat_id:
+        log_warn("POINKLE_STARTUP_PING=owner set, but no owner Telegram id is configured.")
+        return
+
+    send_status_update(telegram_token, owner_chat_id, state, indicator="🟢")
+
+
 def get_telegram_updates(token, offset=None, poll_timeout=1):
     url = f"https://api.telegram.org/bot{token}/getUpdates"
     params = {"timeout": poll_timeout}
@@ -11888,7 +11904,7 @@ def main():
     update_bot_status(state, "Online", "Starting")
     save_state(state)
     register_bot_commands(telegram_token)
-    send_status_update(telegram_token, telegram_chat_id, state, indicator="🟢")
+    send_startup_status_update(telegram_token, state)
 
     log_info("Poinkle scanner started.")
     log_info(f"Watching {len(WATCHLIST)} global symbols.")

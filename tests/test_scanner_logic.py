@@ -1797,6 +1797,45 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertEqual(registered, ["TOKEN"])
 
+    def test_startup_ping_defaults_to_silent(self):
+        with patch.object(
+            scanner.os,
+            "getenv",
+            side_effect=lambda key, default=None: default if key == "POINKLE_STARTUP_PING" else None,
+        ), patch.object(scanner, "send_status_update") as send_status:
+            scanner.send_startup_status_update("TOKEN", {})
+
+        send_status.assert_not_called()
+
+    def test_startup_ping_owner_sends_only_to_owner_dm(self):
+        with patch.object(
+            scanner.os,
+            "getenv",
+            side_effect=lambda key, default=None: {
+                "POINKLE_STARTUP_PING": "owner",
+                "OWNER_ID": "OWNER_DM",
+            }.get(key, default),
+        ), patch.object(scanner, "send_status_update") as send_status:
+            scanner.send_startup_status_update("TOKEN", {"__bot_status": {"status": "Online"}})
+
+        send_status.assert_called_once_with("TOKEN", "OWNER_DM", {"__bot_status": {"status": "Online"}}, indicator="🟢")
+
+    def test_startup_ping_never_targets_group_chat(self):
+        with patch.object(
+            scanner.os,
+            "getenv",
+            side_effect=lambda key, default=None: {
+                "POINKLE_STARTUP_PING": "owner",
+                "OWNER_ID": "OWNER_DM",
+                "TELEGRAM_CHAT_ID": "GROUP_CHAT",
+            }.get(key, default),
+        ), patch.object(scanner, "send_status_update") as send_status:
+            scanner.send_startup_status_update("TOKEN", {})
+
+        sent_chat_ids = [call.args[1] for call in send_status.call_args_list]
+        self.assertEqual(sent_chat_ids, ["OWNER_DM"])
+        self.assertNotIn("GROUP_CHAT", sent_chat_ids)
+
     def test_mike_command_returns_mikes_curated_symbols_and_reports_failures(self):
         sent_messages = []
         seen_symbols = []
