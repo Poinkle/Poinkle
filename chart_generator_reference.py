@@ -278,7 +278,8 @@ def generate_reference_levels_chart(
     if not candles:
         raise ValueError("No candles provided")
 
-    recent = candles[-104:] if len(candles) >= 104 else candles[:]
+    candle_limit = 70 if teaching_mode else 104
+    recent = candles[-candle_limit:] if len(candles) >= candle_limit else candles[:]
     x = list(range(len(recent)))
     closes = [c["close"] for c in candles]
     ema21_values = usable_ema(ema21, closes, 21)[-len(recent):]
@@ -373,9 +374,7 @@ def generate_reference_levels_chart(
         chart_ax.spines["right"].set_alpha(0.34)
         chart_ax.yaxis.tick_right()
         chart_ax.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
-        chart_ax.tick_params(axis="y", colors="#b9cbd4", labelsize=9.5, length=0, pad=8)
-        chart_ax.set_yticks(np.linspace(y_min, y_max, 6))
-        chart_ax.set_yticklabels([format_price(value) for value in np.linspace(y_min, y_max, 6)])
+        chart_ax.tick_params(axis="y", colors="#d6e6ec", labelsize=12.0, length=0, pad=9)
     else:
         chart_ax.axis("off")
     for grid_y in np.linspace(y_min, y_max, 7)[1:-1]:
@@ -386,39 +385,29 @@ def generate_reference_levels_chart(
         watermark_alpha = 0.055 if teaching_mode else 0.035
         chart_ax.text(0.52, 0.50, "POINKLE", transform=chart_ax.transAxes, color="#dffbff", fontsize=watermark_size, fontweight="bold", ha="center", va="center", alpha=watermark_alpha, zorder=0)
 
-    def zone(level, thickness, color, alpha, start, end, label=None, *, muted=False, show_price_range=False):
+    level_ticks = []
+
+    def level_bar(level, thickness, color, alpha, start, end, label=None, *, taught=False):
         if not y_min <= level <= y_max:
             return
         lower = level - thickness * 0.42
         upper = level + thickness * 0.42
-        edge_alpha = 0.42 if muted else min(alpha + 0.20, 0.62)
-        chart_ax.add_patch(Rectangle((start, lower), end - start, thickness * 0.84, facecolor=color, edgecolor=color, linewidth=0.9 if muted else 1.6, alpha=alpha, zorder=1))
-        chart_ax.add_patch(Rectangle((start, level - thickness * 0.64), end - start, thickness * 0.22, facecolor=color, edgecolor="none", alpha=alpha * (0.18 if muted else 0.28), zorder=1))
-        chart_ax.add_patch(Rectangle((start, upper), end - start, thickness * 0.22, facecolor=color, edgecolor="none", alpha=alpha * (0.18 if muted else 0.28), zorder=1))
-        chart_ax.hlines([lower, upper], start, end, colors=color, linewidth=0.7 if muted else 1.35, alpha=edge_alpha, zorder=2)
+        level_ticks.append(level)
+        chart_ax.add_patch(Rectangle((start, lower), end - start, thickness * 0.84, facecolor=color, edgecolor=color, linewidth=0, alpha=alpha, zorder=2 if taught else 1))
         if label:
-            label_text = str(label)
-            if show_price_range:
-                label_text = f"{label_text}\n{format_price(lower)} - {format_price(upper)}"
             chart_ax.text(
-                future_label_x if teaching_mode else end + (0.6 if show_price_range else 0.9),
-                level,
-                label_text,
+                future_label_x,
+                upper + span * 0.018,
+                str(label),
                 color=color,
-                fontsize=12.5 if teaching_mode and not muted else 9.5 if teaching_mode and muted else 12.5 if show_price_range else 7.0,
+                fontsize=12.0,
                 fontweight="bold",
                 ha="left",
-                va="center",
-                linespacing=1.05,
-                alpha=0.98 if show_price_range else 0.92,
+                va="bottom",
+                alpha=0.98,
                 zorder=12,
-                path_effects=[pe.withStroke(linewidth=3.0 if show_price_range else 2.2, foreground="#03101a", alpha=0.86 if show_price_range else 0.80)],
+                path_effects=[pe.withStroke(linewidth=2.8, foreground="#03101a", alpha=0.86)],
             )
-
-    def zone_range_text(level, thickness):
-        lower = level - thickness * 0.42
-        upper = level + thickness * 0.42
-        return f"{format_price(lower)} - {format_price(upper)}"
 
     if teaching_mode:
         support_thickness = span * 0.125
@@ -436,34 +425,57 @@ def generate_reference_levels_chart(
         for index, level in enumerate(resistance_context):
             if taught_is_resistance and math.isclose(level, taught_level, rel_tol=0, abs_tol=max(span * 0.002, 1e-9)):
                 continue
-            label = f"Next resistance  {zone_range_text(level, resistance_thickness)}"
-            zone(level, resistance_thickness, "#c7505c", 0.050, len(recent) * 0.34, x_right, label, muted=True)
+            level_bar(level, resistance_thickness * 0.72, "#c7505c", 0.42, len(recent) * 0.34, x_right)
         for index, level in enumerate(support_context):
             if not taught_is_resistance and math.isclose(level, taught_level, rel_tol=0, abs_tol=max(span * 0.002, 1e-9)):
                 continue
-            label = f"Next support  {zone_range_text(level, support_thickness)}"
-            zone(level, support_thickness, "#2c9c64", 0.045, 2, x_right, label, muted=True)
+            level_bar(level, support_thickness * 0.72, "#2c9c64", 0.42, 2, x_right)
         if teaching_zone == "resistance":
             label = str(resistance_label or "Nearest resistance").upper()
-            zone(resistance_level, resistance_thickness, "#c7505c", 0.26, len(recent) * 0.34, x_right, f"{label}\n{zone_range_text(resistance_level, resistance_thickness)}", show_price_range=False)
+            level_bar(resistance_level, resistance_thickness, "#ff5862", 0.86, len(recent) * 0.34, x_right, label, taught=True)
         else:
             label = str(support_label or "Nearest support").upper()
-            zone(support_level, support_thickness, "#2c9c64", 0.24, 2, x_right, f"{label}\n{zone_range_text(support_level, support_thickness)}", show_price_range=False)
+            level_bar(support_level, support_thickness, "#33d17a", 0.86, 2, x_right, label, taught=True)
+        teaching_ticks = sorted({round(value, 8): value for value in level_ticks + [current_price]}.values())
+        chart_ax.set_yticks(teaching_ticks)
+        chart_ax.set_yticklabels([format_price(value) for value in teaching_ticks])
         chart_ax.hlines(current_price, max(len(recent) * 0.08, 0), x_right, colors="#dcebf0", linewidth=1.1, linestyles=(0, (2.0, 3.2)), alpha=0.62, zorder=11)
         chart_ax.text(
-            future_label_x,
+            x_right,
             current_price,
-            f"Current price  {format_price(current_price)}",
-            color="#dcebf0",
-            fontsize=10.4,
+            format_price(current_price),
+            color="#06141b",
+            fontsize=12.5,
             fontweight="bold",
-            ha="left",
+            ha="right",
             va="center",
-            alpha=0.92,
-            zorder=12,
-            path_effects=[pe.withStroke(linewidth=2.7, foreground="#03101a", alpha=0.86)],
+            bbox={"boxstyle": "round,pad=0.22,rounding_size=0.08", "facecolor": "#dcebf0", "edgecolor": "#5ee6f4", "linewidth": 0.8, "alpha": 0.96},
+            zorder=15,
         )
     else:
+        def zone(level, thickness, color, alpha, start, end, label=None):
+            if not y_min <= level <= y_max:
+                return
+            lower = level - thickness * 0.42
+            upper = level + thickness * 0.42
+            chart_ax.add_patch(Rectangle((start, lower), end - start, thickness * 0.84, facecolor=color, edgecolor="none", alpha=alpha, zorder=1))
+            chart_ax.add_patch(Rectangle((start, level - thickness * 0.64), end - start, thickness * 0.22, facecolor=color, edgecolor="none", alpha=alpha * 0.28, zorder=1))
+            chart_ax.add_patch(Rectangle((start, upper), end - start, thickness * 0.22, facecolor=color, edgecolor="none", alpha=alpha * 0.28, zorder=1))
+            if label:
+                chart_ax.text(
+                    end + 0.9,
+                    level,
+                    str(label),
+                    color=color,
+                    fontsize=7.0,
+                    fontweight="bold",
+                    ha="left",
+                    va="center",
+                    alpha=0.92,
+                    zorder=12,
+                    path_effects=[pe.withStroke(linewidth=2.2, foreground="#03101a", alpha=0.80)],
+                )
+
         zone(resistance_level, span * 0.115, "#c7505c", 0.24, len(recent) * 0.34, len(recent) * 0.94, resistance_label)
         mid_zone = current_price if y_min <= current_price <= y_max else (support_level + resistance_level) / 2
         zone(mid_zone, span * 0.090, "#b8ab6b", 0.080, len(recent) * 0.24, len(recent) * 0.70)
@@ -480,10 +492,12 @@ def generate_reference_levels_chart(
     for i, candle in enumerate(recent):
         open_, high_, low_, close = candle["open"], candle["high"], candle["low"], candle["close"]
         color = "#73df62" if close >= open_ else "#ef5046"
-        chart_ax.vlines(i, low_, high_, color=color, linewidth=0.82, alpha=0.88, zorder=8)
+        wick_width = 1.15 if teaching_mode else 0.82
+        body_width = 0.76 if teaching_mode else 0.54
+        chart_ax.vlines(i, low_, high_, color=color, linewidth=wick_width, alpha=0.88, zorder=8)
         body_low = min(open_, close)
         body_h = abs(close - open_) or span * 0.003
-        chart_ax.add_patch(Rectangle((i - 0.27, body_low), 0.54, body_h, facecolor=color, edgecolor=color, linewidth=0.22, alpha=0.93, zorder=9))
+        chart_ax.add_patch(Rectangle((i - body_width / 2, body_low), body_width, body_h, facecolor=color, edgecolor=color, linewidth=0.22, alpha=0.93, zorder=9))
 
     time_to_index = {candle.get("time"): index for index, candle in enumerate(recent)}
     for annotation in chart_annotations or []:
