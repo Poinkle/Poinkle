@@ -193,12 +193,20 @@ def add_logo_watermark(ax, watermark_path=None, opacity=0.06):
         image = plt.imread(path)
     except Exception:
         return False
+    image_height, image_width = image.shape[:2]
+    image_aspect = image_width / max(image_height, 1)
+    watermark_height = 0.46
+    watermark_width = min(0.62, watermark_height * image_aspect)
+    watermark_height = watermark_width / max(image_aspect, 0.0001)
+    x_center, y_center = 0.50, 0.50
+    x0, x1 = x_center - watermark_width / 2, x_center + watermark_width / 2
+    y0, y1 = y_center - watermark_height / 2, y_center + watermark_height / 2
     ax.imshow(
         image,
-        extent=[0.16, 0.70, 0.18, 0.78],
+        extent=[x0, x1, y0, y1],
         transform=ax.transAxes,
         origin="upper",
-        aspect="auto",
+        aspect="equal",
         alpha=opacity,
         zorder=0.35,
     )
@@ -306,8 +314,8 @@ def generate_reference_levels_chart(
         visible_low = min([low] + teaching_levels)
         visible_high = max([high] + teaching_levels)
         span = max(visible_high - visible_low, min_span)
-        y_min = max(visible_low - span * 0.08, 0)
-        y_max = visible_high + span * 0.10
+        y_min = max(visible_low - span * 0.045, 0)
+        y_max = visible_high + span * 0.060
     liq_levels = liquidity_levels_from_structure(recent, y_min, y_max, current_price)
 
     fig = plt.figure(figsize=(12.96, 8.56), dpi=100)
