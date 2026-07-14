@@ -332,36 +332,63 @@ def generate_reference_levels_chart(
     chart_ax.set_facecolor((0, 0, 0, 0))
     chart_ax.set_xlim(-1, len(recent) * 1.12)
     chart_ax.set_ylim(y_min, y_max)
-    chart_ax.axis("off")
+    if teaching_mode:
+        chart_ax.spines["left"].set_visible(False)
+        chart_ax.spines["top"].set_visible(False)
+        chart_ax.spines["bottom"].set_visible(False)
+        chart_ax.spines["right"].set_color("#5f7c86")
+        chart_ax.spines["right"].set_alpha(0.34)
+        chart_ax.yaxis.tick_right()
+        chart_ax.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
+        chart_ax.tick_params(axis="y", colors="#b9cbd4", labelsize=9.5, length=0, pad=8)
+        chart_ax.set_yticks(np.linspace(y_min, y_max, 6))
+        chart_ax.set_yticklabels([format_price(value) for value in np.linspace(y_min, y_max, 6)])
+    else:
+        chart_ax.axis("off")
     for grid_y in np.linspace(y_min, y_max, 7)[1:-1]:
         chart_ax.hlines(grid_y, -1, len(recent), colors="#41616a", linewidth=0.45, alpha=0.10, zorder=0)
     add_ghost_watermark(chart_ax)
-    chart_ax.text(0.55, 0.43, "POINKLE", transform=chart_ax.transAxes, color="#dffbff", fontsize=58, fontweight="bold", ha="center", va="center", alpha=0.035, zorder=0)
+    watermark_size = 96 if teaching_mode else 58
+    watermark_alpha = 0.055 if teaching_mode else 0.035
+    chart_ax.text(0.52, 0.50, "POINKLE", transform=chart_ax.transAxes, color="#dffbff", fontsize=watermark_size, fontweight="bold", ha="center", va="center", alpha=watermark_alpha, zorder=0)
 
-    def zone(level, thickness, color, alpha, start, end, label=None):
-        chart_ax.add_patch(Rectangle((start, level - thickness * 0.42), end - start, thickness * 0.84, facecolor=color, edgecolor="none", alpha=alpha, zorder=1))
-        chart_ax.add_patch(Rectangle((start, level - thickness * 0.64), end - start, thickness * 0.22, facecolor=color, edgecolor="none", alpha=alpha * 0.28, zorder=1))
-        chart_ax.add_patch(Rectangle((start, level + thickness * 0.42), end - start, thickness * 0.22, facecolor=color, edgecolor="none", alpha=alpha * 0.28, zorder=1))
+    def zone(level, thickness, color, alpha, start, end, label=None, *, muted=False, show_price_range=False):
+        lower = level - thickness * 0.42
+        upper = level + thickness * 0.42
+        edge_alpha = 0.42 if muted else min(alpha + 0.20, 0.62)
+        chart_ax.add_patch(Rectangle((start, lower), end - start, thickness * 0.84, facecolor=color, edgecolor=color, linewidth=0.9 if muted else 1.6, alpha=alpha, zorder=1))
+        chart_ax.add_patch(Rectangle((start, level - thickness * 0.64), end - start, thickness * 0.22, facecolor=color, edgecolor="none", alpha=alpha * (0.18 if muted else 0.28), zorder=1))
+        chart_ax.add_patch(Rectangle((start, upper), end - start, thickness * 0.22, facecolor=color, edgecolor="none", alpha=alpha * (0.18 if muted else 0.28), zorder=1))
+        chart_ax.hlines([lower, upper], start, end, colors=color, linewidth=0.7 if muted else 1.35, alpha=edge_alpha, zorder=2)
         if label:
+            label_text = str(label)
+            if show_price_range:
+                label_text = f"{label_text}\n{format_price(lower)} - {format_price(upper)}"
             chart_ax.text(
-                end + 0.9,
+                end + (0.6 if show_price_range else 0.9),
                 level,
-                str(label),
+                label_text,
                 color=color,
-                fontsize=7.0,
+                fontsize=12.5 if show_price_range else 7.0,
                 fontweight="bold",
                 ha="left",
                 va="center",
-                alpha=0.92,
+                linespacing=1.05,
+                alpha=0.98 if show_price_range else 0.92,
                 zorder=12,
-                path_effects=[pe.withStroke(linewidth=2.2, foreground="#03101a", alpha=0.80)],
+                path_effects=[pe.withStroke(linewidth=3.0 if show_price_range else 2.2, foreground="#03101a", alpha=0.86 if show_price_range else 0.80)],
             )
 
     if teaching_mode:
+        mid_zone = current_price if y_min <= current_price <= y_max else (support_level + resistance_level) / 2
         if teaching_zone == "resistance":
-            zone(resistance_level, span * 0.115, "#c7505c", 0.24, len(recent) * 0.34, len(recent) * 0.94, resistance_label)
+            zone(support_level, span * 0.125, "#2c9c64", 0.045, 2, len(recent) * 0.98, muted=True)
+            zone(mid_zone, span * 0.090, "#b8ab6b", 0.035, len(recent) * 0.24, len(recent) * 0.70, muted=True)
+            zone(resistance_level, span * 0.115, "#c7505c", 0.26, len(recent) * 0.34, len(recent) * 0.94, resistance_label, show_price_range=True)
         else:
-            zone(support_level, span * 0.125, "#2c9c64", 0.22, 2, len(recent) * 0.98, support_label)
+            zone(resistance_level, span * 0.115, "#c7505c", 0.050, len(recent) * 0.34, len(recent) * 0.94, muted=True)
+            zone(mid_zone, span * 0.090, "#b8ab6b", 0.035, len(recent) * 0.24, len(recent) * 0.70, muted=True)
+            zone(support_level, span * 0.125, "#2c9c64", 0.24, 2, len(recent) * 0.98, support_label, show_price_range=True)
     else:
         zone(resistance_level, span * 0.115, "#c7505c", 0.24, len(recent) * 0.34, len(recent) * 0.94, resistance_label)
         mid_zone = current_price if y_min <= current_price <= y_max else (support_level + resistance_level) / 2
@@ -410,7 +437,7 @@ def generate_reference_levels_chart(
             xy=(candle_index, y_value),
             xytext=(min(candle_index + 5, len(recent) * 0.96), y_value + y_offset),
             color="#dffbff",
-            fontsize=7.2,
+            fontsize=12.0 if teaching_mode else 7.2,
             fontweight="bold",
             ha="left",
             va="center",
@@ -420,7 +447,7 @@ def generate_reference_levels_chart(
                 "lw": 1.0,
                 "alpha": 0.82,
             },
-            path_effects=[pe.withStroke(linewidth=2.4, foreground="#03101a", alpha=0.82)],
+            path_effects=[pe.withStroke(linewidth=3.1 if teaching_mode else 2.4, foreground="#03101a", alpha=0.86 if teaching_mode else 0.82)],
             zorder=14,
         )
 
