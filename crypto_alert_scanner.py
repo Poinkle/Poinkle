@@ -105,7 +105,7 @@ except ModuleNotFoundError:
     requests = None
 
 
-TEST_MODE = True
+TEST_MODE = os.getenv("POINKLE_TEST_MODE", "false").strip().lower() in {"1", "true", "yes", "on"}
 DEBUG = False
 LIVE_ALERT_TEST_CHAT_ID = ""
 BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "Poinkle_Bot").strip().lstrip("@")
@@ -953,6 +953,31 @@ def write_json_file_atomic(path, payload, label):
 
 def save_state(state):
     write_json_file_atomic(STATE_FILE, state, "scanner state")
+
+
+def migrate_pending_setup_mode_keys(state):
+    migrated = 0
+    dropped_duplicates = 0
+    for symbol, symbol_state in list((state or {}).items()):
+        if str(symbol).startswith("__") or not isinstance(symbol_state, dict):
+            continue
+        pending_setups = symbol_state.get("pending_setups")
+        if not isinstance(pending_setups, dict):
+            continue
+        for setup_key in list(pending_setups.keys()):
+            setup_key_text = str(setup_key)
+            if not setup_key_text.startswith("test:"):
+                continue
+            live_key = f"live:{setup_key_text[len('test:'):]}"
+            if live_key in pending_setups:
+                del pending_setups[setup_key]
+                dropped_duplicates += 1
+                log_info(f"Migrated pending setup duplicate dropped for {symbol}: {setup_key_text} -> {live_key}")
+                continue
+            pending_setups[live_key] = pending_setups.pop(setup_key)
+            migrated += 1
+            log_info(f"Migrated pending setup key for {symbol}: {setup_key_text} -> {live_key}")
+    return {"migrated": migrated, "dropped_duplicates": dropped_duplicates}
 
 
 def load_user_alerts():
@@ -11901,6 +11926,7 @@ def main():
     supported_symbols, unsupported_symbols = validate_watchlist_against_exchange(exchange, WATCHLIST)
     UNSUPPORTED_SYMBOLS_THIS_SESSION.update(unsupported_symbols)
     state = load_state()
+    migrate_pending_setup_mode_keys(state)
     update_bot_status(state, "Online", "Starting")
     save_state(state)
     register_bot_commands(telegram_token)

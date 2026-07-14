@@ -1797,6 +1797,90 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertEqual(registered, ["TOKEN"])
 
+    def test_test_mode_defaults_to_false(self):
+        loaded = self.load_scanner_with_data_dir()
+
+        self.assertFalse(loaded.TEST_MODE)
+
+    def test_test_mode_env_can_turn_it_on(self):
+        with patch.dict(os.environ, {"POINKLE_TEST_MODE": "true"}, clear=True):
+            module_name = f"crypto_alert_scanner_test_mode_on_{id(self)}"
+            spec = importlib.util.spec_from_file_location(module_name, SCANNER_PATH)
+            loaded = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(loaded)
+
+        self.assertTrue(loaded.TEST_MODE)
+
+    def test_alert_text_omits_test_mode_banner_when_off(self):
+        scanner.TEST_MODE = False
+
+        message = scanner.build_alert(
+            "BTC/USD",
+            candle(0, 100, 105, 99, 104, 250),
+            {
+                "type": "volume_spike",
+                "label": "Bullish Volume Spike",
+                "emoji": "🟢",
+                "direction": "bullish",
+                "volume_multiple": 2.5,
+            },
+            ema_21=101,
+            ema_55=99,
+            current_rsi=58,
+            volume_avg=100,
+        )
+
+        self.assertNotIn("TEST MODE", message)
+
+    def test_status_shows_production_when_test_mode_off(self):
+        scanner.TEST_MODE = False
+
+        message = scanner.build_bot_status_message({"__bot_status": {"status": "Online"}})
+
+        self.assertIn("Mode: PRODUCTION", message)
+        self.assertNotIn("Mode: TEST", message)
+
+    def test_pending_setup_keys_migrate_from_test_to_live(self):
+        state = {
+            "BTC/USD": {
+                "pending_setups": {
+                    "test:breakout:100": {"direction": "breakout", "level": 100},
+                },
+            },
+        }
+
+        result = scanner.migrate_pending_setup_mode_keys(state)
+
+        self.assertEqual(result, {"migrated": 1, "dropped_duplicates": 0})
+        self.assertNotIn("test:breakout:100", state["BTC/USD"]["pending_setups"])
+        self.assertEqual(
+            state["BTC/USD"]["pending_setups"]["live:breakout:100"],
+            {"direction": "breakout", "level": 100},
+        )
+
+    def test_pending_setup_migration_does_not_overwrite_existing_live_key(self):
+        state = {
+            "BTC/USD": {
+                "pending_setups": {
+                    "test:breakout:100": {"direction": "breakout", "level": 100, "source": "old"},
+                    "live:breakout:100": {"direction": "breakout", "level": 100, "source": "new"},
+                },
+            },
+        }
+
+        result = scanner.migrate_pending_setup_mode_keys(state)
+
+        self.assertEqual(result, {"migrated": 0, "dropped_duplicates": 1})
+        self.assertNotIn("test:breakout:100", state["BTC/USD"]["pending_setups"])
+        self.assertEqual(state["BTC/USD"]["pending_setups"]["live:breakout:100"]["source"], "new")
+
+    def test_live_scan_builds_level_alerts_with_computed_key_levels(self):
+        source = (PROJECT_DIR / "crypto_alert_scanner.py").read_text()
+        run_once_source = source[source.index("def run_once(") : source.index("def main():")]
+        build_call = run_once_source[run_once_source.index("build_level_alerts(") : run_once_source.index(")\n                )", run_once_source.index("build_level_alerts("))]
+
+        self.assertIn("key_levels=key_levels", build_call)
+
     def test_startup_ping_defaults_to_silent(self):
         with patch.object(
             scanner.os,
