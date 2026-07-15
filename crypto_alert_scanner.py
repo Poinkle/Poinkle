@@ -289,6 +289,7 @@ TELEGRAM_JOB_LIGHT = "light"
 TELEGRAM_JOB_HEAVY = "heavy"
 TELEGRAM_LIGHT_JOB_ESTIMATE_SECONDS = 1.0
 LIVE_EXPLAIN_CONCEPTS = {"support", "resistance", "confirmation"}
+HEAVY_EXPLAIN_CONCEPTS = {"dominance", "double_top"}
 HEAVY_TELEGRAM_JOB_ACTIONS = {"snapshot", "research", "whynot", "whatnow", "explain"}
 ALERT_SEVERITY_PREFERENCE_KEY = "alert_severity_min"
 ALERT_SEVERITY_DEVELOPING = "developing"
@@ -1710,7 +1711,7 @@ def heavy_command_action_for_text(message_text):
         return "whynot"
     if is_whatnow_command(message_text):
         return "whatnow"
-    if is_explain_command(message_text) and normalize_concept_key(explain_command_requested_concept(message_text)) == "dominance":
+    if is_explain_command(message_text) and normalize_concept_key(explain_command_requested_concept(message_text)) in HEAVY_EXPLAIN_CONCEPTS:
         return "explain"
     if is_explain_command(message_text) and is_live_explain_command(message_text):
         return "explain"
@@ -5511,6 +5512,7 @@ TOP_COIN_PICKER_BASES = ("BTC", "ETH", "SOL", "XRP", "DOGE", "ADA", "AVAX", "LIN
 SUPPORTED_CREATOR_PLATFORMS = ("telegram", "tiktok", "youtube", "x", "instagram", "discord", "website")
 CONCEPT_GROUPS = (
     ("📊 Price & Structure", ("candle", "support", "resistance", "range", "key_level", "trend", "market_structure")),
+    ("📐 Chart Patterns", ("double_top",)),
     ("⚡ The Event", ("breakout", "breakdown", "confirmation", "retest", "follow_through")),
     ("📈 The Indicators", ("rsi", "ema", "volume_spike", "confluence", "liquidity")),
     ("🌐 Market Context", ("dominance",)),
@@ -8811,7 +8813,7 @@ def handle_explain_concept_callback(telegram_token, callback_query, payload, exc
 
     user_id = str(((callback_query or {}).get("from") or {}).get("id") or "")
     skill_level = user_skill_level(user_id) if user_id else None
-    if concept_key == "dominance":
+    if concept_key in HEAVY_EXPLAIN_CONCEPTS:
         if enqueue_telegram_command_job("explain", chat_id, f"/explain {concept_key}", source_chat=chat, from_user=(callback_query or {}).get("from")):
             send_heavy_job_acknowledgment(
                 telegram_token,

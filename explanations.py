@@ -71,6 +71,46 @@ EXPLANATION_REGISTRY = {
             "is a zone, not a ceiling price must obey."
         ),
     },
+    "double_top": {
+        "beginner": (
+            "<b>WHAT IT IS</b>\n"
+            "A double top is where price fails at the same resistance level twice. "
+            "It rises to a zone, gets turned back, returns to that same zone, and "
+            "gets turned back again. Two failed attempts at one ceiling. The low "
+            "between the two peaks is the NECKLINE.\n\n"
+            "<b>WHAT CONFIRMS IT</b>\n"
+            "Seeing two tops is not the pattern completing. The pattern completes "
+            "only when price closes below the neckline — and by Poinkle's rule that "
+            "means TWO closes, not one. One close below is an attempt. The second "
+            "close that holds is confirmation. Until the neckline breaks with "
+            "confirmation, it is two rejections being watched, not a completed "
+            "pattern.\n\n"
+            "<b>HONEST LIMIT</b>\n"
+            "No pattern is guaranteed. Two tops can form and price can push through "
+            "on a later attempt. A neckline can break and then reclaim. A double "
+            "top describes what price has already done — twice turned back at one "
+            "level — not what comes next. It is a shape worth watching, never a call."
+        ),
+        "experienced": (
+            "<b>WHAT IT IS</b>\n"
+            "A double top is where price fails at the same resistance level twice. "
+            "It rises to a zone, gets turned back, returns to that same zone, and "
+            "gets turned back again. Two failed attempts at one ceiling. The low "
+            "between the two peaks is the NECKLINE.\n\n"
+            "<b>WHAT CONFIRMS IT</b>\n"
+            "Seeing two tops is not the pattern completing. The pattern completes "
+            "only when price closes below the neckline — and by Poinkle's rule that "
+            "means TWO closes, not one. One close below is an attempt. The second "
+            "close that holds is confirmation. Until the neckline breaks with "
+            "confirmation, it is two rejections being watched, not a completed "
+            "pattern.\n\n"
+            "<b>HONEST LIMIT</b>\n"
+            "No pattern is guaranteed. Two tops can form and price can push through "
+            "on a later attempt. A neckline can break and then reclaim. A double "
+            "top describes what price has already done — twice turned back at one "
+            "level — not what comes next. It is a shape worth watching, never a call."
+        ),
+    },
     "breakout": {
         "beginner": (
             "When price moves above a resistance level and stays there — often with "
@@ -403,6 +443,12 @@ EXPLANATION_ALIASES = {
     "floor": "support",
     "resistance": "resistance",
     "ceiling": "resistance",
+    "double top": "double_top",
+    "doubletop": "double_top",
+    "double-top": "double_top",
+    "dt": "double_top",
+    "m top": "double_top",
+    "m-top": "double_top",
     "breakout": "breakout",
     "break out": "breakout",
     "breakdown": "breakdown",
@@ -488,6 +534,7 @@ CONCEPT_DISPLAY_NAMES = {
     "volume_spike": "Volume Spike",
     "support": "Support",
     "resistance": "Resistance",
+    "double_top": "Double Top",
     "breakout": "Breakout",
     "breakdown": "Breakdown",
     "confluence": "Confluence",
