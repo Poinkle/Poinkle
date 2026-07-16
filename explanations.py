@@ -111,6 +111,48 @@ EXPLANATION_REGISTRY = {
             "level — not what comes next. It is a shape worth watching, never a call."
         ),
     },
+    "double_bottom": {
+        "beginner": (
+            "<b>WHAT IT IS</b>\n"
+            "A double bottom is where price holds at the same support level twice. "
+            "It falls to a zone, gets turned back up, returns to that same zone, "
+            "and holds again. Two successful defenses of one floor. The high "
+            "between the two lows is the NECKLINE.\n\n"
+            "<b>WHAT CONFIRMS IT</b>\n"
+            "Seeing two bottoms is not the pattern completing. The pattern "
+            "completes only when price closes above the neckline — and by "
+            "Poinkle's rule that means TWO closes, not one. One close above is an "
+            "attempt. The second close that holds is confirmation. Until the "
+            "neckline breaks with confirmation, it is two holds being watched, "
+            "not a completed pattern.\n\n"
+            "<b>HONEST LIMIT</b>\n"
+            "No pattern is guaranteed. Two bottoms can form and price can break "
+            "down through the floor on a later attempt. A neckline can break and "
+            "then fail back below. A double bottom describes what price has "
+            "already done — twice held at one level — not what comes next. It is "
+            "a shape worth watching, never a call."
+        ),
+        "experienced": (
+            "<b>WHAT IT IS</b>\n"
+            "A double bottom is where price holds at the same support level twice. "
+            "It falls to a zone, gets turned back up, returns to that same zone, "
+            "and holds again. Two successful defenses of one floor. The high "
+            "between the two lows is the NECKLINE.\n\n"
+            "<b>WHAT CONFIRMS IT</b>\n"
+            "Seeing two bottoms is not the pattern completing. The pattern "
+            "completes only when price closes above the neckline — and by "
+            "Poinkle's rule that means TWO closes, not one. One close above is an "
+            "attempt. The second close that holds is confirmation. Until the "
+            "neckline breaks with confirmation, it is two holds being watched, "
+            "not a completed pattern.\n\n"
+            "<b>HONEST LIMIT</b>\n"
+            "No pattern is guaranteed. Two bottoms can form and price can break "
+            "down through the floor on a later attempt. A neckline can break and "
+            "then fail back below. A double bottom describes what price has "
+            "already done — twice held at one level — not what comes next. It is "
+            "a shape worth watching, never a call."
+        ),
+    },
     "breakout": {
         "beginner": (
             "When price moves above a resistance level and stays there — often with "
@@ -449,6 +491,12 @@ EXPLANATION_ALIASES = {
     "dt": "double_top",
     "m top": "double_top",
     "m-top": "double_top",
+    "double bottom": "double_bottom",
+    "doublebottom": "double_bottom",
+    "double-bottom": "double_bottom",
+    "db": "double_bottom",
+    "w bottom": "double_bottom",
+    "w-bottom": "double_bottom",
     "breakout": "breakout",
     "break out": "breakout",
     "breakdown": "breakdown",
@@ -535,6 +583,7 @@ CONCEPT_DISPLAY_NAMES = {
     "support": "Support",
     "resistance": "Resistance",
     "double_top": "Double Top",
+    "double_bottom": "Double Bottom",
     "breakout": "Breakout",
     "breakdown": "Breakdown",
     "confluence": "Confluence",
