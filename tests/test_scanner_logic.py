@@ -6174,13 +6174,14 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("x_right = len(recent) * 1.16 if teaching_mode else len(recent) * 1.12", source)
         self.assertIn("future_label_x", source)
         self.assertIn("if teaching_mode:\n        watermark_drawn = add_logo_watermark(chart_ax, opacity=0.06)", source)
-        self.assertIn("else:\n        watermark_drawn = add_logo_watermark(chart_ax, opacity=0.05)", source)
+        self.assertIn("else:\n        watermark_drawn = add_logo_watermark(chart_ax, opacity=0.09)", source)
         self.assertIn("image_height, image_width = image.shape[:2]", source)
         self.assertIn("image_aspect = image_width / max(image_height, 1)", source)
         self.assertIn("fig_w, fig_h = ax.figure.get_size_inches()", source)
         self.assertIn("ax_bbox = ax.get_position()", source)
         self.assertIn("axes_aspect = ax_w_in / max(ax_h_in, 0.0001)", source)
-        self.assertIn("watermark_height = 0.68", source)
+        self.assertIn("watermark_height = 0.80", source)
+        self.assertIn("watermark_width = min(0.78,", source)
         self.assertIn("x_center, y_center = 0.50, 0.50", source)
         self.assertIn("extent=[x0, x1, y0, y1]", source)
         self.assertIn('aspect="auto"', source)
@@ -6241,12 +6242,22 @@ class ScannerLogicTests(unittest.TestCase):
 
     def test_snapshot_reference_footer_defaults_to_two_level_items(self):
         source = (PROJECT_DIR / "chart_generator_reference.py").read_text()
-        footer_section = source[source.index("items = footer_items or [") : source.index("column_widths = [")]
+        footer_section = source[source.index("support_text = format_price") : source.index("footer.text(0.50, 0.155")]
 
+        self.assertIn("support_text = format_price(support_level)", footer_section)
+        self.assertIn("resistance_text = format_price(resistance_level)", footer_section)
+        self.assertNotIn("near_supports[0]", footer_section)
+        self.assertNotIn("near_resistances[0]", footer_section)
         self.assertIn('f"1. Close above {resistance_text} - an attempt"', footer_section)
-        self.assertIn('f"2. Close below {support_text} - same rule"', footer_section)
+        self.assertIn('f"2. Close below {support_text} - an attempt"', footer_section)
         self.assertNotIn("A second close", footer_section)
         self.assertNotIn("3. Close below", footer_section)
+        self.assertNotIn("same rule", footer_section)
+        self.assertIn("item_count = len(items)", footer_section)
+        self.assertIn("if item_count <= 2:", footer_section)
+        self.assertIn("column_positions = [0.140, 0.540][:item_count]", footer_section)
+        self.assertIn("divider_xs = [0.500]", footer_section)
+        self.assertIn("if idx < item_count - 1:", footer_section)
         self.assertIn("One close is a hypothesis. Two is an answer.", source)
 
     def test_snapshot_reference_default_header_removes_next(self):
@@ -6254,6 +6265,7 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertIn('title = title or f"{symbol.replace(\'/\', \' / \')} TEACHING YOU WHAT TO LOOK AT"', source)
         self.assertNotIn("TEACHING YOU WHAT TO LOOK AT NEXT", source)
+        self.assertIn('"Tap to enlarge"', source)
 
     def test_snapshot_reference_chart_draws_price_axis_and_current_price_tag(self):
         source = (PROJECT_DIR / "chart_generator_reference.py").read_text()
@@ -6280,10 +6292,15 @@ class ScannerLogicTests(unittest.TestCase):
 
     def test_snapshot_logo_watermark_uses_logo_with_text_fallback(self):
         source = (PROJECT_DIR / "chart_generator_reference.py").read_text()
-        snapshot_branch = source[source.index("else:\n        watermark_drawn = add_logo_watermark(chart_ax, opacity=0.05)") :]
+        snapshot_branch = source[source.index("else:\n        watermark_drawn = add_logo_watermark(chart_ax, opacity=0.09)") :]
         snapshot_branch = snapshot_branch[: snapshot_branch.index("\n\n    level_ticks = []")]
 
-        self.assertIn("watermark_drawn = add_logo_watermark(chart_ax, opacity=0.05)", snapshot_branch)
+        self.assertIn("watermark_height = 0.80", source)
+        self.assertIn("watermark_width = min(0.78,", source)
+        self.assertIn("watermark_drawn = add_logo_watermark(chart_ax, opacity=0.09)", snapshot_branch)
+        self.assertIn("zorder=0.35", source)
+        self.assertIn("zorder=8", source)
+        self.assertIn("zorder=9", source)
         self.assertIn("if not watermark_drawn:", snapshot_branch)
         self.assertIn('"POINKLE"', snapshot_branch)
         self.assertNotIn("add_ghost_watermark(chart_ax)", snapshot_branch)
@@ -6939,7 +6956,7 @@ class ScannerLogicTests(unittest.TestCase):
             sent = scanner.send_levels_chart("TOKEN", "999", "BTC/USD", "caption")
 
         self.assertTrue(sent)
-        self.assertEqual(send_photo.call_args.kwargs["caption"], "caption\n\nTap the image to enlarge.")
+        self.assertEqual(send_photo.call_args.kwargs["caption"], "caption")
         self.assertNotIn("teaching_mode", captured)
         self.assertNotIn("teaching_zone", captured)
 

@@ -218,8 +218,8 @@ def add_logo_watermark(ax, watermark_path=None, opacity=0.06):
     ax_w_in = fig_w * ax_bbox.width
     ax_h_in = fig_h * ax_bbox.height
     axes_aspect = ax_w_in / max(ax_h_in, 0.0001)
-    watermark_height = 0.68
-    watermark_width = min(0.62, watermark_height * image_aspect / max(axes_aspect, 0.0001))
+    watermark_height = 0.80
+    watermark_width = min(0.78, watermark_height * image_aspect / max(axes_aspect, 0.0001))
     watermark_height = watermark_width * axes_aspect / max(image_aspect, 0.0001)
     x_center, y_center = 0.50, 0.50
     x0, x1 = x_center - watermark_width / 2, x_center + watermark_width / 2
@@ -415,6 +415,7 @@ def generate_reference_levels_chart(
         logo_ax = fig.add_axes([0.031, 0.916, 0.046, 0.064])
         add_pig_logo(logo_ax)
         canvas.text(0.082, 0.947, "POINKLE SNAPSHOT", color="#d2dde4", fontsize=12.0, ha="left", va="center", zorder=10)
+        canvas.text(0.082, 0.924, "Tap to enlarge", color="#8fa9b6", fontsize=8.6, ha="left", va="center", alpha=0.72, zorder=10)
     title = title or f"{symbol.replace('/', ' / ')} TEACHING YOU WHAT TO LOOK AT"
     glow_text(canvas, 0.515, 0.950, title, 18.8, ha="center", lw=4.6, alpha=0.58)
     if signal_scope and not teaching_mode:
@@ -472,7 +473,7 @@ def generate_reference_levels_chart(
         if not watermark_drawn:
             chart_ax.text(0.52, 0.50, "POINKLE", transform=chart_ax.transAxes, color="#dffbff", fontsize=96, fontweight="bold", ha="center", va="center", alpha=0.055, zorder=0)
     else:
-        watermark_drawn = add_logo_watermark(chart_ax, opacity=0.05)
+        watermark_drawn = add_logo_watermark(chart_ax, opacity=0.09)
         if not watermark_drawn:
             chart_ax.text(0.52, 0.50, "POINKLE", transform=chart_ax.transAxes, color="#dffbff", fontsize=58, fontweight="bold", ha="center", va="center", alpha=0.035, zorder=0)
 
@@ -721,14 +722,22 @@ def generate_reference_levels_chart(
         footer.add_patch(FancyBboxPatch((0, 0.03), 1, 0.90, boxstyle="round,pad=0.012,rounding_size=0.040", facecolor="none", edgecolor="#77efff", linewidth=10, alpha=0.026, zorder=0))
         ft = footer.text(0.50, 0.775, "WHAT WOULD CHANGE THE PICTURE", color="#3bdff4", fontsize=16.0, fontweight="bold", ha="center", va="center", zorder=3)
         ft.set_path_effects([pe.withStroke(linewidth=3.0, foreground="#0b6878", alpha=0.44)])
-        support_text = format_price(near_supports[0]) if near_supports else format_price(support_level)
-        resistance_text = format_price(near_resistances[0]) if near_resistances else format_price(resistance_level)
+        support_text = format_price(support_level)
+        resistance_text = format_price(resistance_level)
         items = footer_items or [
             f"1. Close above {resistance_text} - an attempt",
-            f"2. Close below {support_text} - same rule",
+            f"2. Close below {support_text} - an attempt",
         ]
-        column_widths = [26, 25, 26]
-        for idx, (x_pos, item) in enumerate(zip([0.075, 0.395, 0.705], items)):
+        item_count = len(items)
+        if item_count <= 2:
+            column_positions = [0.140, 0.540][:item_count]
+            column_widths = [34, 34][:item_count]
+            divider_xs = [0.500]
+        else:
+            column_positions = [0.075, 0.395, 0.705][:item_count]
+            column_widths = [26, 25, 26][:item_count]
+            divider_xs = [0.367, 0.687]
+        for idx, (x_pos, item) in enumerate(zip(column_positions, items)):
             wrapped = textwrap.wrap(str(item), width=column_widths[idx])[:2]
             if not wrapped:
                 wrapped = [str(item)]
@@ -736,8 +745,9 @@ def generate_reference_levels_chart(
             for line in wrapped:
                 footer.text(x_pos, y, line, color="#dce7ef", fontsize=12.8, ha="left", va="center", zorder=3)
                 y -= 0.145
-            if idx < 2:
-                footer.plot([x_pos + 0.292, x_pos + 0.292], [0.205, 0.635], color="#2dd4f0", linewidth=1.0, alpha=0.52, zorder=3)
+            if idx < item_count - 1:
+                divider_x = divider_xs[idx] if idx < len(divider_xs) else x_pos + 0.292
+                footer.plot([divider_x, divider_x], [0.205, 0.635], color="#2dd4f0", linewidth=1.0, alpha=0.52, zorder=3)
         footer.text(0.50, 0.155, "One close is a hypothesis. Two is an answer.", color="#e4fbff", fontsize=12.2, fontweight="bold", ha="center", va="center", zorder=3)
 
         canvas.text(0.50, 0.062, "End of Snapshot  \u2022  Keep Watching The Zones", color="#a9b8c5", fontsize=11.2, alpha=0.75, ha="center", va="center", zorder=5)

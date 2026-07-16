@@ -6349,7 +6349,7 @@ def send_levels_chart(telegram_token, chat_id, symbol, caption, reply_markup=Non
             telegram_token,
             chat_id,
             chart_path,
-            caption=f"{caption}\n\nTap the image to enlarge.",
+            caption=caption,
             reply_markup=reply_markup,
         )
         return True
