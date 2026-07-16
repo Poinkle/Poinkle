@@ -2157,6 +2157,73 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("Mike brings the question. Poinkle teaches the concept.", sent_messages[1][1])
         self.assertEqual(sent_messages[2][2], scanner.creator_support_resistance_keyboard(scanner.CREATOR_DOORS["mike_knows"]))
 
+    def test_creator_profile_url_builds_supported_social_links(self):
+        self.assertEqual(scanner.creator_profile_url("telegram", "@mikeknows01"), "https://t.me/mikeknows01")
+        self.assertEqual(scanner.creator_profile_url("tiktok", "@mikeknows.io"), "https://www.tiktok.com/@mikeknows.io")
+        self.assertEqual(scanner.creator_profile_url("instagram", "@mikeknows_og"), "https://www.instagram.com/mikeknows_og")
+        self.assertEqual(scanner.creator_profile_url("x", "@mikeknows_og"), "https://x.com/mikeknows_og")
+        self.assertEqual(scanner.creator_profile_url("youtube", "@MikeKnows"), "https://www.youtube.com/@MikeKnows")
+        self.assertIsNone(scanner.creator_profile_url("discord", "@mikeknows"))
+        self.assertIsNone(scanner.creator_profile_url("unknown", "@mikeknows"))
+
+    def test_mike_verify_room_adds_social_url_buttons_without_changing_text(self):
+        sent_messages = []
+        creators = {
+            "mike_knows": {
+                "display_name": "Mike Knows",
+                "community": "The Inner Circle",
+                "accounts": [
+                    {"platform": "telegram", "handle": "@mikeknows01"},
+                    {"platform": "tiktok", "handle": "@mikeknows.io"},
+                    {"platform": "instagram", "handle": "@mikeknows_og"},
+                    {"platform": "x", "handle": "@mikeknows_og"},
+                    {"platform": "discord", "handle": "@mikeknows"},
+                ],
+                "registered_at": "2026-07-13",
+            }
+        }
+        callback_query = {
+            "id": "callback-verify-links",
+            "message": {"chat": {"id": "999", "type": "private"}, "message_id": 44},
+            "from": {"id": 777},
+        }
+
+        with patch.object(scanner, "answer_telegram_callback"), patch.object(
+            scanner, "load_creators", return_value=creators
+        ), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append((str(chat_id), text, reply_markup)),
+        ):
+            self.assertTrue(scanner.handle_creator_door_callback("TOKEN", callback_query, "mike_knows:verify", exchange=object()))
+
+        accounts = scanner.creator_accounts(creators["mike_knows"])
+        expected_text = scanner.render_verified_creator_message(
+            accounts[0]["handle"],
+            creators["mike_knows"],
+            matched_accounts=[accounts[0]],
+        )
+        self.assertEqual(sent_messages[0][1], expected_text)
+        self.assertIn("Telegram   @mikeknows01", sent_messages[0][1])
+        self.assertIn("TikTok     @mikeknows.io", sent_messages[0][1])
+        self.assertIn("Instagram  @mikeknows_og", sent_messages[0][1])
+        self.assertIn("X          @mikeknows_og", sent_messages[0][1])
+
+        rows = sent_messages[0][2]["inline_keyboard"]
+        self.assertEqual([len(row) for row in rows], [1, 1, 1, 1])
+        self.assertEqual(
+            rows,
+            [
+                [{"text": "Telegram  @mikeknows01", "url": "https://t.me/mikeknows01"}],
+                [{"text": "TikTok  @mikeknows.io", "url": "https://www.tiktok.com/@mikeknows.io"}],
+                [{"text": "Instagram  @mikeknows_og", "url": "https://www.instagram.com/mikeknows_og"}],
+                [{"text": "X  @mikeknows_og", "url": "https://x.com/mikeknows_og"}],
+            ],
+        )
+        for row in rows:
+            self.assertIn("url", row[0])
+            self.assertNotIn("callback_data", row[0])
+
     def test_mike_buy_sell_question_uses_whatnow_refusal_path(self):
         door_config = scanner.CREATOR_DOORS["mike_knows"]
         first_question = door_config["questions"][0]

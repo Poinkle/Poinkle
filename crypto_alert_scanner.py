@@ -5864,6 +5864,27 @@ def display_handle(handle):
     return clean_handle if clean_handle.startswith("@") else f"@{clean_handle}"
 
 
+def creator_profile_url(platform, handle):
+    clean_platform = normalize_creator_platform(platform)
+    clean_handle = str(handle or "").strip()
+    if clean_handle.startswith("@"):
+        clean_handle = clean_handle[1:]
+    if not clean_handle:
+        return None
+
+    url_templates = {
+        "telegram": "https://t.me/{handle}",
+        "tiktok": "https://www.tiktok.com/@{handle}",
+        "instagram": "https://www.instagram.com/{handle}",
+        "x": "https://x.com/{handle}",
+        "youtube": "https://www.youtube.com/@{handle}",
+    }
+    template = url_templates.get(clean_platform)
+    if not template:
+        return None
+    return template.format(handle=clean_handle)
+
+
 def creator_account_lines(creator):
     accounts = creator_accounts(creator)
     if not accounts:
@@ -5893,6 +5914,23 @@ def creator_account_keyboard(creator_key, creator):
             ]
         )
     rows.append([{"text": "⬅️ Back", "callback_data": f"{PANEL_CALLBACK_PREFIX}:verify"}])
+    return {"inline_keyboard": rows} if rows else None
+
+
+def creator_account_link_keyboard(creator):
+    rows = []
+    for account in creator_accounts(creator):
+        profile_url = creator_profile_url(account.get("platform"), account.get("handle"))
+        if not profile_url:
+            continue
+        rows.append(
+            [
+                {
+                    "text": creator_account_button_label(account),
+                    "url": profile_url,
+                }
+            ]
+        )
     return {"inline_keyboard": rows} if rows else None
 
 
@@ -8369,6 +8407,7 @@ def send_creator_verify_card(telegram_token, chat_id, door_config):
             telegram_token,
             chat_id,
             render_verified_creator_message(accounts[0]["handle"], creator, matched_accounts=[accounts[0]]),
+            reply_markup=creator_account_link_keyboard(creator),
         )
         return True
 
