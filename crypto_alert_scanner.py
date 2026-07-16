@@ -5527,14 +5527,13 @@ CREATOR_DOORS = {
         "community": "The Inner Circle",
         "verify_key": "mike_knows",
         "welcome_title": "Welcome to Mike Knows' corner of Poinkle 👋",
-        "branding_line": "Built for Mike Knows' Inner Circle. Taught by Poinkle.",
+        "branding_line": "Built for Mike Knows' Inner Circle. Powered by Poinkle.",
         "intro_video_url": None,
         "watched_coins_source": "MIKES_LIST",
         "room_labels": {
             "verify": "✅ Is this really Mike?",
             "questions": "📚 Questions Mike Gets All The Time",
             "coins": "📈 Coins Mike Watches",
-            "poinkle": "🐷 What is Poinkle?",
         },
         "questions_intro": (
             "Questions Mike gets all the time.\n\n"
@@ -5546,11 +5545,6 @@ CREATOR_DOORS = {
             {"label": "Chart patterns", "callback": f"{EXPLAIN_GROUP_CALLBACK_PREFIX}:1"},
             {"label": "BTC.D / USDT.D", "callback": f"{EXPLAIN_CONCEPT_CALLBACK_PREFIX}:dominance"},
             {"label": "Real breakout or fakeout?", "callback": f"{PANEL_CALLBACK_PREFIX}:fakeout"},
-        ),
-        "poinkle_text": (
-            "Poinkle is a crypto education tool.\n\n"
-            "It shows zones, confirmation, and context so you can read the chart yourself.\n\n"
-            "It never tells you what to do."
         ),
     }
 }
@@ -5715,7 +5709,6 @@ def creator_door_keyboard(door_config):
             [{"text": labels["verify"], "callback_data": creator_door_callback(creator_key, "verify")}],
             [{"text": labels["questions"], "callback_data": creator_door_callback(creator_key, "questions")}],
             [{"text": labels["coins"], "callback_data": creator_door_callback(creator_key, "coins")}],
-            [{"text": labels["poinkle"], "callback_data": creator_door_callback(creator_key, "poinkle")}],
         ]
     }
 
@@ -8384,15 +8377,6 @@ def send_creator_questions_room(telegram_token, chat_id, door_config):
     )
 
 
-def send_creator_poinkle_room(telegram_token, chat_id, door_config):
-    send_telegram_message(
-        telegram_token,
-        chat_id,
-        door_config["poinkle_text"],
-        reply_markup={"inline_keyboard": [[{"text": "⬅️ Back", "callback_data": creator_door_callback(door_config["creator_key"], "open")}]]},
-    )
-
-
 def handle_mike_command(exchange, telegram_token, telegram_chat_id, source_chat=None):
     source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
     response_chat_id = str(source_chat.get("id", telegram_chat_id))
@@ -9173,9 +9157,6 @@ def handle_creator_door_callback(telegram_token, callback_query, payload, exchan
         return True
     if room == "coins":
         send_mike_watchlist_card(exchange, telegram_token, chat_id)
-        return True
-    if room == "poinkle":
-        send_creator_poinkle_room(telegram_token, chat_id, door_config)
         return True
     return False
 

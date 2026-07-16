@@ -1998,7 +1998,7 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(sent_chat_ids, ["OWNER_DM"])
         self.assertNotIn("GROUP_CHAT", sent_chat_ids)
 
-    def test_mike_command_returns_creator_door_with_four_room_buttons(self):
+    def test_mike_command_returns_creator_door_with_three_room_buttons(self):
         sent_messages = []
 
         with patch.object(
@@ -2012,7 +2012,7 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(sent_messages[0][0], "999")
         self.assertIn("Welcome to Mike Knows' corner of Poinkle", sent_messages[0][1])
         self.assertIn("The Inner Circle", sent_messages[0][1])
-        self.assertIn("Built for Mike Knows' Inner Circle. Taught by Poinkle.", sent_messages[0][1])
+        self.assertIn("Built for Mike Knows' Inner Circle. Powered by Poinkle.", sent_messages[0][1])
         buttons = [row[0] for row in sent_messages[0][2]["inline_keyboard"]]
         self.assertEqual(
             [button["text"] for button in buttons],
@@ -2020,7 +2020,6 @@ class ScannerLogicTests(unittest.TestCase):
                 "✅ Is this really Mike?",
                 "📚 Questions Mike Gets All The Time",
                 "📈 Coins Mike Watches",
-                "🐷 What is Poinkle?",
             ],
         )
         self.assertEqual(
@@ -2029,7 +2028,6 @@ class ScannerLogicTests(unittest.TestCase):
                 "cdoor:mike_knows:verify",
                 "cdoor:mike_knows:questions",
                 "cdoor:mike_knows:coins",
-                "cdoor:mike_knows:poinkle",
             ],
         )
 
@@ -2101,7 +2099,6 @@ class ScannerLogicTests(unittest.TestCase):
             self.assertTrue(scanner.handle_creator_door_callback("TOKEN", callback_query, "mike_knows:verify", exchange=object()))
             self.assertTrue(scanner.handle_creator_door_callback("TOKEN", callback_query, "mike_knows:questions", exchange=object()))
             self.assertTrue(scanner.handle_creator_door_callback("TOKEN", callback_query, "mike_knows:support_resistance", exchange=object()))
-            self.assertTrue(scanner.handle_creator_door_callback("TOKEN", callback_query, "mike_knows:poinkle", exchange=object()))
 
         self.assertIn("✅ <b>VERIFIED</b>", sent_messages[0][1])
         self.assertIn("@mikeknows.io is <b>Mike Knows</b>' real TikTok.", sent_messages[0][1])
@@ -2120,7 +2117,6 @@ class ScannerLogicTests(unittest.TestCase):
         )
         self.assertIn("Mike brings the question. Poinkle teaches the concept.", sent_messages[1][1])
         self.assertEqual(sent_messages[2][2], scanner.creator_support_resistance_keyboard(scanner.CREATOR_DOORS["mike_knows"]))
-        self.assertIn("Poinkle is a crypto education tool.", sent_messages[3][1])
 
     def test_mike_buy_sell_question_uses_whatnow_refusal_path(self):
         door_config = scanner.CREATOR_DOORS["mike_knows"]
@@ -2146,7 +2142,6 @@ class ScannerLogicTests(unittest.TestCase):
             [
                 scanner.creator_door_welcome_text(door_config),
                 door_config["questions_intro"],
-                door_config["poinkle_text"],
                 "\n".join(door_config["room_labels"].values()),
                 "\n".join(question["label"] for question in door_config["questions"]),
             ]
@@ -2175,7 +2170,6 @@ class ScannerLogicTests(unittest.TestCase):
                 "verify": "Verify Test",
                 "questions": "Test Questions",
                 "coins": "Test Coins",
-                "poinkle": "Test Poinkle",
             },
         }
 
@@ -2183,7 +2177,7 @@ class ScannerLogicTests(unittest.TestCase):
         keyboard = scanner.creator_door_keyboard(door_config)
         self.assertEqual(
             [row[0]["text"] for row in keyboard["inline_keyboard"]],
-            ["Verify Test", "Test Questions", "Test Coins", "Test Poinkle"],
+            ["Verify Test", "Test Questions", "Test Coins"],
         )
         self.assertEqual(
             [row[0]["callback_data"] for row in keyboard["inline_keyboard"]],
@@ -2191,7 +2185,6 @@ class ScannerLogicTests(unittest.TestCase):
                 "cdoor:test_creator:verify",
                 "cdoor:test_creator:questions",
                 "cdoor:test_creator:coins",
-                "cdoor:test_creator:poinkle",
             ],
         )
 
