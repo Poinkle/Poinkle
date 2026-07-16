@@ -415,7 +415,7 @@ def generate_reference_levels_chart(
         logo_ax = fig.add_axes([0.031, 0.916, 0.046, 0.064])
         add_pig_logo(logo_ax)
         canvas.text(0.082, 0.947, "POINKLE SNAPSHOT", color="#d2dde4", fontsize=12.0, ha="left", va="center", zorder=10)
-    title = title or f"{symbol.replace('/', ' / ')} TEACHING YOU WHAT TO LOOK AT NEXT"
+    title = title or f"{symbol.replace('/', ' / ')} TEACHING YOU WHAT TO LOOK AT"
     glow_text(canvas, 0.515, 0.950, title, 18.8, ha="center", lw=4.6, alpha=0.58)
     if signal_scope and not teaching_mode:
         canvas.text(0.515, 0.912, signal_scope, color="#9fb3bf", fontsize=11.0, fontweight="bold", ha="center", va="center", alpha=0.82, zorder=10)
@@ -725,8 +725,7 @@ def generate_reference_levels_chart(
         resistance_text = format_price(near_resistances[0]) if near_resistances else format_price(resistance_level)
         items = footer_items or [
             f"1. Close above {resistance_text} - an attempt",
-            "2. A second close - confirmation",
-            f"3. Close below {support_text} - same rule",
+            f"2. Close below {support_text} - same rule",
         ]
         column_widths = [26, 25, 26]
         for idx, (x_pos, item) in enumerate(zip([0.075, 0.395, 0.705], items)):

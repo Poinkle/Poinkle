@@ -6219,7 +6219,6 @@ class ScannerLogicTests(unittest.TestCase):
             with self.subTest(filename=filename):
                 self.assertIn("WHAT WOULD CHANGE THE PICTURE", source)
                 self.assertIn("Close above", source)
-                self.assertIn("A second close", source)
                 self.assertIn("Close below", source)
                 self.assertIn("One close is a hypothesis. Two is an answer.", source)
                 self.assertIn('("WAIT", "Nothing here is a signal. You decide.")', source)
@@ -6239,6 +6238,22 @@ class ScannerLogicTests(unittest.TestCase):
                     "see sweeps",
                 ):
                     self.assertNotIn(banned_phrase, source.lower())
+
+    def test_snapshot_reference_footer_defaults_to_two_level_items(self):
+        source = (PROJECT_DIR / "chart_generator_reference.py").read_text()
+        footer_section = source[source.index("items = footer_items or [") : source.index("column_widths = [")]
+
+        self.assertIn('f"1. Close above {resistance_text} - an attempt"', footer_section)
+        self.assertIn('f"2. Close below {support_text} - same rule"', footer_section)
+        self.assertNotIn("A second close", footer_section)
+        self.assertNotIn("3. Close below", footer_section)
+        self.assertIn("One close is a hypothesis. Two is an answer.", source)
+
+    def test_snapshot_reference_default_header_removes_next(self):
+        source = (PROJECT_DIR / "chart_generator_reference.py").read_text()
+
+        self.assertIn('title = title or f"{symbol.replace(\'/\', \' / \')} TEACHING YOU WHAT TO LOOK AT"', source)
+        self.assertNotIn("TEACHING YOU WHAT TO LOOK AT NEXT", source)
 
     def test_snapshot_reference_chart_draws_price_axis_and_current_price_tag(self):
         source = (PROJECT_DIR / "chart_generator_reference.py").read_text()
@@ -6920,10 +6935,11 @@ class ScannerLogicTests(unittest.TestCase):
 
         with patch.object(scanner, "generate_levels_chart", side_effect=fake_generate), patch.object(
             scanner, "send_telegram_photo", return_value=True
-        ):
+        ) as send_photo:
             sent = scanner.send_levels_chart("TOKEN", "999", "BTC/USD", "caption")
 
         self.assertTrue(sent)
+        self.assertEqual(send_photo.call_args.kwargs["caption"], "caption\n\nTap the image to enlarge.")
         self.assertNotIn("teaching_mode", captured)
         self.assertNotIn("teaching_zone", captured)
 
