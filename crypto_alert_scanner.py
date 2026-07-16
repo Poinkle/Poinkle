@@ -289,7 +289,7 @@ TELEGRAM_JOB_LIGHT = "light"
 TELEGRAM_JOB_HEAVY = "heavy"
 TELEGRAM_LIGHT_JOB_ESTIMATE_SECONDS = 1.0
 LIVE_EXPLAIN_CONCEPTS = {"support", "resistance", "confirmation"}
-HEAVY_EXPLAIN_CONCEPTS = {"dominance", "double_top", "double_bottom"}
+HEAVY_EXPLAIN_CONCEPTS = {"dominance", "double_top", "double_bottom", "neckline"}
 HEAVY_TELEGRAM_JOB_ACTIONS = {"snapshot", "research", "whynot", "whatnow", "explain"}
 ALERT_SEVERITY_PREFERENCE_KEY = "alert_severity_min"
 ALERT_SEVERITY_DEVELOPING = "developing"
@@ -5512,7 +5512,7 @@ TOP_COIN_PICKER_BASES = ("BTC", "ETH", "SOL", "XRP", "DOGE", "ADA", "AVAX", "LIN
 SUPPORTED_CREATOR_PLATFORMS = ("telegram", "tiktok", "youtube", "x", "instagram", "discord", "website")
 CONCEPT_GROUPS = (
     ("📊 Price & Structure", ("candle", "support", "resistance", "range", "key_level", "trend", "market_structure")),
-    ("📐 Chart Patterns", ("double_top", "double_bottom")),
+    ("📐 Chart Patterns", ("double_top", "double_bottom", "neckline")),
     ("⚡ The Event", ("breakout", "breakdown", "confirmation", "retest", "follow_through")),
     ("📈 The Indicators", ("rsi", "ema", "volume_spike", "confluence", "liquidity")),
     ("🌐 Market Context", ("dominance",)),

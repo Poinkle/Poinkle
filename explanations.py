@@ -153,6 +153,46 @@ EXPLANATION_REGISTRY = {
             "a shape worth watching, never a call."
         ),
     },
+    "neckline": {
+        "beginner": (
+            "<b>WHAT IT IS</b>\n"
+            "The neckline is the level that decides whether a double top or double "
+            "bottom completes. On a double top it is the low between the two peaks. "
+            "On a double bottom it is the high between the two lows. It is the line "
+            "price must close through for the pattern to count.\n\n"
+            "<b>WHAT CONFIRMS IT</b>\n"
+            "A neckline is not broken the moment price touches it. By Poinkle's "
+            "rule, breaking it means TWO closes through it, not one. One close "
+            "through is an attempt. The second close that holds is confirmation. "
+            "Until then the neckline is a level being watched, not a level that "
+            "has broken.\n\n"
+            "<b>HONEST LIMIT</b>\n"
+            "No level is guaranteed. A neckline can be closed through and then "
+            "reclaimed, turning a break into a failed attempt. The neckline "
+            "describes the line that matters for a pattern — it does not promise "
+            "the pattern completes or that price keeps going after it breaks. It "
+            "is a level worth watching, never a call."
+        ),
+        "experienced": (
+            "<b>WHAT IT IS</b>\n"
+            "The neckline is the level that decides whether a double top or double "
+            "bottom completes. On a double top it is the low between the two peaks. "
+            "On a double bottom it is the high between the two lows. It is the line "
+            "price must close through for the pattern to count.\n\n"
+            "<b>WHAT CONFIRMS IT</b>\n"
+            "A neckline is not broken the moment price touches it. By Poinkle's "
+            "rule, breaking it means TWO closes through it, not one. One close "
+            "through is an attempt. The second close that holds is confirmation. "
+            "Until then the neckline is a level being watched, not a level that "
+            "has broken.\n\n"
+            "<b>HONEST LIMIT</b>\n"
+            "No level is guaranteed. A neckline can be closed through and then "
+            "reclaimed, turning a break into a failed attempt. The neckline "
+            "describes the line that matters for a pattern — it does not promise "
+            "the pattern completes or that price keeps going after it breaks. It "
+            "is a level worth watching, never a call."
+        ),
+    },
     "breakout": {
         "beginner": (
             "When price moves above a resistance level and stays there — often with "
@@ -497,6 +537,9 @@ EXPLANATION_ALIASES = {
     "db": "double_bottom",
     "w bottom": "double_bottom",
     "w-bottom": "double_bottom",
+    "neckline": "neckline",
+    "neck line": "neckline",
+    "neck-line": "neckline",
     "breakout": "breakout",
     "break out": "breakout",
     "breakdown": "breakdown",
@@ -584,6 +627,7 @@ CONCEPT_DISPLAY_NAMES = {
     "resistance": "Resistance",
     "double_top": "Double Top",
     "double_bottom": "Double Bottom",
+    "neckline": "Neckline",
     "breakout": "Breakout",
     "breakdown": "Breakdown",
     "confluence": "Confluence",
