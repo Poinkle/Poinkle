@@ -1998,7 +1998,42 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(sent_chat_ids, ["OWNER_DM"])
         self.assertNotIn("GROUP_CHAT", sent_chat_ids)
 
-    def test_mike_command_returns_mikes_curated_symbols_and_reports_failures(self):
+    def test_mike_command_returns_creator_door_with_four_room_buttons(self):
+        sent_messages = []
+
+        with patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append((str(chat_id), text, reply_markup)),
+        ), patch.object(scanner, "send_mike_list_card") as send_card:
+            scanner.handle_mike_command(object(), "TOKEN", "999")
+
+        send_card.assert_not_called()
+        self.assertEqual(sent_messages[0][0], "999")
+        self.assertIn("Welcome to Mike Knows' corner of Poinkle", sent_messages[0][1])
+        self.assertIn("The Inner Circle", sent_messages[0][1])
+        self.assertIn("Built for Mike Knows' Inner Circle. Taught by Poinkle.", sent_messages[0][1])
+        buttons = [row[0] for row in sent_messages[0][2]["inline_keyboard"]]
+        self.assertEqual(
+            [button["text"] for button in buttons],
+            [
+                "✅ Is this really Mike?",
+                "📚 Questions Mike Gets All The Time",
+                "📈 Coins Mike Watches",
+                "🐷 What is Poinkle?",
+            ],
+        )
+        self.assertEqual(
+            [button["callback_data"] for button in buttons],
+            [
+                "cdoor:mike_knows:verify",
+                "cdoor:mike_knows:questions",
+                "cdoor:mike_knows:coins",
+                "cdoor:mike_knows:poinkle",
+            ],
+        )
+
+    def test_mike_coins_room_preserves_curated_symbols_and_reports_failures(self):
         sent_messages = []
         seen_symbols = []
 
@@ -2014,6 +2049,7 @@ class ScannerLogicTests(unittest.TestCase):
 
         with patch.object(scanner, "MIKES_LIST", ["BTC/USD", "ETH/USD", "NOTREAL/USD"]), patch.object(
             scanner, "build_levels_scan_snapshot", side_effect=fake_snapshot
+        ), patch.object(scanner, "answer_telegram_callback"
         ), patch.object(
             scanner,
             "send_telegram_message",
@@ -2021,7 +2057,16 @@ class ScannerLogicTests(unittest.TestCase):
         ), patch.object(
             scanner, "send_mike_list_card", return_value=False
         ):
-            scanner.handle_mike_command(object(), "TOKEN", "999")
+            scanner.handle_creator_door_callback(
+                "TOKEN",
+                {
+                    "id": "callback-1",
+                    "message": {"chat": {"id": "999", "type": "private"}, "message_id": 44},
+                    "from": {"id": 777},
+                },
+                "mike_knows:coins",
+                exchange=object(),
+            )
 
         self.assertEqual(seen_symbols, ["BTC/USD", "ETH/USD", "NOTREAL/USD"])
         self.assertEqual(sent_messages[0][0], "999")
@@ -2029,6 +2074,126 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("BTC: Price 101 | Trend bullish | RSI 56.00", sent_messages[0][1])
         self.assertIn("ETH: Price 102 | Trend bullish | RSI 57.00", sent_messages[0][1])
         self.assertIn("NOTREAL: Price market data unavailable | Trend n/a | RSI n/a", sent_messages[0][1])
+
+    def test_mike_door_room_buttons_route_to_existing_handlers(self):
+        sent_messages = []
+        creators = {
+            "mike_knows": {
+                "display_name": "Mike Knows",
+                "community": "The Inner Circle",
+                "accounts": [{"platform": "tiktok", "handle": "@mikeknows.io"}],
+                "registered_at": "2026-07-13",
+            }
+        }
+        callback_query = {
+            "id": "callback-1",
+            "message": {"chat": {"id": "999", "type": "private"}, "message_id": 44},
+            "from": {"id": 777},
+        }
+
+        with patch.object(scanner, "answer_telegram_callback"), patch.object(
+            scanner, "load_creators", return_value=creators
+        ), patch.object(
+            scanner,
+            "send_telegram_message",
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append((str(chat_id), text, reply_markup)),
+        ):
+            self.assertTrue(scanner.handle_creator_door_callback("TOKEN", callback_query, "mike_knows:verify", exchange=object()))
+            self.assertTrue(scanner.handle_creator_door_callback("TOKEN", callback_query, "mike_knows:questions", exchange=object()))
+            self.assertTrue(scanner.handle_creator_door_callback("TOKEN", callback_query, "mike_knows:support_resistance", exchange=object()))
+            self.assertTrue(scanner.handle_creator_door_callback("TOKEN", callback_query, "mike_knows:poinkle", exchange=object()))
+
+        self.assertIn("✅ <b>VERIFIED</b>", sent_messages[0][1])
+        self.assertIn("@mikeknows.io is <b>Mike Knows</b>' real TikTok.", sent_messages[0][1])
+
+        question_keyboard = sent_messages[1][2]
+        question_buttons = [row[0] for row in question_keyboard["inline_keyboard"][:-1]]
+        self.assertEqual(
+            [(button["text"], button["callback_data"]) for button in question_buttons],
+            [
+                ("Should I buy or sell?", "panel:whatnow"),
+                ("Support & resistance", "cdoor:mike_knows:support_resistance"),
+                ("Chart patterns", "xgroup:1"),
+                ("BTC.D / USDT.D", "xconcept:dominance"),
+                ("Real breakout or fakeout?", "panel:fakeout"),
+            ],
+        )
+        self.assertIn("Mike brings the question. Poinkle teaches the concept.", sent_messages[1][1])
+        self.assertEqual(sent_messages[2][2], scanner.creator_support_resistance_keyboard(scanner.CREATOR_DOORS["mike_knows"]))
+        self.assertIn("Poinkle is a crypto education tool.", sent_messages[3][1])
+
+    def test_mike_buy_sell_question_uses_whatnow_refusal_path(self):
+        door_config = scanner.CREATOR_DOORS["mike_knows"]
+        first_question = door_config["questions"][0]
+        self.assertEqual(first_question["label"], "Should I buy or sell?")
+        self.assertEqual(first_question["callback"], "panel:whatnow")
+
+        callback_query = {
+            "id": "callback-1",
+            "message": {"chat": {"id": "999", "type": "private"}, "message_id": 44},
+            "from": {"id": 777},
+        }
+        with patch.object(scanner, "answer_telegram_callback"), patch.object(scanner, "send_target_coin_picker") as picker:
+            handled = scanner.handle_panel_callback("TOKEN", callback_query, "whatnow", exchange=object())
+
+        self.assertTrue(handled)
+        picker.assert_called_once()
+        self.assertEqual(picker.call_args.args[:3], ("TOKEN", "999", "whatnow"))
+
+    def test_mike_door_text_has_no_creator_attributed_market_call_language(self):
+        door_config = scanner.CREATOR_DOORS["mike_knows"]
+        text = "\n".join(
+            [
+                scanner.creator_door_welcome_text(door_config),
+                door_config["questions_intro"],
+                door_config["poinkle_text"],
+                "\n".join(door_config["room_labels"].values()),
+                "\n".join(question["label"] for question in door_config["questions"]),
+            ]
+        ).lower()
+
+        banned_phrases = (
+            "mike's levels",
+            "mike's signal",
+            "mike's breakout",
+            "mike is watching this right now",
+            "mike says",
+            "mike thinks",
+            "mike expects",
+        )
+        for phrase in banned_phrases:
+            self.assertNotIn(phrase, text)
+
+    def test_mike_door_reads_labels_from_config(self):
+        door_config = {
+            "creator_key": "test_creator",
+            "display_name": "Test Creator",
+            "community": "Test Room",
+            "branding_line": "Built for Test Room. Taught by Poinkle.",
+            "welcome_title": "Welcome to Test Creator's corner",
+            "room_labels": {
+                "verify": "Verify Test",
+                "questions": "Test Questions",
+                "coins": "Test Coins",
+                "poinkle": "Test Poinkle",
+            },
+        }
+
+        self.assertIn("Welcome to Test Creator's corner", scanner.creator_door_welcome_text(door_config))
+        keyboard = scanner.creator_door_keyboard(door_config)
+        self.assertEqual(
+            [row[0]["text"] for row in keyboard["inline_keyboard"]],
+            ["Verify Test", "Test Questions", "Test Coins", "Test Poinkle"],
+        )
+        self.assertEqual(
+            [row[0]["callback_data"] for row in keyboard["inline_keyboard"]],
+            [
+                "cdoor:test_creator:verify",
+                "cdoor:test_creator:questions",
+                "cdoor:test_creator:coins",
+                "cdoor:test_creator:poinkle",
+            ],
+        )
 
     def test_lightweight_confluence_requires_two_distinct_directional_signal_types(self):
         volume_alert = {

@@ -5491,6 +5491,7 @@ START_ORIENTATION_CALLBACK_PREFIX = "start"
 ONBOARD_CALLBACK_PREFIX = "onboard"
 COIN_PICK_CALLBACK_PREFIX = "coinpick"
 PANEL_CALLBACK_PREFIX = "panel"
+CREATOR_DOOR_CALLBACK_PREFIX = "cdoor"
 WATCH_TOGGLE_CALLBACK_PREFIX = "watchtoggle"
 WATCH_LETTER_CALLBACK_PREFIX = "watchletter"
 COIN_PICKER_BUTTONS_PER_ROW = 3
@@ -5519,6 +5520,40 @@ CONCEPT_GROUPS = (
     ("🎯 Your Plan", ("accumulation", "patience_grade")),
     ("🔢 Poinkle's Labels", ("setup_quality", "break_strength_score")),
 )
+CREATOR_DOORS = {
+    "mike_knows": {
+        "creator_key": "mike_knows",
+        "display_name": "Mike Knows",
+        "community": "The Inner Circle",
+        "verify_key": "mike_knows",
+        "welcome_title": "Welcome to Mike Knows' corner of Poinkle 👋",
+        "branding_line": "Built for Mike Knows' Inner Circle. Taught by Poinkle.",
+        "intro_video_url": None,
+        "watched_coins_source": "MIKES_LIST",
+        "room_labels": {
+            "verify": "✅ Is this really Mike?",
+            "questions": "📚 Questions Mike Gets All The Time",
+            "coins": "📈 Coins Mike Watches",
+            "poinkle": "🐷 What is Poinkle?",
+        },
+        "questions_intro": (
+            "Questions Mike gets all the time.\n\n"
+            "Mike brings the question. Poinkle teaches the concept."
+        ),
+        "questions": (
+            {"label": "Should I buy or sell?", "callback": f"{PANEL_CALLBACK_PREFIX}:whatnow"},
+            {"label": "Support & resistance", "callback": f"{CREATOR_DOOR_CALLBACK_PREFIX}:mike_knows:support_resistance"},
+            {"label": "Chart patterns", "callback": f"{EXPLAIN_GROUP_CALLBACK_PREFIX}:1"},
+            {"label": "BTC.D / USDT.D", "callback": f"{EXPLAIN_CONCEPT_CALLBACK_PREFIX}:dominance"},
+            {"label": "Real breakout or fakeout?", "callback": f"{PANEL_CALLBACK_PREFIX}:fakeout"},
+        ),
+        "poinkle_text": (
+            "Poinkle is a crypto education tool.\n\n"
+            "It shows zones, confirmation, and context so you can read the chart yourself.\n\n"
+            "It never tells you what to do."
+        ),
+    }
+}
 
 
 def validate_concept_groups():
@@ -5653,6 +5688,62 @@ def explain_group_prompt():
     return (
         "What do you want to understand?\n\n"
         "Poinkle looks at price first. Indicators only reinforce what price already shows you."
+    )
+
+
+def creator_door_config(creator_key):
+    return CREATOR_DOORS.get(str(creator_key or "").strip())
+
+
+def creator_door_welcome_text(door_config):
+    return (
+        f"{door_config['welcome_title']}\n"
+        f"{door_config['community']}\n"
+        f"{door_config['branding_line']}"
+    )
+
+
+def creator_door_callback(creator_key, room):
+    return f"{CREATOR_DOOR_CALLBACK_PREFIX}:{creator_key}:{room}"
+
+
+def creator_door_keyboard(door_config):
+    creator_key = door_config["creator_key"]
+    labels = door_config["room_labels"]
+    return {
+        "inline_keyboard": [
+            [{"text": labels["verify"], "callback_data": creator_door_callback(creator_key, "verify")}],
+            [{"text": labels["questions"], "callback_data": creator_door_callback(creator_key, "questions")}],
+            [{"text": labels["coins"], "callback_data": creator_door_callback(creator_key, "coins")}],
+            [{"text": labels["poinkle"], "callback_data": creator_door_callback(creator_key, "poinkle")}],
+        ]
+    }
+
+
+def creator_question_keyboard(door_config):
+    rows = [
+        [{"text": question["label"], "callback_data": question["callback"]}]
+        for question in door_config.get("questions", ())
+    ]
+    rows.append([{"text": "⬅️ Back", "callback_data": creator_door_callback(door_config["creator_key"], "open")}])
+    return {"inline_keyboard": rows}
+
+
+def creator_support_resistance_keyboard(door_config):
+    creator_key = door_config["creator_key"]
+    return {
+        "inline_keyboard": [
+            [{"text": "Support", "callback_data": f"{EXPLAIN_CONCEPT_CALLBACK_PREFIX}:support"}],
+            [{"text": "Resistance", "callback_data": f"{EXPLAIN_CONCEPT_CALLBACK_PREFIX}:resistance"}],
+            [{"text": "⬅️ Back", "callback_data": creator_door_callback(creator_key, "questions")}],
+        ]
+    }
+
+
+def creator_support_resistance_text():
+    return (
+        "Support & resistance.\n\n"
+        "These are the zones price keeps reacting to. Pick one to learn it."
     )
 
 
@@ -8229,9 +8320,7 @@ def send_mike_list_card(telegram_token, chat_id, rows, caption):
         return False
 
 
-def handle_mike_command(exchange, telegram_token, telegram_chat_id, source_chat=None):
-    source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
-    response_chat_id = str(source_chat.get("id", telegram_chat_id))
+def send_mike_watchlist_card(exchange, telegram_token, response_chat_id):
     try:
         rows = build_mike_list_rows(exchange)
         message = build_mike_list_message_from_rows(rows)
@@ -8244,6 +8333,70 @@ def handle_mike_command(exchange, telegram_token, telegram_chat_id, source_chat=
     caption = "The Inner Circle - Mike's List"
     if not send_mike_list_card(telegram_token, response_chat_id, rows, caption):
         send_telegram_message(telegram_token, response_chat_id, message)
+
+
+def send_creator_door(telegram_token, chat_id, creator_key):
+    door_config = creator_door_config(creator_key)
+    if not door_config:
+        send_start_orientation_card(telegram_token, chat_id)
+        return False
+    send_telegram_message(
+        telegram_token,
+        chat_id,
+        creator_door_welcome_text(door_config),
+        reply_markup=creator_door_keyboard(door_config),
+    )
+    return True
+
+
+def send_creator_verify_card(telegram_token, chat_id, door_config):
+    creators = load_creators()
+    verify_key = door_config.get("verify_key")
+    creator = creators.get(verify_key)
+    if not creator:
+        send_verify_creator_picker(telegram_token, chat_id)
+        return True
+
+    accounts = creator_accounts(creator)
+    if accounts:
+        send_telegram_message(
+            telegram_token,
+            chat_id,
+            render_verified_creator_message(accounts[0]["handle"], creator, matched_accounts=[accounts[0]]),
+        )
+        return True
+
+    send_telegram_message(
+        telegram_token,
+        chat_id,
+        render_creator_handle_list_message(creator),
+        reply_markup=creator_account_keyboard(verify_key, creator),
+    )
+    return True
+
+
+def send_creator_questions_room(telegram_token, chat_id, door_config):
+    send_telegram_message(
+        telegram_token,
+        chat_id,
+        door_config["questions_intro"],
+        reply_markup=creator_question_keyboard(door_config),
+    )
+
+
+def send_creator_poinkle_room(telegram_token, chat_id, door_config):
+    send_telegram_message(
+        telegram_token,
+        chat_id,
+        door_config["poinkle_text"],
+        reply_markup={"inline_keyboard": [[{"text": "⬅️ Back", "callback_data": creator_door_callback(door_config["creator_key"], "open")}]]},
+    )
+
+
+def handle_mike_command(exchange, telegram_token, telegram_chat_id, source_chat=None):
+    source_chat = source_chat or {"id": telegram_chat_id, "type": "private"}
+    response_chat_id = str(source_chat.get("id", telegram_chat_id))
+    send_creator_door(telegram_token, response_chat_id, "mike_knows")
 
 
 def handle_research_command(
@@ -8984,6 +9137,49 @@ def handle_verify_handle_callback(telegram_token, callback_query, payload, excha
     return True
 
 
+def handle_creator_door_callback(telegram_token, callback_query, payload, exchange=None):
+    callback_query_id = (callback_query or {}).get("id")
+    if callback_query_id:
+        answer_telegram_callback(telegram_token, callback_query_id)
+
+    parts = str(payload or "").split(":", 1)
+    if len(parts) != 2:
+        return False
+    creator_key, room = [part.strip() for part in parts]
+    door_config = creator_door_config(creator_key)
+    if not door_config:
+        return False
+
+    message = (callback_query or {}).get("message") or {}
+    chat = message.get("chat") or {}
+    chat_id = str(chat.get("id") or "")
+    if not chat_id:
+        return False
+
+    if room == "open":
+        return send_creator_door(telegram_token, chat_id, creator_key)
+    if room == "verify":
+        return send_creator_verify_card(telegram_token, chat_id, door_config)
+    if room == "questions":
+        send_creator_questions_room(telegram_token, chat_id, door_config)
+        return True
+    if room == "support_resistance":
+        send_telegram_message(
+            telegram_token,
+            chat_id,
+            creator_support_resistance_text(),
+            reply_markup=creator_support_resistance_keyboard(door_config),
+        )
+        return True
+    if room == "coins":
+        send_mike_watchlist_card(exchange, telegram_token, chat_id)
+        return True
+    if room == "poinkle":
+        send_creator_poinkle_room(telegram_token, chat_id, door_config)
+        return True
+    return False
+
+
 def send_command_panel(telegram_token, chat_id):
     send_telegram_message(
         telegram_token,
@@ -9340,6 +9536,7 @@ def handle_telegram_callback_query(exchange, telegram_token, callback_query):
         START_ORIENTATION_CALLBACK_PREFIX: handle_start_orientation_callback,
         ONBOARD_CALLBACK_PREFIX: handle_onboard_callback,
         PANEL_CALLBACK_PREFIX: handle_panel_callback,
+        CREATOR_DOOR_CALLBACK_PREFIX: handle_creator_door_callback,
         COIN_PICK_CALLBACK_PREFIX: handle_coin_pick_callback,
         WATCH_TOGGLE_CALLBACK_PREFIX: handle_watch_toggle_callback,
         WATCH_LETTER_CALLBACK_PREFIX: handle_watch_letter_callback,
