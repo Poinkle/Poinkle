@@ -193,6 +193,86 @@ EXPLANATION_REGISTRY = {
             "is a level worth watching, never a call."
         ),
     },
+    "bull_flag": {
+        "beginner": (
+            "<b>WHAT IT IS</b>\n"
+            "A bull flag is a pause after a sharp move up. Price runs up (the "
+            "flagpole), then drifts sideways or slightly down in a tight range "
+            "(the flag) as the move takes a breath. It describes a strong up-move "
+            "followed by a period of rest.\n\n"
+            "<b>WHAT CONFIRMS IT</b>\n"
+            "A flag is just a pause until price closes out of it. By Poinkle's "
+            "rule, breaking above the flag means TWO closes above it, not one. "
+            "One close above is an attempt. The second close that holds is "
+            "confirmation. Until then it is a pause being watched, not a completed "
+            "pattern.\n\n"
+            "<b>HONEST LIMIT</b>\n"
+            "No pattern is guaranteed. A pause can resolve either direction — the "
+            "flag can break down instead of up, or break up and then fail back. A "
+            "bull flag describes a rest after an up-move; it does not promise the "
+            "move keeps moving or say how far price goes if it does. It is a shape "
+            "worth watching, never a call."
+        ),
+        "experienced": (
+            "<b>WHAT IT IS</b>\n"
+            "A bull flag is a pause after a sharp move up. Price runs up (the "
+            "flagpole), then drifts sideways or slightly down in a tight range "
+            "(the flag) as the move takes a breath. It describes a strong up-move "
+            "followed by a period of rest.\n\n"
+            "<b>WHAT CONFIRMS IT</b>\n"
+            "A flag is just a pause until price closes out of it. By Poinkle's "
+            "rule, breaking above the flag means TWO closes above it, not one. "
+            "One close above is an attempt. The second close that holds is "
+            "confirmation. Until then it is a pause being watched, not a completed "
+            "pattern.\n\n"
+            "<b>HONEST LIMIT</b>\n"
+            "No pattern is guaranteed. A pause can resolve either direction — the "
+            "flag can break down instead of up, or break up and then fail back. A "
+            "bull flag describes a rest after an up-move; it does not promise the "
+            "move keeps moving or say how far price goes if it does. It is a shape "
+            "worth watching, never a call."
+        ),
+    },
+    "bear_flag": {
+        "beginner": (
+            "<b>WHAT IT IS</b>\n"
+            "A bear flag is a pause after a sharp move down. Price drops (the "
+            "flagpole), then drifts sideways or slightly up in a tight range (the "
+            "flag) as the move takes a breath. It describes a strong down-move "
+            "followed by a period of rest.\n\n"
+            "<b>WHAT CONFIRMS IT</b>\n"
+            "A flag is just a pause until price closes out of it. By Poinkle's "
+            "rule, breaking below the flag means TWO closes below it, not one. "
+            "One close below is an attempt. The second close that holds is "
+            "confirmation. Until then it is a pause being watched, not a completed "
+            "pattern.\n\n"
+            "<b>HONEST LIMIT</b>\n"
+            "No pattern is guaranteed. A pause can resolve either direction — the "
+            "flag can break up instead of down, or break down and then fail back. "
+            "A bear flag describes a rest after a down-move; it does not promise "
+            "the move keeps moving or say how far price goes if it does. It is a "
+            "shape worth watching, never a call."
+        ),
+        "experienced": (
+            "<b>WHAT IT IS</b>\n"
+            "A bear flag is a pause after a sharp move down. Price drops (the "
+            "flagpole), then drifts sideways or slightly up in a tight range (the "
+            "flag) as the move takes a breath. It describes a strong down-move "
+            "followed by a period of rest.\n\n"
+            "<b>WHAT CONFIRMS IT</b>\n"
+            "A flag is just a pause until price closes out of it. By Poinkle's "
+            "rule, breaking below the flag means TWO closes below it, not one. "
+            "One close below is an attempt. The second close that holds is "
+            "confirmation. Until then it is a pause being watched, not a completed "
+            "pattern.\n\n"
+            "<b>HONEST LIMIT</b>\n"
+            "No pattern is guaranteed. A pause can resolve either direction — the "
+            "flag can break up instead of down, or break down and then fail back. "
+            "A bear flag describes a rest after a down-move; it does not promise "
+            "the move keeps moving or say how far price goes if it does. It is a "
+            "shape worth watching, never a call."
+        ),
+    },
     "breakout": {
         "beginner": (
             "When price moves above a resistance level and stays there — often with "
@@ -540,6 +620,12 @@ EXPLANATION_ALIASES = {
     "neckline": "neckline",
     "neck line": "neckline",
     "neck-line": "neckline",
+    "bull flag": "bull_flag",
+    "bullflag": "bull_flag",
+    "bull-flag": "bull_flag",
+    "bear flag": "bear_flag",
+    "bearflag": "bear_flag",
+    "bear-flag": "bear_flag",
     "breakout": "breakout",
     "break out": "breakout",
     "breakdown": "breakdown",
@@ -628,6 +714,8 @@ CONCEPT_DISPLAY_NAMES = {
     "double_top": "Double Top",
     "double_bottom": "Double Bottom",
     "neckline": "Neckline",
+    "bull_flag": "Bull Flag",
+    "bear_flag": "Bear Flag",
     "breakout": "Breakout",
     "breakdown": "Breakdown",
     "confluence": "Confluence",

@@ -4711,6 +4711,17 @@ class ScannerLogicTests(unittest.TestCase):
             with self.subTest(alias=alias):
                 self.assertEqual(scanner.normalize_concept_key(alias), "neckline")
 
+    def test_flag_explanation_aliases_resolve(self):
+        expected = {
+            "bull_flag": ("bull flag", "bullflag", "bull-flag"),
+            "bear_flag": ("bear flag", "bearflag", "bear-flag"),
+        }
+
+        for concept_key, aliases in expected.items():
+            for alias in aliases:
+                with self.subTest(alias=alias):
+                    self.assertEqual(scanner.normalize_concept_key(alias), concept_key)
+
     def test_explain_double_top_returns_card_for_aliases(self):
         aliases = ("double top", "doubletop", "double-top", "dt", "m top", "m-top")
 
@@ -4743,6 +4754,21 @@ class ScannerLogicTests(unittest.TestCase):
                 self.assertIn("<b>WHAT IT IS</b>", message)
                 self.assertIn("<b>WHAT CONFIRMS IT</b>", message)
                 self.assertIn("<b>HONEST LIMIT</b>", message)
+
+    def test_explain_flag_cards_return_for_aliases(self):
+        expected = {
+            "Bull Flag": ("bull flag", "bullflag", "bull-flag"),
+            "Bear Flag": ("bear flag", "bearflag", "bear-flag"),
+        }
+
+        for display_name, aliases in expected.items():
+            for alias in aliases:
+                with self.subTest(alias=alias):
+                    message = scanner.build_explain_command_message(f"/explain {alias}")
+                    self.assertIn(f"<b>{display_name}</b>", message)
+                    self.assertIn("<b>WHAT IT IS</b>", message)
+                    self.assertIn("<b>WHAT CONFIRMS IT</b>", message)
+                    self.assertIn("<b>HONEST LIMIT</b>", message)
 
     def test_double_top_card_avoids_pattern_banned_language(self):
         message = scanner.build_explain_command_message("/explain double top").lower()
@@ -4826,6 +4852,76 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("double bottom", message)
         self.assertNotIn("top", banned_phrases)
         self.assertNotIn("bottom", banned_phrases)
+
+    def test_bull_flag_card_avoids_pattern_banned_language(self):
+        message = scanner.build_explain_command_message("/explain bull flag").lower()
+        banned_phrases = (
+            "will",
+            "expect",
+            "likely",
+            "signals",
+            "indicates",
+            "means price",
+            "going to",
+            "continuation",
+            "continues higher",
+            "continues lower",
+            "measured move",
+            "flagpole target",
+            "target",
+            "probability",
+            "reversal",
+            "bullish",
+            "bearish",
+        )
+
+        for banned_phrase in banned_phrases:
+            with self.subTest(banned_phrase=banned_phrase):
+                self.assertNotIn(banned_phrase, message)
+        for banned_word in ("buy", "sell", "enter", "exit", "long", "short"):
+            with self.subTest(banned_word=banned_word):
+                self.assertIsNone(re.search(rf"\b{banned_word}\b", message))
+        self.assertIn("flag", message)
+        self.assertIn("flagpole", message)
+        self.assertNotIn("flag", banned_phrases)
+        self.assertNotIn("flagpole", banned_phrases)
+        self.assertIn("measured move", banned_phrases)
+        self.assertIn("target", banned_phrases)
+
+    def test_bear_flag_card_avoids_pattern_banned_language(self):
+        message = scanner.build_explain_command_message("/explain bear flag").lower()
+        banned_phrases = (
+            "will",
+            "expect",
+            "likely",
+            "signals",
+            "indicates",
+            "means price",
+            "going to",
+            "continuation",
+            "continues higher",
+            "continues lower",
+            "measured move",
+            "flagpole target",
+            "target",
+            "probability",
+            "reversal",
+            "bullish",
+            "bearish",
+        )
+
+        for banned_phrase in banned_phrases:
+            with self.subTest(banned_phrase=banned_phrase):
+                self.assertNotIn(banned_phrase, message)
+        for banned_word in ("buy", "sell", "enter", "exit", "long", "short"):
+            with self.subTest(banned_word=banned_word):
+                self.assertIsNone(re.search(rf"\b{banned_word}\b", message))
+        self.assertIn("flag", message)
+        self.assertIn("flagpole", message)
+        self.assertNotIn("flag", banned_phrases)
+        self.assertNotIn("flagpole", banned_phrases)
+        self.assertIn("measured move", banned_phrases)
+        self.assertIn("target", banned_phrases)
 
     def test_dominance_card_avoids_banned_language(self):
         with patch.object(scanner, "fetch_coingecko_global_data", return_value=None):
@@ -4920,6 +5016,13 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertFalse(scanner.is_live_explain_command("/explain neckline"))
         self.assertEqual(scanner.heavy_command_action_for_text("/explain neckline"), "explain")
         self.assertTrue(scanner.should_enqueue_heavy_command("/explain neckline"))
+
+    def test_explain_flag_cards_use_heavy_job_queue_without_live_chart_route(self):
+        for command in ("/explain bull flag", "/explain bear flag"):
+            with self.subTest(command=command):
+                self.assertFalse(scanner.is_live_explain_command(command))
+                self.assertEqual(scanner.heavy_command_action_for_text(command), "explain")
+                self.assertTrue(scanner.should_enqueue_heavy_command(command))
 
     def test_stage_three_explanation_concepts_resolve_for_beginner_and_experienced(self):
         expected_phrases = {
@@ -5270,6 +5373,32 @@ class ScannerLogicTests(unittest.TestCase):
         ack_job.assert_called_once_with("TOKEN", "777", "explain", "/explain neckline")
         send_response.assert_not_called()
 
+    def test_explain_flag_callbacks_queue_heavy_job(self):
+        callback_query = {
+            "id": "callback-1",
+            "message": {"chat": {"id": "777"}, "message_id": 44},
+            "from": {"id": 777},
+        }
+
+        for concept_key in ("bull_flag", "bear_flag"):
+            with self.subTest(concept_key=concept_key):
+                scanner.TELEGRAM_COMMAND_JOB_QUEUE.clear()
+                with patch.object(scanner, "answer_telegram_callback") as answer_callback, patch.object(
+                    scanner, "send_heavy_job_acknowledgment"
+                ) as ack_job, patch.object(scanner, "send_explain_command_response") as send_response, patch.object(
+                    scanner, "clear_callback_message_keyboard"
+                ) as clear_keyboard:
+                    handled = scanner.handle_explain_concept_callback("TOKEN", callback_query, concept_key)
+                queued_job = scanner.TELEGRAM_COMMAND_JOB_QUEUE.popleft()
+
+                self.assertTrue(handled)
+                answer_callback.assert_called_once_with("TOKEN", "callback-1")
+                clear_keyboard.assert_called_once_with("TOKEN", callback_query)
+                self.assertEqual(queued_job["action"], "explain")
+                self.assertEqual(queued_job["message_text"], f"/explain {concept_key}")
+                ack_job.assert_called_once_with("TOKEN", "777", "explain", f"/explain {concept_key}")
+                send_response.assert_not_called()
+
     def test_same_picker_button_double_tap_sends_once_and_acks_second_tap(self):
         state = {}
         sent_messages = []
@@ -5513,7 +5642,10 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertEqual(len(grouped_keys), len(set(grouped_keys)))
 
     def test_double_top_appears_in_chart_patterns_picker_group(self):
-        self.assertIn(("📐 Chart Patterns", ("double_top", "double_bottom", "neckline")), scanner.CONCEPT_GROUPS)
+        self.assertIn(
+            ("📐 Chart Patterns", ("double_top", "double_bottom", "neckline", "bull_flag", "bear_flag")),
+            scanner.CONCEPT_GROUPS,
+        )
 
     def test_deweaponized_concepts_are_removed_from_registry_and_groups(self):
         grouped_keys = [
@@ -5522,7 +5654,7 @@ class ScannerLogicTests(unittest.TestCase):
             for concept_key in concept_keys
         ]
 
-        self.assertEqual(len(scanner.available_concepts()), 25)
+        self.assertEqual(len(scanner.available_concepts()), 27)
         self.assertNotIn("trade_plan", scanner.available_concepts())
         self.assertNotIn("market_score", scanner.available_concepts())
         self.assertNotIn("trade_plan", grouped_keys)
