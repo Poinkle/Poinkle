@@ -2051,10 +2051,9 @@ class ScannerLogicTests(unittest.TestCase):
         ), patch.object(
             scanner,
             "send_telegram_message",
-            side_effect=lambda token, chat_id, text: sent_messages.append((str(chat_id), text)),
-        ), patch.object(
-            scanner, "send_mike_list_card", return_value=False
-        ):
+            side_effect=lambda token, chat_id, text, reply_markup=None: sent_messages.append((str(chat_id), text, reply_markup)),
+        ), patch.object(scanner, "send_mike_list_card", return_value=False) as send_card:
+            expected_keyboard = scanner.creator_watched_coins_keyboard(scanner.CREATOR_DOORS["mike_knows"])
             scanner.handle_creator_door_callback(
                 "TOKEN",
                 {
@@ -2067,11 +2066,51 @@ class ScannerLogicTests(unittest.TestCase):
             )
 
         self.assertEqual(seen_symbols, ["BTC/USD", "ETH/USD", "NOTREAL/USD"])
+        self.assertEqual(send_card.call_args.kwargs["reply_markup"], expected_keyboard)
         self.assertEqual(sent_messages[0][0], "999")
         self.assertEqual(len(sent_messages[0][1].splitlines()), 3)
+        self.assertEqual(sent_messages[0][2], expected_keyboard)
         self.assertIn("BTC: Price 101 | Trend bullish | RSI 56.00", sent_messages[0][1])
         self.assertIn("ETH: Price 102 | Trend bullish | RSI 57.00", sent_messages[0][1])
         self.assertIn("NOTREAL: Price market data unavailable | Trend n/a | RSI n/a", sent_messages[0][1])
+
+    def test_mike_coins_room_includes_snapshot_buttons_for_each_coin(self):
+        with patch.object(scanner, "MIKES_LIST", ["SOL/USD", "TAO/USD", "JCT/USD"]):
+            keyboard = scanner.creator_watched_coins_keyboard(scanner.CREATOR_DOORS["mike_knows"])
+
+        coin_buttons = [button for row in keyboard["inline_keyboard"][:-1] for button in row]
+        self.assertEqual([button["text"] for button in coin_buttons], ["SOL", "TAO", "JCT"])
+        self.assertEqual(
+            [button["callback_data"] for button in coin_buttons],
+            ["coinpick:snapshot:SOL", "coinpick:snapshot:TAO", "coinpick:snapshot:JCT"],
+        )
+        self.assertEqual(
+            keyboard["inline_keyboard"][-1],
+            [{"text": "⬅️ Back", "callback_data": "cdoor:mike_knows:open"}],
+        )
+
+    def test_mike_coin_button_routes_through_existing_snapshot_coinpick_path(self):
+        with patch.object(scanner, "MIKES_LIST", ["SOL/USD"]):
+            keyboard = scanner.creator_watched_coins_keyboard(scanner.CREATOR_DOORS["mike_knows"])
+        callback_data = keyboard["inline_keyboard"][0][0]["callback_data"]
+        callback_query = {
+            "id": "callback-mike-sol",
+            "data": callback_data,
+            "message": {"chat": {"id": "777", "type": "private"}, "message_id": 44},
+            "from": {"id": 777},
+        }
+
+        with patch.object(scanner, "answer_telegram_callback"), patch.object(
+            scanner, "clear_callback_message_keyboard"
+        ), patch.object(scanner, "enqueue_telegram_command_job", return_value=True) as enqueue_job, patch.object(
+            scanner, "send_heavy_job_acknowledgment"
+        ) as send_ack:
+            handled = scanner.handle_telegram_callback_query(object(), "TOKEN", callback_query)
+
+        self.assertTrue(handled)
+        enqueue_job.assert_called_once()
+        self.assertEqual(enqueue_job.call_args.args[:3], ("snapshot", "777", "/snapshot SOL"))
+        send_ack.assert_called_once()
 
     def test_mike_door_room_buttons_route_to_existing_handlers(self):
         sent_messages = []

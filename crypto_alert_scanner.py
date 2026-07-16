@@ -5722,6 +5722,19 @@ def creator_question_keyboard(door_config):
     return {"inline_keyboard": rows}
 
 
+def creator_watched_coins_keyboard(door_config):
+    buttons = [
+        {
+            "text": base_symbol(symbol),
+            "callback_data": f"{COIN_PICK_CALLBACK_PREFIX}:snapshot:{base_symbol(symbol)}",
+        }
+        for symbol in mike_list_symbols()
+    ]
+    rows = coin_picker_button_rows(buttons)
+    rows.append([{"text": "⬅️ Back", "callback_data": creator_door_callback(door_config["creator_key"], "open")}])
+    return {"inline_keyboard": rows}
+
+
 def creator_support_resistance_keyboard(door_config):
     creator_key = door_config["creator_key"]
     return {
@@ -8302,30 +8315,30 @@ def build_mike_list_message(exchange):
     return build_mike_list_message_from_rows(build_mike_list_rows(exchange))
 
 
-def send_mike_list_card(telegram_token, chat_id, rows, caption):
+def send_mike_list_card(telegram_token, chat_id, rows, caption, reply_markup=None):
     try:
         if render_mike_list_card is None:
             raise RuntimeError("Mike list card renderer unavailable")
         card_path = render_mike_list_card(rows, logo_path=POINKLE_RESEARCH_EMBLEM_PATH)
-        return send_telegram_photo(telegram_token, chat_id, card_path, caption=caption)
+        return send_telegram_photo(telegram_token, chat_id, card_path, caption=caption, reply_markup=reply_markup)
     except Exception as error:
         log_warn(f"Mike list card rendering failed: {error}")
         return False
 
 
-def send_mike_watchlist_card(exchange, telegram_token, response_chat_id):
+def send_mike_watchlist_card(exchange, telegram_token, response_chat_id, reply_markup=None):
     try:
         rows = build_mike_list_rows(exchange)
         message = build_mike_list_message_from_rows(rows)
     except Exception as error:
         log_warn(f"Error running /mike: {error}")
         message = "Mike's list is temporarily unavailable. Please try again soon."
-        send_telegram_message(telegram_token, response_chat_id, message)
+        send_telegram_message(telegram_token, response_chat_id, message, reply_markup=reply_markup)
         return
 
     caption = "The Inner Circle - Mike's List"
-    if not send_mike_list_card(telegram_token, response_chat_id, rows, caption):
-        send_telegram_message(telegram_token, response_chat_id, message)
+    if not send_mike_list_card(telegram_token, response_chat_id, rows, caption, reply_markup=reply_markup):
+        send_telegram_message(telegram_token, response_chat_id, message, reply_markup=reply_markup)
 
 
 def send_creator_door(telegram_token, chat_id, creator_key):
@@ -9156,7 +9169,12 @@ def handle_creator_door_callback(telegram_token, callback_query, payload, exchan
         )
         return True
     if room == "coins":
-        send_mike_watchlist_card(exchange, telegram_token, chat_id)
+        send_mike_watchlist_card(
+            exchange,
+            telegram_token,
+            chat_id,
+            reply_markup=creator_watched_coins_keyboard(door_config),
+        )
         return True
     return False
 
