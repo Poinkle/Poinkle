@@ -1114,18 +1114,24 @@ def generate_poinkle_snapshot_spec_chart(symbol, candles, current_price, support
     footer_title = footer.text(0.50, 0.665, "WHAT WOULD CHANGE THE PICTURE", color="#3bdff4", fontsize=14.2, fontweight="bold", ha="center", va="center", zorder=3)
     footer_title.set_path_effects([pe.withStroke(linewidth=3.0, foreground="#0b6878", alpha=0.42)])
 
-    support_text = format_price(nearby_supports[0]) if nearby_supports else format_price(support_level)
-    resistance_text = format_price(nearby_resistances[0]) if nearby_resistances else format_price(resistance_level)
+    support_text = format_price(support_level)
+    resistance_text = format_price(resistance_level)
     watch_items = [
         f"1. Close above {resistance_text} - an attempt",
-        "2. A second close - confirmation",
-        f"3. Close below {support_text} - same rule",
+        f"2. Close below {support_text} - an attempt",
     ]
-    footer_x = [0.065, 0.385, 0.690]
+    item_count = len(watch_items)
+    if item_count <= 2:
+        footer_x = [0.140, 0.540][:item_count]
+        divider_xs = [0.500]
+    else:
+        footer_x = [0.065, 0.385, 0.690][:item_count]
+        divider_xs = [0.357, 0.677]
     for idx, (x_pos, item) in enumerate(zip(footer_x, watch_items)):
         footer.text(x_pos, 0.315, item, color="#dbe7ef", fontsize=11.2, ha="left", va="center", zorder=3)
-        if idx < 2:
-            footer.plot([x_pos + 0.292, x_pos + 0.292], [0.20, 0.50], color="#2dd4f0", linewidth=1.0, alpha=0.55, zorder=3)
+        if idx < item_count - 1:
+            divider_x = divider_xs[idx] if idx < len(divider_xs) else x_pos + 0.292
+            footer.plot([divider_x, divider_x], [0.20, 0.50], color="#2dd4f0", linewidth=1.0, alpha=0.55, zorder=3)
     footer.text(0.50, 0.115, "One close is a hypothesis. Two is an answer.", color="#a9dce8", fontsize=9.2, ha="center", va="center", zorder=3)
 
     canvas.text(
@@ -1320,17 +1326,24 @@ def generate_poinkle_reference_snapshot_chart(symbol, candles, current_price, su
     footer_title = footer.text(0.50, 0.665, "WHAT WOULD CHANGE THE PICTURE", color="#3bdff4", fontsize=13.8, fontweight="bold", ha="center", va="center", zorder=3)
     footer_title.set_path_effects([pe.withStroke(linewidth=3.0, foreground="#0b6878", alpha=0.42)])
 
-    support_text = format_price(nearby_supports[0]) if nearby_supports else format_price(support_level)
-    resistance_text = format_price(nearby_resistances[0]) if nearby_resistances else format_price(resistance_level)
+    support_text = format_price(support_level)
+    resistance_text = format_price(resistance_level)
     watch_items = [
         f"1. Close above {resistance_text} - an attempt",
-        "2. A second close - confirmation",
-        f"3. Close below {support_text} - same rule",
+        f"2. Close below {support_text} - an attempt",
     ]
-    for idx, (x_pos, item) in enumerate(zip([0.065, 0.385, 0.690], watch_items)):
+    item_count = len(watch_items)
+    if item_count <= 2:
+        footer_x = [0.140, 0.540][:item_count]
+        divider_xs = [0.500]
+    else:
+        footer_x = [0.065, 0.385, 0.690][:item_count]
+        divider_xs = [0.357, 0.677]
+    for idx, (x_pos, item) in enumerate(zip(footer_x, watch_items)):
         footer.text(x_pos, 0.315, item, color="#dbe7ef", fontsize=10.8, ha="left", va="center", zorder=3)
-        if idx < 2:
-            footer.plot([x_pos + 0.292, x_pos + 0.292], [0.20, 0.50], color="#2dd4f0", linewidth=1.0, alpha=0.52, zorder=3)
+        if idx < item_count - 1:
+            divider_x = divider_xs[idx] if idx < len(divider_xs) else x_pos + 0.292
+            footer.plot([divider_x, divider_x], [0.20, 0.50], color="#2dd4f0", linewidth=1.0, alpha=0.52, zorder=3)
     footer.text(0.50, 0.115, "One close is a hypothesis. Two is an answer.", color="#a9dce8", fontsize=9.0, ha="center", va="center", zorder=3)
 
     canvas.text(0.50, 0.062, "End of Snapshot  \u2022  Keep Watching The Zones", color="#a9b8c5", fontsize=10.5, alpha=0.74, ha="center", va="center", zorder=5)

@@ -211,6 +211,21 @@ def add_logo_watermark(ax, watermark_path=None, opacity=0.06):
         image = plt.imread(path)
     except Exception:
         return False
+    image = np.array(image, copy=True)
+    if not np.issubdtype(image.dtype, np.floating):
+        image = image.astype(float) / np.iinfo(image.dtype).max
+    else:
+        image = image.astype(float, copy=False)
+    if image.ndim == 2:
+        image = np.dstack([image, image, image, np.ones_like(image)])
+    elif image.shape[2] == 3:
+        image = np.dstack([image, np.ones(image.shape[:2])])
+    fade_y = np.linspace(-1.0, 1.0, image.shape[0])[:, None]
+    fade_x = np.linspace(-1.0, 1.0, image.shape[1])[None, :]
+    edge_distance = np.maximum(np.abs(fade_x), np.abs(fade_y))
+    edge_fade = np.clip((1.0 - edge_distance) / 0.28, 0.0, 1.0)
+    edge_fade = edge_fade * edge_fade * (3.0 - 2.0 * edge_fade)
+    image[..., 3] *= edge_fade
     image_height, image_width = image.shape[:2]
     image_aspect = image_width / max(image_height, 1)
     fig_w, fig_h = ax.figure.get_size_inches()

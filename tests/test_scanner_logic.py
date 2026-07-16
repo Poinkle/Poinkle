@@ -6260,6 +6260,23 @@ class ScannerLogicTests(unittest.TestCase):
         self.assertIn("if idx < item_count - 1:", footer_section)
         self.assertIn("One close is a hypothesis. Two is an answer.", source)
 
+    def test_legacy_snapshot_footers_match_reference_footer_contract(self):
+        source = (PROJECT_DIR / "chart_generator.py").read_text()
+
+        self.assertIn("support_text = format_price(support_level)", source)
+        self.assertIn("resistance_text = format_price(resistance_level)", source)
+        self.assertNotIn("nearby_supports[0]", source)
+        self.assertNotIn("nearby_resistances[0]", source)
+        self.assertIn('f"1. Close above {resistance_text} - an attempt"', source)
+        self.assertIn('f"2. Close below {support_text} - an attempt"', source)
+        self.assertNotIn("A second close - confirmation", source)
+        self.assertNotIn("same rule", source)
+        self.assertIn("item_count = len(watch_items)", source)
+        self.assertIn("if item_count <= 2:", source)
+        self.assertIn("footer_x = [0.140, 0.540][:item_count]", source)
+        self.assertIn("divider_xs = [0.500]", source)
+        self.assertIn("if idx < item_count - 1:", source)
+
     def test_snapshot_reference_default_header_removes_next(self):
         source = (PROJECT_DIR / "chart_generator_reference.py").read_text()
 
@@ -6297,6 +6314,9 @@ class ScannerLogicTests(unittest.TestCase):
 
         self.assertIn("watermark_height = 0.80", source)
         self.assertIn("watermark_width = min(0.78,", source)
+        self.assertIn("edge_distance = np.maximum(np.abs(fade_x), np.abs(fade_y))", source)
+        self.assertIn("edge_fade = np.clip((1.0 - edge_distance) / 0.28, 0.0, 1.0)", source)
+        self.assertIn("image[..., 3] *= edge_fade", source)
         self.assertIn("watermark_drawn = add_logo_watermark(chart_ax, opacity=0.09)", snapshot_branch)
         self.assertIn("zorder=0.35", source)
         self.assertIn("zorder=8", source)
