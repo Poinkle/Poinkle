@@ -6262,9 +6262,18 @@ class ScannerLogicTests(unittest.TestCase):
 
     def test_legacy_snapshot_footers_match_reference_footer_contract(self):
         source = (PROJECT_DIR / "chart_generator.py").read_text()
+        footer_helper = source[source.index("def draw_level_one_footer") : source.index("# Future learning layers:")]
 
         self.assertIn("support_text = format_price(support_level)", source)
         self.assertIn("resistance_text = format_price(resistance_level)", source)
+        self.assertIn("def draw_level_one_footer(ax, trend_title, trend_hint, current_price, support_level, resistance_level):", source)
+        self.assertIn("visible_supports[0] if visible_supports else None", source)
+        self.assertIn("visible_resistances[0] if visible_resistances else None", source)
+        self.assertNotIn("supports[0]", footer_helper)
+        self.assertNotIn("resistances[0]", footer_helper)
+        self.assertNotIn("Daily close below", footer_helper)
+        self.assertNotIn("Second close above", footer_helper)
+        self.assertNotIn("Same rule downward", footer_helper)
         self.assertNotIn("nearby_supports[0]", source)
         self.assertNotIn("nearby_resistances[0]", source)
         self.assertIn('f"1. Close above {resistance_text} - an attempt"', source)

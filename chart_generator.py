@@ -587,34 +587,34 @@ def draw_footer_card(ax, title, lines, accent):
         y -= 0.135
 
 
-def draw_level_one_footer(ax, trend_title, trend_hint, current_price, supports, resistances):
+def draw_level_one_footer(ax, trend_title, trend_hint, current_price, support_level, resistance_level):
     ax.axis("off")
     box(ax, 0.00, 0.08, 1.00, 0.84, edge=GRID, face=PANEL, alpha=0.76, lw=1.0)
     text(ax, 0.50, 0.735, "WHAT WOULD CHANGE THE PICTURE", size=11.6, color=BLUE, weight="bold", ha="center")
 
-    watch_lines = [
-        (
-            f"Daily close above {format_price(resistances[0])}",
-            "One close is an attempt.",
-        ) if resistances else ("Let resistance form", "Wait for a cleaner upper edge."),
-        (
-            "Second close above it",
-            "That's confirmation.",
-        ),
-        (
-            f"Daily close below {format_price(supports[0])}",
-            "Same rule downward.",
-        ) if supports else ("Let support form", "Wait for a cleaner lower edge."),
+    resistance_text = format_price(resistance_level) if resistance_level is not None else "resistance"
+    support_text = format_price(support_level) if support_level is not None else "support"
+    watch_items = [
+        f"1. Close above {resistance_text} - an attempt",
+        f"2. Close below {support_text} - an attempt",
     ]
-    x_positions = [0.155, 0.420, 0.685]
-    colors = [GREEN, BLUE, RED]
-    for index, (x_pos, item, color) in enumerate(zip(x_positions, watch_lines, colors), start=1):
-        line, lesson = item
+    item_count = len(watch_items)
+    if item_count <= 2:
+        x_positions = [0.180, 0.555][:item_count]
+        divider_xs = [0.500]
+    else:
+        x_positions = [0.155, 0.420, 0.685][:item_count]
+        divider_xs = [0.342, 0.607]
+    colors = [BLUE, BLUE]
+    for index, (x_pos, line, color) in enumerate(zip(x_positions, watch_items, colors), start=1):
         badge = Circle((x_pos, 0.445), 0.027, transform=ax.transAxes, facecolor=color, edgecolor="none", alpha=0.90, zorder=4)
         ax.add_patch(badge)
         text(ax, x_pos, 0.445, str(index), size=8.2, color=BACKGROUND, weight="bold", ha="center")
-        text(ax, x_pos + 0.040, 0.470, line, size=9.4, color=TEXT, weight="bold")
-        text(ax, x_pos + 0.040, 0.270, lesson, size=7.9, color=MUTED)
+        text(ax, x_pos + 0.040, 0.430, line, size=9.4, color=TEXT, weight="bold")
+        if index < item_count:
+            divider_x = divider_xs[index - 1] if index - 1 < len(divider_xs) else x_pos + 0.225
+            ax.plot([divider_x, divider_x], [0.245, 0.555], transform=ax.transAxes, color=GRID, linewidth=1.0, alpha=0.55, zorder=3)
+    text(ax, 0.50, 0.185, "One close is a hypothesis. Two is an answer.", size=8.4, color=MUTED, weight="bold", ha="center")
 
 
 # Future learning layers:
@@ -821,7 +821,14 @@ def generate_matplotlib_levels_chart(symbol, candles, current_price, supports, r
     for start_x, end, rad in zip(arrow_starts, arrow_ends, arrow_rads):
         draw_teaching_arrow(guide_ax, (start_x, card_y - 0.005), end, rad=rad)
 
-    draw_level_one_footer(footer_ax, trend_title, trend_hint, current_price, panel_supports, panel_resistances)
+    draw_level_one_footer(
+        footer_ax,
+        trend_title,
+        trend_hint,
+        current_price,
+        visible_supports[0] if visible_supports else None,
+        visible_resistances[0] if visible_resistances else None,
+    )
 
     fd, path = tempfile.mkstemp(suffix=".png", prefix=f"{symbol.replace('/', '_')}_draft3_snapshot_")
     os.close(fd)
